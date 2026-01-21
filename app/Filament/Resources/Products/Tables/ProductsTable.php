@@ -8,6 +8,12 @@ use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use pxlrbt\FilamentExcel\Actions\Tables\ExportBulkAction;
+use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\ProductImport;
+use Filament\Notifications\Notification;
 
 class ProductsTable
 {
@@ -50,6 +56,39 @@ class ProductsTable
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
+                ExportBulkAction::make(),
+                Action::make('importProducts')
+                    ->label('Import Excel')
+                    ->icon('heroicon-o-arrow-up-tray')
+                    ->color('success')
+                    ->form([
+                        FileUpload::make('attachment')
+                            ->label('Upload .xlsx or .csv')
+                            ->disk('public') // Temporary storage
+                            ->directory('imports')
+                            ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv'])
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
+                        // Get the file path
+                        $file = public_path('storage/' . $data['attachment']); // Adjust if using S3/local
+                        
+                        // Run the Import
+                        try {
+                            Excel::import(new ProductImport, $data['attachment'], 'public'); // 'public' is the disk name
+                            
+                            Notification::make()
+                                ->title('Products Imported Successfully')
+                                ->success()
+                                ->send();
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->title('Import Failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
             ]);
     }
 }

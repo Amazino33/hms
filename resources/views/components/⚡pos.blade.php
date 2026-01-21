@@ -11,6 +11,8 @@ use Filament\Notifications\Notification;
 new class extends Component
 {
     public $categories;
+    public $tables;
+    public $selectedTableId;
     public $activeCategoryId;
     public $cart = []; 
     public $total = 0;
@@ -22,6 +24,12 @@ new class extends Component
         
         // Default to the first category
         $this->activeCategoryId = $this->categories->first()?->id;
+
+        // Load tables
+        $this->tables = \App\Models\Table::all();
+
+        // Default to the first table
+        $this->selectedTableId = $this->tables->first()?->id;
     }
 
     public function addToCart($productId)
@@ -58,14 +66,17 @@ new class extends Component
             return;
         }
 
+        $tableId = $this->selectedTableId;
+
         // 1. Database Transaction
-        DB::transaction(function () {
+        DB::transaction(function () use ($tableId) {
             // Create Order
             $order = Order::create([
                 'order_number' => 'ORD-' . time(),
                 'total_amount' => $this->total,
                 'status' => 'pending',
                 'payment_method' => 'cash',
+                'table_id' => $tableId,
             ]);
 
             // Create Items & Deduct Stock
@@ -137,6 +148,15 @@ new class extends Component
     </div>
 
     <div class="col-span-4 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
+        <div class="p-4 border-b bg-white">
+            <label class="block text-sm font-bold text-gray-700 mb-1">Select Table</label>
+            <select wire:model="selectedTableId" class="w-full p-2 border rounded-lg bg-gray-50 font-bold text-gray-800">
+                @foreach($tables as $table)
+                    <option value="{{ $table->id }}">{{ $table->name }}</option>
+                @endforeach
+            </select>
+        </div>
+
         <div class="p-4 border-b bg-gray-50 font-bold text-lg text-gray-800">
             Current Order
         </div>

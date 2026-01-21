@@ -16,12 +16,18 @@
                     <h3 class="font-bold text-xl text-gray-800">
                         {{ $order->order_number }}
                     </h3>
+
                     <span class="text-xs font-mono text-gray-500">
                         {{ $order->created_at->diffForHumans() }}
                     </span>
                 </div>
 
-                <div class="p-4 flex-1 overflow-y-auto max-h-64 space-y-2">
+                <div class="p-4 flex-1 overflow-y-auto max-h-64 space-y-2">                   
+                    {{-- 👇 NEW: Show Table Name --}}
+                    <div class="text-indigo-600 font-bold text-sm mt-1">
+                        {{ $order->table->name ?? 'Takeaway' }}
+                    </div>
+
                     @foreach($order->items as $item)
                         <div class="flex items-center justify-between">
                             <span class="font-bold text-lg text-gray-700">

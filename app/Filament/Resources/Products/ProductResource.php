@@ -17,6 +17,7 @@ use Filament\Forms\Components\TextInput; // Fields are in Forms
 use Filament\Forms\Components\Select; // Fields are in Forms
 use Filament\Forms\Components\Toggle; // Fields are in Forms
 
+
 class ProductResource extends Resource
 {
     protected static ?string $model = Product::class;
