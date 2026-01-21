@@ -24,10 +24,10 @@ class ProductsTable
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('price')
-                    ->money()
+                    ->money('NGN')
                     ->sortable(),
                 TextColumn::make('cost')
-                    ->money()
+                    ->money('NGN')
                     ->sortable(),
                 IconColumn::make('is_active')
                     ->boolean(),

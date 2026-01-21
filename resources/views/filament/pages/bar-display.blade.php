@@ -6,7 +6,7 @@
         @forelse($orders as $order)
             @php
                 // Filter items safely. change 'food' to 'drink' for the Bar Display
-                $relevantItems = $order->items->filter(fn($item) => $item->product?->category?->type === 'food');
+                $relevantItems = $order->items->filter(fn($item) => $item->product?->category?->type === 'drink');
             @endphp
             {{-- 👇 Only show the Card if there are actual items to show --}}
             @if($relevantItems->isNotEmpty())

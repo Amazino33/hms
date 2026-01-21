@@ -164,11 +164,13 @@ class OrderResource extends Resource
         ])
         ->toolbarActions([
             BulkAction::make('delete')
-                ->icon('heroicon-o-trash')
-                ->label('Delete Selected')
-                ->requiresConfirmation()
-                ->color('danger')
-                ->action(fn (array $records) => Order::whereIn('id', $records)->delete()),
+            ->icon('heroicon-o-trash')
+            ->label('Delete Selected')
+            ->requiresConfirmation()
+            ->color('danger')
+            ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                Order::whereIn('id', $records->pluck('id')->toArray())->delete();
+            }),   
         ]);
     }
 
