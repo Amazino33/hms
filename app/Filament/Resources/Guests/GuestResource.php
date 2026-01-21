@@ -15,6 +15,8 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 
 class GuestResource extends Resource
 {
@@ -73,6 +75,23 @@ class GuestResource extends Resource
                 ->dateTime()
                 ->sortable()
                 ->toggleable(isToggledHiddenByDefault: true),
+        ])
+        ->recordActions([
+            Action::make('edit')
+                ->icon('heroicon-o-pencil')
+                ->label('Edit'),
+            Action::make('delete')
+                ->icon('heroicon-o-trash')
+                ->label('Delete')
+                ->requiresConfirmation()
+                ->color('danger'),
+        ])
+        ->toolbarActions([
+            BulkAction::make('delete')
+                ->icon('heroicon-o-trash')
+                ->label('Delete Selected')
+                ->requiresConfirmation()
+                ->color('danger'),
         ]);
     }
 

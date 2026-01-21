@@ -21,6 +21,10 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Carbon\Carbon;
 use App\Models\Room;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 
 class BookingResource extends Resource
 {
@@ -91,7 +95,71 @@ class BookingResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return BookingsTable::configure($table);
+        return $table
+        ->columns([
+            // 1. Show Guest Name (Relationship)
+            TextColumn::make('guest.name')
+                ->label('Guest')
+                ->searchable()
+                ->sortable()
+                ->weight('bold'),
+
+            // 2. Show Room Number (Relationship)
+            TextColumn::make('room.number')
+                ->label('Room')
+                ->sortable()
+                ->badge() // Makes it look like a tag
+                ->color('primary'),
+
+            // 3. Dates
+            TextColumn::make('check_in')
+                ->date()
+                ->sortable(),
+
+            TextColumn::make('check_out')
+                ->date()
+                ->sortable(),
+
+            // 4. Money
+            TextColumn::make('total_price')
+                ->money('NGN')
+                ->sortable()
+                ->weight('bold'),
+
+            // 5. Status
+            IconColumn::make('is_paid')
+                ->label('Paid?')
+                ->boolean()
+                ->trueIcon('heroicon-o-check-circle')
+                ->falseIcon('heroicon-o-x-circle'),
+        ])
+        ->defaultSort('created_at', 'desc') // Show newest bookings first
+        ->filters([
+            // Use this to quickly find unpaid guests
+            \Filament\Tables\Filters\TernaryFilter::make('is_paid')
+                ->label('Payment Status')
+                ->trueLabel('Paid')
+                ->falseLabel('Pending'),
+        ])
+        ->recordActions([
+            Action::make('edit')
+                ->label('Edit')
+                ->icon('heroicon-o-pencil')
+                ->url(fn (Booking $record) => EditBooking::getUrl(['record' => $record])),            
+            Action::make('delete')
+                ->requiresConfirmation()
+                ->label('Delete')
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->action(fn (Booking $record) => $record->delete()),
+        ])
+        ->toolbarActions([
+            BulkAction::make('delete')
+            ->requiresConfirmation()
+            ->label('Delete Selected')
+            ->icon('heroicon-o-trash')
+            ->action(fn (array $records) => Booking::whereIn('id', $records)->delete()),
+        ]);
     }
 
     public static function getRelations(): array

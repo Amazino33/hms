@@ -2,12 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 
+// Redirect the homepage directly to the Admin Panel
 Route::get('/', function () {
-    return view('welcome');
-})->name('home');
-
-Route::view('dashboard', 'dashboard')
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
+    return redirect('/admin');
+});
 
 require __DIR__.'/settings.php';

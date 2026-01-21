@@ -18,6 +18,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 
 class CategoryResource extends Resource
 {
@@ -55,7 +57,27 @@ class CategoryResource extends Resource
                         'warning' => 'drink',
                         'success' => 'service',
                     ]),
-            ]);
+            ])
+        ->recordActions([
+            Action::make('edit')
+                ->requiresConfirmation()
+                ->label('Edit')
+                ->icon('heroicon-o-pencil')
+                ->url(fn (Category $record) => EditCategory::getUrl(['record' => $record])),            
+            Action::make('delete')
+                ->requiresConfirmation()
+                ->label('Delete')
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->action(fn (Category $record) => $record->delete()),
+        ])
+        ->toolbarActions([
+            BulkAction::make('delete')
+                ->requiresConfirmation()
+                ->label('Delete Selected')
+                ->icon('heroicon-o-trash')
+                ->action(fn (array $records) => Category::whereIn('id', $records)->delete()),
+        ]);
     }
 
     public static function getRelations(): array

@@ -9,6 +9,8 @@ use App\Filament\Resources\Rooms\Schemas\RoomForm;
 use App\Filament\Resources\Rooms\Tables\RoomsTable;
 use App\Models\Room;
 use BackedEnum;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -77,6 +79,26 @@ class RoomResource extends Resource
         ])
         ->filters([
             //
+        ])
+        ->recordActions([
+            Action::make('edit')
+                ->icon('heroicon-o-pencil')
+                ->label('Edit')
+                ->url(fn (Room $record) => EditRoom::getUrl(['record' => $record])),
+            Action::make('delete')
+                ->requiresConfirmation()
+                ->label('Delete')
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->action(fn (Room $record) => $record->delete()),
+        ])
+        ->toolbarActions([
+            BulkAction::make('delete')
+                ->icon('heroicon-o-trash')
+                ->label('Delete Selected')
+                ->requiresConfirmation()
+                ->color('danger')
+                ->action(fn (array $records) => Room::whereIn('id', $records)->delete()),
         ]);
     }
 

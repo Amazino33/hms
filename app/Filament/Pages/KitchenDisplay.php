@@ -25,15 +25,21 @@ class KitchenDisplay extends Page
     }
 
     public function markAsReady($orderId)
-{
-    // Use findOrFail so the editor knows it found a real record
-    $order = Order::findOrFail($orderId);
-    
-    $order->update(['status' => 'ready']);
-    
-    Notification::make()
-        ->title("Order #{$order->order_number} Ready!")
-        ->success()
-        ->send();
-}
+    {
+        // Use findOrFail so the editor knows it found a real record
+        $order = Order::findOrFail($orderId);
+        
+        $order->update(['status' => 'ready']);
+        
+        Notification::make()
+            ->title("Order #{$order->order_number} Ready!")
+            ->success()
+            ->send();
+    }
+
+    public static function canAccess(): bool
+    {
+        // Only Super Admins and Chefs can see this
+        return auth()->user()->hasRole(['super_admin', 'chef']);
+    }
 }

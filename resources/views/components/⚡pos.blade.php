@@ -173,7 +173,7 @@ new class extends Component
                 wire:click="checkout" 
                 wire:loading.attr="disabled"
                 class="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl text-lg font-bold shadow-lg transform active:scale-95 transition-all">
-                <span wire:loading.remove>CHECKOUT</span>
+                <span wire:loading.remove>PLACE ORDER</span>
                 <span wire:loading>PROCESSING...</span>
             </button>
         </div>
