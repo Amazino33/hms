@@ -108,9 +108,9 @@ new class extends Component
     }
 };
 ?>
-<script src="https://cdn.tailwindcss.com"></script>
 {{-- HTML STARTS HERE --}}
 <div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
+    <script src="https://cdn.tailwindcss.com"></script>
     
     <div class="col-span-8 flex flex-col h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         
