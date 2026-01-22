@@ -23,7 +23,7 @@ class ProductForm
                     ->required()
                     ->numeric()
                     ->prefix('$'),
-                TextInput::make('cost')
+                TextInput::make('cost_price')
                     ->numeric()
                     ->prefix('$'),
                 Toggle::make('is_active')

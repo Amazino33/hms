@@ -17,7 +17,6 @@ return new class extends Migration
             $table->string('sku')->unique()->nullable();
             $table->foreignId('category_id')->constrained()->cascadeOnDelete();
             $table->decimal('price', 10, 2);
-            $table->decimal('cost', 10, 2)->nullable(); // For profit reporting
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

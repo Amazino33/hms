@@ -32,7 +32,7 @@ class ProductsTable
                 TextColumn::make('price')
                     ->money('NGN')
                     ->sortable(),
-                TextColumn::make('cost')
+                TextColumn::make('cost_price')
                     ->money('NGN')
                     ->sortable(),
                 IconColumn::make('is_active')

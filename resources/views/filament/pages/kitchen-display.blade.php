@@ -28,7 +28,13 @@
                         {{ $order->table->name ?? 'Takeaway' }}
                     </div>
 
+                    {{-- 👇 NEW: Waiter Name --}}
+                    <div class="text-xs text-gray-500 font-medium mt-1">
+                        Waiter: {{ $order->user->name ?? 'Admin' }}
+                    </div>
+                    
                     @foreach($order->items as $item)
+                        @if ($relevantItems->isNotEmpty() && $item->product?->category?->type === 'food')
                         <div class="flex items-center justify-between">
                             <span class="font-bold text-lg text-gray-700">
                                 {{ $item->quantity }}x
@@ -37,6 +43,7 @@
                                 {{ $item->product_name }}
                             </span>
                         </div>
+                        @endif
                     @endforeach
                 </div>
 

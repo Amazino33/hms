@@ -43,7 +43,12 @@ class ProductResource extends Resource
 
             Section::make()->schema([
                 TextInput::make('price')->numeric()->prefix('₦')->required(),
-                TextInput::make('cost')->numeric()->prefix('₦'),
+                TextInput::make('cost_price')
+                    ->label('Cost Price')
+                    ->numeric()
+                    ->prefix('₦')
+                    ->required()
+                    ->default(0),
                 Toggle::make('is_active')->default(true),
             ])->columns(2),
         ]);
