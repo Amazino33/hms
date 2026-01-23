@@ -24,24 +24,20 @@ new class extends Component {
         $this->search = '';
     }
 
-    // 👇 This runs automatically when you change the dropdown
     public function updatedSelectedTableId($value)
     {
-        // 1. Clear current cart to avoid mixing orders
         $this->cart = [];
         $this->currentOrderId = null;
 
         if (!$value)
             return;
 
-        // 2. Find if this table has a PENDING order
         $existingOrder = \App\Models\Order::where('table_id', $value)
             ->where('status', 'pending')
             ->with('items')
             ->latest()
             ->first();
 
-        // 3. If found, load it into the Cart
         if ($existingOrder) {
             $this->currentOrderId = $existingOrder->id;
 
@@ -75,13 +71,9 @@ new class extends Component {
 
     public function mount()
     {
-        // Load categories that have products to avoid empty tabs
         $this->categories = Category::has('products')->get();
-
-        // Default to the first category
         $this->activeCategoryId = $this->categories->first()?->id;
 
-        // Load tables WITH their pending orders
         $tables = \App\Models\Table::all();
 
         foreach ($tables as $table) {
@@ -94,12 +86,10 @@ new class extends Component {
             }
         }
 
-        // 2. Now load the tables for the view (Fresh data)
         $this->tables = \App\Models\Table::with(['orders' => function ($query) {
             $query->where('status', 'pending');
         }])->get();
 
-        // Default to the first table
         $this->selectedTableId = $this->tables->first()?->id;
 
         if (request()->has('table_id')) {
@@ -113,7 +103,6 @@ new class extends Component {
     {
         $product = Product::find($productId);
 
-        // Add to cart logic
         if (isset($this->cart[$productId])) {
             $this->cart[$productId]['quantity']++;
         } else {
@@ -145,12 +134,9 @@ new class extends Component {
 
         $tableId = $this->selectedTableId;
 
-        // 1. Database Transaction
         DB::transaction(function () use ($tableId, $action) {
-            // A. Determine Status
             $status = ($action === 'pay') ? 'paid' : 'pending';
 
-            // Create Order
             $order = Order::updateOrCreate(
                 ['id' => $this->currentOrderId],
                 [
@@ -163,10 +149,8 @@ new class extends Component {
                 ]
             );
 
-            // C. Sync Items
             $order->items()->delete();
 
-            // Create Items & Deduct Stock
             foreach ($this->cart as $productId => $item) {
                 OrderItem::create([
                     'order_id' => $order->id,
@@ -183,7 +167,6 @@ new class extends Component {
                     ->decrement('quantity', $item['quantity']);
             }
 
-            // D. Update Table Status
             $table = \App\Models\Table::find($this->selectedTableId);
             if ($action === 'pay') {
                 $order->update(['status' => 'paid']);
@@ -196,30 +179,25 @@ new class extends Component {
             }
         });
 
-        // 2. Reset
         $this->cart = [];
         $this->total = 0;
 
-        // 3. Notify
         Notification::make()
             ->title($action === 'pay' ? 'Payment Received' : 'Order Updated')
             ->success()
             ->send();
     }
 
-    // ✅ FIXED: This now handles both search and category filtering
     public function with()
     {
         $query = Product::where('is_active', true);
         
-        // If searching, override category filter
         if (!empty($this->search)) {
             $query->where(function($q) {
                 $q->where('name', 'like', '%'.$this->search.'%')
                   ->orWhere('sku', 'like', '%'.$this->search.'%');
             });
         }
-        // Only apply category filter when NOT searching
         elseif ($this->activeCategoryId) {
             $query->where('category_id', $this->activeCategoryId);
         }
@@ -230,47 +208,44 @@ new class extends Component {
     }
 };
 ?>
-{{-- HTML STARTS HERE --}}
+
 <div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <div class="col-span-8 flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
 
-    <div class="col-span-8 flex flex-col h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-
-    <div class="m-6">
-        <div class="relative">
-            <input 
-                type="text" 
-                wire:model.live.debounce.300ms="search" 
-                placeholder="Search Item Name or Barcode..." 
-                class="w-full px-4 py-3 pl-12 text-lg border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                autofocus
-            >
-
-            <div class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-            </div>
-
-            @if($search)
-                <button 
-                    wire:click="clearSearch"
-                    class="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-red-500"
+        <div class="m-6">
+            <div class="relative">
+                <input 
+                    type="text" 
+                    wire:model.live.debounce.300ms="search" 
+                    placeholder="Search Item Name or Barcode..." 
+                    class="w-full px-4 py-3 pl-12 text-lg border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    autofocus
                 >
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+
+                <div class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                    <svg class="w-6 h-6 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                     </svg>
-                </button>
-            @endif
+                </div>
+
+                @if($search)
+                    <button 
+                        wire:click="clearSearch"
+                        class="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-red-500"
+                    >
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                @endif
+            </div>
         </div>
-    </div>
 
-
-        <div class="flex overflow-x-auto p-2 bg-gray-50 border-b space-x-2">
+        <div class="flex overflow-x-auto p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2">
             @foreach($categories as $category)
                 <button wire:click="$set('activeCategoryId', {{ $category->id }})"
                     class="px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors
-                        {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' }}">
+                        {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">
                     {{ $category->name }}
                 </button>
             @endforeach
@@ -279,23 +254,22 @@ new class extends Component {
         <div class="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-4 content-start">
             @foreach($products as $product)
                 <div wire:click="addToCart({{ $product->id }})"
-                    class="cursor-pointer bg-white border hover:border-amber-500 hover:shadow-md rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-32">
-                    <div class="font-bold text-gray-800 line-clamp-2">{{ $product->name }}</div>
-                    <div class="text-amber-600 font-mono mt-1">₦{{ number_format($product->price) }}</div>
+                    class="cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:shadow-md rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-32">
+                    <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2">{{ $product->name }}</div>
+                    <div class="text-amber-600 dark:text-amber-500 font-mono mt-1">₦{{ number_format($product->price) }}</div>
                 </div>
             @endforeach
         </div>
     </div>
 
-    <div class="col-span-4 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
-        <div class="p-4 border-b bg-white">
-            <label class="block text-sm font-bold text-gray-700 mb-1">Select Table</label>
+    <div class="col-span-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Select Table</label>
             <select wire:model.live="selectedTableId"
-                class="w-full p-2 border rounded-lg bg-gray-50 font-bold text-gray-800">
+                class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold">
                 <option value="">-- Select a Table --</option>
                 @foreach($tables as $table)
                     @php
-                        // Check if this table has a pending order
                         $isOccupied = $table->orders->isNotEmpty();
                     @endphp
 
@@ -308,21 +282,21 @@ new class extends Component {
             </select>
         </div>
 
-        <div class="p-4 border-b bg-gray-50 font-bold text-lg text-gray-800">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-bold text-lg text-gray-800 dark:text-gray-200">
             Current Order
         </div>
 
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
             @if(empty($cart))
-                <div class="text-center text-gray-400 mt-10">Cart is empty</div>
+                <div class="text-center text-gray-400 dark:text-gray-500 mt-10">Cart is empty</div>
             @else
                 @foreach($cart as $id => $item)
-                    <div class="flex justify-between items-center border-b pb-2">
+                    <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
                         <div class="flex-1">
-                            <div class="font-bold text-sm">{{ $item['name'] }}</div>
-                            <div class="text-xs text-gray-500">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                            <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
                         </div>
-                        <div class="font-mono font-bold text-gray-700">
+                        <div class="font-mono font-bold text-gray-700 dark:text-gray-300">
                             ₦{{ number_format($item['price'] * $item['quantity']) }}
                         </div>
                         <button wire:click="removeFromCart({{ $id }})" class="ml-3 text-red-500 hover:text-red-700">
@@ -337,20 +311,18 @@ new class extends Component {
             @endif
         </div>
 
-        <div class="p-4 bg-gray-50 border-t">
-            <div class="flex justify-between text-xl font-bold mb-4 text-gray-900">
+        <div class="p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
                 <span>Total:</span>
                 <span>₦{{ number_format($total) }}</span>
             </div>
             <div class="grid grid-cols-2 gap-3">
-                {{-- Button 1: Send to Kitchen (Update) --}}
                 <button wire:click="checkout('update')"
                     class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex flex-col items-center justify-center">
                     <span class="text-sm">👨‍🍳 Send / Update</span>
                     <span class="text-xs font-normal opacity-80">Keep Table Open</span>
                 </button>
 
-                {{-- Button 2: Collect Payment (Close) --}}
                 <button wire:click="checkout('pay')" wire:confirm="Are you sure you want to close this table?"
                     class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg flex flex-col items-center justify-center">
                     <span class="text-sm">💰 Collect Cash</span>
