@@ -13,9 +13,16 @@ new class extends Component {
     public $tables;
     public $selectedTableId;
     public $activeCategoryId;
-    public $currentOrderId = null; // To track if we are editing an existing order
+    public $currentOrderId = null;
     public $cart = [];
     public $total = 0;
+    public $search = '';
+
+    
+    public function clearSearch()
+    {
+        $this->search = '';
+    }
 
     // 👇 This runs automatically when you change the dropdown
     public function updatedSelectedTableId($value)
@@ -29,7 +36,7 @@ new class extends Component {
 
         // 2. Find if this table has a PENDING order
         $existingOrder = \App\Models\Order::where('table_id', $value)
-            ->where('status', 'pending') // Only load if not paid yet
+            ->where('status', 'pending')
             ->with('items')
             ->latest()
             ->first();
@@ -44,7 +51,7 @@ new class extends Component {
                     'name' => $item->product_name,
                     'price' => $item->unit_price,
                     'quantity' => $item->quantity,
-                    'image' => $item->product->image ?? null, // Optional
+                    'image' => $item->product->image ?? null,
                 ];
             }
             $this->updateTotal();
@@ -89,7 +96,7 @@ new class extends Component {
 
         // 2. Now load the tables for the view (Fresh data)
         $this->tables = \App\Models\Table::with(['orders' => function ($query) {
-            $query->where('status', 'pending'); // Only care about open orders
+            $query->where('status', 'pending');
         }])->get();
 
         // Default to the first table
@@ -97,8 +104,8 @@ new class extends Component {
 
         if (request()->has('table_id')) {
             $tableId = request()->query('table_id');
-            $this->selectedTableId = $tableId; // Set the ID
-            $this->updatedSelectedTableId($tableId); // Trigger the "Load Order" logic
+            $this->selectedTableId = $tableId;
+            $this->updatedSelectedTableId($tableId);
         }
     }
 
@@ -141,7 +148,6 @@ new class extends Component {
         // 1. Database Transaction
         DB::transaction(function () use ($tableId, $action) {
             // A. Determine Status
-            // If 'pay', we close the order. If 'update', we keep it pending.
             $status = ($action === 'pay') ? 'paid' : 'pending';
 
             // Create Order
@@ -157,8 +163,7 @@ new class extends Component {
                 ]
             );
 
-            // C. Sync Items (Delete old items and re-save cart)
-            // This is the easiest way to handle quantity changes
+            // C. Sync Items
             $order->items()->delete();
 
             // Create Items & Deduct Stock
@@ -172,8 +177,6 @@ new class extends Component {
                     'subtotal' => $item['price'] * $item['quantity'],
                 ]);
 
-                // Update Inventory (Assuming Warehouse ID 2 is "Bar")
-                // In a real app, you might pick the warehouse dynamically
                 DB::table('inventory_items')
                     ->where('product_id', $productId)
                     ->where('warehouse_id', 2)
@@ -183,20 +186,13 @@ new class extends Component {
             // D. Update Table Status
             $table = \App\Models\Table::find($this->selectedTableId);
             if ($action === 'pay') {
-                // 1. Mark Order as Paid
-                $order->update(['status' => 'paid']); // 👈 Critical
-
-                // 2. Free the Table
-                $table = \App\Models\Table::find($this->selectedTableId);
-                $table->update(['status' => 'available']); // 👈 Critical
-
-                // 3. Clear the Screen
+                $order->update(['status' => 'paid']);
+                $table->update(['status' => 'available']);
                 $this->currentOrderId = null;
                 $this->cart = []; 
-                $this->selectedTableId = null; // Reset dropdown (optional)
+                $this->selectedTableId = null;
             } else {
                 $table->update(['status' => 'occupied']);
-                // We keep the cart loaded so they can see what they just sent
             }
         });
 
@@ -211,11 +207,25 @@ new class extends Component {
             ->send();
     }
 
-    // Provide data to the view
+    // ✅ FIXED: This now handles both search and category filtering
     public function with()
     {
+        $query = Product::where('is_active', true);
+        
+        // If searching, override category filter
+        if (!empty($this->search)) {
+            $query->where(function($q) {
+                $q->where('name', 'like', '%'.$this->search.'%')
+                  ->orWhere('sku', 'like', '%'.$this->search.'%');
+            });
+        }
+        // Only apply category filter when NOT searching
+        elseif ($this->activeCategoryId) {
+            $query->where('category_id', $this->activeCategoryId);
+        }
+
         return [
-            'products' => Product::where('category_id', $this->activeCategoryId)->get(),
+            'products' => $query->get(),
         ];
     }
 };
@@ -225,6 +235,36 @@ new class extends Component {
     <script src="https://cdn.tailwindcss.com"></script>
 
     <div class="col-span-8 flex flex-col h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+
+    <div class="m-6">
+        <div class="relative">
+            <input 
+                type="text" 
+                wire:model.live.debounce.300ms="search" 
+                placeholder="Search Item Name or Barcode..." 
+                class="w-full px-4 py-3 pl-12 text-lg border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                autofocus
+            >
+
+            <div class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+
+            @if($search)
+                <button 
+                    wire:click="clearSearch"
+                    class="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-red-500"
+                >
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            @endif
+        </div>
+    </div>
+
 
         <div class="flex overflow-x-auto p-2 bg-gray-50 border-b space-x-2">
             @foreach($categories as $category)
