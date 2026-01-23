@@ -5,6 +5,7 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Filament\Notifications\Notification;
 
@@ -133,8 +134,9 @@ new class extends Component {
         }
 
         $tableId = $this->selectedTableId;
+        $tableName = \App\Models\Table::find($tableId)?->name ?? 'Unknown';
 
-        DB::transaction(function () use ($tableId, $action) {
+        DB::transaction(function () use ($tableId, $action, $tableName) {
             $status = ($action === 'pay') ? 'paid' : 'pending';
 
             $order = Order::updateOrCreate(
@@ -151,7 +153,13 @@ new class extends Component {
 
             $order->items()->delete();
 
+            // Track which types of items were ordered
+            $hasFoodItems = false;
+            $hasDrinkItems = false;
+
             foreach ($this->cart as $productId => $item) {
+                $product = Product::with('category')->find($productId);
+                
                 OrderItem::create([
                     'order_id' => $order->id,
                     'product_id' => $productId,
@@ -165,6 +173,39 @@ new class extends Component {
                     ->where('product_id', $productId)
                     ->where('warehouse_id', 2)
                     ->decrement('quantity', $item['quantity']);
+
+                // Check category type
+                if ($product && $product->category) {
+                    if ($product->category->type === 'food') {
+                        $hasFoodItems = true;
+                    } elseif ($product->category->type === 'drink') {
+                        $hasDrinkItems = true;
+                    }
+                }
+            }
+
+            // Send notifications to Chef if there are food items
+            if ($hasFoodItems) {
+                $chefs = User::role('chef')->get();
+                foreach ($chefs as $chef) {
+                    Notification::make()
+                        ->title('New Kitchen Order')
+                        ->body("Order {$order->order_number} for {$tableName}")
+                        ->success()
+                        ->sendToDatabase($chef);
+                }
+            }
+
+            // Send notifications to Bartender if there are drink items
+            if ($hasDrinkItems) {
+                $bartenders = User::role('bartender')->get();
+                foreach ($bartenders as $bartender) {
+                    Notification::make()
+                        ->title('New Bar Order')
+                        ->body("Order {$order->order_number} for {$tableName}")
+                        ->success()
+                        ->sendToDatabase($bartender);
+                }
             }
 
             $table = \App\Models\Table::find($this->selectedTableId);

@@ -2,10 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Resources\Orders\OrderResource;
 use BackedEnum;
 use Filament\Pages\Page;
 use App\Models\Order;
+use Filament\Actions\Action as ActionsAction;
 use Filament\Notifications\Notification;
+use Illuminate\Notifications\Action;
 
 class KitchenDisplay extends Page
 {
@@ -30,11 +33,23 @@ class KitchenDisplay extends Page
         $order = Order::findOrFail($orderId);
         
         $order->update(['status' => 'ready']);
+
+        // 1. Get the list of items (e.g., "2x Rice, 1x Coke")
+        $itemList = $order->items->map(function ($item) {
+            return "{$item->quantity}x {$item->product->name}";
+        })->join(', ');
         
         Notification::make()
             ->title("Order #{$order->order_number} Ready!")
+            ->body("Order #{$order->id} for {$order->table->name}\n\rItems: {$itemList}\n\r is ready for pickup.")
             ->success()
-            ->send();
+            ->actions([
+                // Add a button to the notification to jump to the order
+                ActionsAction::make('view')
+                    ->button()
+                    ->url(OrderResource::getUrl('view', ['record' => $order->id])),
+            ])
+            ->sendToDatabase($order->user);
     }
 
     public static function canAccess(): bool
