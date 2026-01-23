@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Orders;
 use App\Filament\Resources\Orders\Pages\CreateOrder;
 use App\Filament\Resources\Orders\Pages\EditOrder;
 use App\Filament\Resources\Orders\Pages\ListOrders;
+use App\Filament\Resources\Orders\Pages\ViewOrder;
 use App\Filament\Resources\Orders\Schemas\OrderForm;
 use App\Filament\Resources\Orders\Tables\OrdersTable;
 use App\Models\Order;
@@ -117,7 +118,7 @@ class OrderResource extends Resource
                         // Optional: Update total_amount when items are added (requires more advanced logic, 
                         // but for now, you can type the total manually at the top).
                 ]), 
-            ]);
+            ])->columns(1);
     }
 
     public static function table(Table $table): Table
@@ -154,7 +155,10 @@ class OrderResource extends Resource
             Action::make('edit')
                 ->icon('heroicon-o-pencil')
                 ->label('Edit')
-                ->url(fn (Order $record) => EditOrder::getUrl(['record' => $record])),            
+                ->url(
+                    fn (Order $record): string => auth()->user()->can('update', $record)
+                    ? Pages\EditOrder::getUrl(['record' => $record]) // If Admin, go to Edit
+                    : Pages\ViewOrder::getUrl(['record' => $record])),            
             Action::make('delete')
                 ->requiresConfirmation()
                 ->label('Delete')
@@ -186,6 +190,7 @@ class OrderResource extends Resource
         return [
             'index' => ListOrders::route('/'),
             'create' => CreateOrder::route('/create'),
+            'view' => ViewOrder::route('/{record}'),
             'edit' => EditOrder::route('/{record}/edit'),
         ];
     }

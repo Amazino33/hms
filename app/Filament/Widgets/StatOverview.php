@@ -69,18 +69,27 @@ class StatOverview extends StatsOverviewWidget
             ];
         }
 
-        // 🤵 SCENARIO 3: WAITER (See Service Status)
+        // 🤵 SCENARIO 3: WAITER (See Personal Stats)
         if ($user->hasRole('waiter')) {
-            $ready = \App\Models\Order::where('status', 'ready')->count();
             
+            // 1. "My Ready Orders" (Only show orders created by THIS waiter that are ready)
+            $myReady = \App\Models\Order::where('user_id', $user->id) // 👈 Filter by User
+                ->where('status', 'ready')
+                ->count();
+
+            // 2. "My Sales" (Only sum orders created by THIS waiter)
+            $mySales = \App\Models\Order::where('user_id', $user->id) // 👈 Filter by User
+                ->whereDate('created_at', now())
+                ->sum('total_amount');
+
             return [
-                Stat::make('Ready to Serve', $ready)
-                    ->description('Waiting for pickup')
+                Stat::make('Ready for Pickup', $myReady)
+                    ->description('Your tables waiting')
                     ->color('success')
                     ->descriptionIcon('heroicon-m-check-badge'),
                     
-                Stat::make('My Sales Today', '₦' . number_format(\App\Models\Order::whereDate('created_at', now())->sum('total_amount')))
-                    ->description('Total value of orders')
+                Stat::make('My Sales Today', '₦' . number_format($mySales))
+                    ->description('Your total contribution')
                     ->color('gray'),
             ];
         }
