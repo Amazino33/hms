@@ -61,7 +61,7 @@ class ProductsTable
                     ->label('Import Excel')
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('success')
-                    ->form([
+                    ->schema([
                         FileUpload::make('attachment')
                             ->label('Upload .xlsx or .csv')
                             ->disk('public') // Temporary storage
