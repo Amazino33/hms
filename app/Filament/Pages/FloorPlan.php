@@ -37,4 +37,11 @@ class FloorPlan extends Page
         
         $this->dispatch('notify', 'Table Cleared'); // Simple notification
     }
+
+    
+    public static function canAccess(): bool
+    {
+        // Only Super Admins and waiter can see this
+        return auth()->user()->hasRole(['super_admin', 'manager', 'waiter']);
+    }
 }

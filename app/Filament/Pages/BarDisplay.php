@@ -40,6 +40,6 @@ class BarDisplay extends Page
     public static function canAccess(): bool
     {
         // Only Super Admins and Chefs can see this
-        return auth()->user()->hasRole(['super_admin', 'manager', 'waiter', 'bartender']);
+        return auth()->user()->hasRole(['super_admin', 'manager', 'bartender']);
     }
 }
