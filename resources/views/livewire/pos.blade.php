@@ -19,7 +19,7 @@ new class extends Component {
     public $total = 0;
     public $search = '';
 
-    
+
     public function clearSearch()
     {
         $this->search = '';
@@ -79,7 +79,7 @@ new class extends Component {
 
         foreach ($tables as $table) {
             $hasPendingOrder = $table->orders()->where('status', 'pending')->exists();
-            
+
             if ($hasPendingOrder && $table->status !== 'occupied') {
                 $table->update(['status' => 'occupied']);
             } elseif (!$hasPendingOrder && $table->status !== 'available') {
@@ -87,9 +87,11 @@ new class extends Component {
             }
         }
 
-        $this->tables = \App\Models\Table::with(['orders' => function ($query) {
-            $query->where('status', 'pending');
-        }])->get();
+        $this->tables = \App\Models\Table::with([
+            'orders' => function ($query) {
+                $query->where('status', 'pending');
+            }
+        ])->get();
 
         $this->selectedTableId = $this->tables->first()?->id;
 
@@ -159,7 +161,7 @@ new class extends Component {
 
             foreach ($this->cart as $productId => $item) {
                 $product = Product::with('category')->find($productId);
-                
+
                 OrderItem::create([
                     'order_id' => $order->id,
                     'product_id' => $productId,
@@ -213,7 +215,7 @@ new class extends Component {
                 $order->update(['status' => 'paid']);
                 $table->update(['status' => 'available']);
                 $this->currentOrderId = null;
-                $this->cart = []; 
+                $this->cart = [];
                 $this->selectedTableId = null;
             } else {
                 $table->update(['status' => 'occupied']);
@@ -231,15 +233,25 @@ new class extends Component {
 
     public function with()
     {
-        $query = Product::where('is_active', true);
+        $query = Product::where('is_active', true)
+            // Load the inventory explicitly for Bar/Kitchen
+            ->withSum([
+                'inventory as available_stock' => function ($query) {
+                    // 👇 FILTER: Only count stock in Bar or Kitchen (Adjust IDs or Names)
+                    // If you use IDs: whereIn('warehouse_id', [1, 3]) 
+                    // If you use Names: whereHas('warehouse', fn($q) => $q->whereIn('name', ['Bar', 'Kitchen']))
         
+                    // Example assuming 'warehouse_id' 2 is Main Warehouse (exclude it)
+                    $query->where('warehouse_id', '!=', 3);
+                }
+            ], 'quantity');
+
         if (!empty($this->search)) {
-            $query->where(function($q) {
-                $q->where('name', 'like', '%'.$this->search.'%')
-                  ->orWhere('sku', 'like', '%'.$this->search.'%');
+            $query->where(function ($q) {
+                $q->where('name', 'like', '%' . $this->search . '%')
+                    ->orWhere('sku', 'like', '%' . $this->search . '%');
             });
-        }
-        elseif ($this->activeCategoryId) {
+        } elseif ($this->activeCategoryId) {
             $query->where('category_id', $this->activeCategoryId);
         }
 
@@ -251,42 +263,41 @@ new class extends Component {
 ?>
 
 <div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
-    <div class="col-span-8 flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div
+        class="col-span-8 flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
 
         <div class="m-6">
             <div class="relative">
-                <input 
-                    type="text" 
-                    wire:model.live.debounce.300ms="search" 
-                    placeholder="Search Item Name or Barcode..." 
+                <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search Item Name or Barcode..."
                     class="w-full px-4 py-3 pl-12 text-lg border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    autofocus
-                >
+                    autofocus>
 
                 <div class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                    <svg class="w-6 h-6 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    <svg class="w-6 h-6 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                     </svg>
                 </div>
 
                 @if($search)
-                    <button 
-                        wire:click="clearSearch"
-                        class="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-red-500"
-                    >
+                    <button wire:click="clearSearch"
+                        class="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-red-500">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                            </path>
                         </svg>
                     </button>
                 @endif
             </div>
         </div>
 
-        <div class="flex overflow-x-auto p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2">
+        <div
+            class="flex overflow-x-auto p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2">
             @foreach($categories as $category)
                 <button wire:click="$set('activeCategoryId', {{ $category->id }})"
                     class="px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors
-                        {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">
+                            {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">
                     {{ $category->name }}
                 </button>
             @endforeach
@@ -295,15 +306,33 @@ new class extends Component {
         <div class="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-4 content-start">
             @foreach($products as $product)
                 <div wire:click="addToCart({{ $product->id }})"
-                    class="cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:shadow-md rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-32">
+                    class="relative cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:shadow-md rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-32 group">
+                    
+                    @php
+                        // If stock is null (no record), treat as 0
+                        $stock = $product->available_stock ?? 0;
+                        $stockColor = $stock > 10 ? 'bg-green-100 text-green-800' : ($stock > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800');
+                    @endphp
+
+                    <span class="absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold {{ $stockColor }}">
+                        {{ $stock }} left
+                    </span>
+
                     <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2">{{ $product->name }}</div>
                     <div class="text-amber-600 dark:text-amber-500 font-mono mt-1">₦{{ number_format($product->price) }}</div>
+                    
+                    @if($stock <= 0)
+                        <div class="absolute inset-0 bg-white/60 dark:bg-gray-900/60 rounded-xl flex items-center justify-center cursor-not-allowed">
+                            <span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold rotate-12">SOLD OUT</span>
+                        </div>
+                    @endif
                 </div>
             @endforeach
         </div>
     </div>
 
-    <div class="col-span-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full">
+    <div
+        class="col-span-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
             <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Select Table</label>
             <select wire:model.live="selectedTableId"
@@ -323,7 +352,8 @@ new class extends Component {
             </select>
         </div>
 
-        <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-bold text-lg text-gray-800 dark:text-gray-200">
+        <div
+            class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-bold text-lg text-gray-800 dark:text-gray-200">
             Current Order
         </div>
 
@@ -335,7 +365,8 @@ new class extends Component {
                     <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
                         <div class="flex-1">
                             <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x
+                                {{ $item['quantity'] }}</div>
                         </div>
                         <div class="font-mono font-bold text-gray-700 dark:text-gray-300">
                             ₦{{ number_format($item['price'] * $item['quantity']) }}
