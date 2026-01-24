@@ -202,10 +202,6 @@ class OrderResource extends Resource
                     ->sortable()
                     ->weight('bold'),
 
-                TextColumn::make('total_amount')
-                    ->money('NGN')
-                    ->sortable(),
-
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn(string $state): string => match ($state) {
@@ -214,8 +210,35 @@ class OrderResource extends Resource
                         'ready' => 'info',
                         'served' => 'success',
                         'paid' => 'success',
+                        'partial' => 'danger',
                         default => 'gray',
                     }),
+
+                TextColumn::make('balance_due')
+                    ->label('Debt')
+                    ->money('NGN')
+                    ->state(fn(Order $record): float => max(0, $record->total_amount - $record->amount_paid))
+                    ->color('danger')
+                    ->weight('bold')
+                    ->state(function (Order $record) {
+                            // 1. If Paid or Pending, return null (shows nothing)
+                            if ($record->amount_paid >= $record->total_amount || $record->status === 'pending') {
+                                return null;
+                            }
+
+                            // 2. Otherwise, return the calculation
+                            return max(0, $record->total_amount - $record->amount_paid);
+                        }),
+
+                TextColumn::make('total_amount')
+                    ->money('NGN')
+                    ->sortable(),
+                
+                TextColumn::make('guest.name')
+                    ->label('Debtor')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
 
                 TextColumn::make('created_at')
                     ->dateTime()

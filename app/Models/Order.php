@@ -22,4 +22,14 @@ class Order extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function guest()
+    {
+        return $this->belongsTo(Guest::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(OrderPayment::class);
+    }
 }
