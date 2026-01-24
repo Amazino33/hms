@@ -87,10 +87,6 @@ class StatOverview extends StatsOverviewWidget
                     ->description('Your tables waiting')
                     ->color('success')
                     ->descriptionIcon('heroicon-m-check-badge'),
-                    
-                Stat::make('My Sales Today', '₦' . number_format($mySales))
-                    ->description('Your total contribution')
-                    ->color('gray'),
             ];
         }
 
