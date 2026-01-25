@@ -18,16 +18,30 @@ class ReceiveTransfers extends Page
         $user = Auth::user();
         $warehouseId = null;
         $warehouseName = null;
+
         if ($user->hasRole('bartender')) {
-            $warehouseId = 4;
-            $warehouse = \App\Models\WareHouse::find(4);
-            $warehouseName = $warehouse ? $warehouse->name : 'Bar';
+            // Find the bar warehouse (consumer type, typically the first consumer warehouse)
+            $barWarehouse = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first();
+            if ($barWarehouse) {
+                $warehouseId = $barWarehouse->id;
+                $warehouseName = $barWarehouse->name;
+            }
         }
+
         if ($user->hasRole('chef')) {
-            $warehouseId = 5;
-            $warehouse = \App\Models\WareHouse::find(5);
-            $warehouseName = $warehouse ? $warehouse->name : 'Kitchen';
+            // Find the kitchen warehouse (consumer type, typically the second consumer warehouse)
+            $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
+            if ($consumerWarehouses->count() > 1) {
+                $kitchenWarehouse = $consumerWarehouses[1]; // Second consumer warehouse
+                $warehouseId = $kitchenWarehouse->id;
+                $warehouseName = $kitchenWarehouse->name;
+            } elseif ($consumerWarehouses->count() == 1) {
+                // If only one consumer warehouse, use it for chef
+                $warehouseId = $consumerWarehouses[0]->id;
+                $warehouseName = $consumerWarehouses[0]->name;
+            }
         }
+
         if ($user->hasRole('storekeeper') || $user->hasRole('super_admin')) {
             // Storekeeper can see all transfers regardless of warehouse
             $transfers = StockTransfer::with(['items','fromWarehouse','toWarehouse'])->whereIn('status', ['pending','sent'])->latest()->get();

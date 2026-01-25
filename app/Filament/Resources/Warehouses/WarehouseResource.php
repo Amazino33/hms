@@ -10,6 +10,7 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Select;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
@@ -35,6 +36,15 @@ class WarehouseResource extends Resource
                 ->maxLength(255)
                 ->placeholder('e.g., Main Store, Bar Fridge'),
             
+            Select::make('type')
+                ->options([
+                    'storage' => 'Storage',
+                    'consumer' => 'Consumer',
+                ])
+                ->required()
+                ->default('storage')
+                ->helperText('Storage: Can have direct inventory input. Consumer: Receives stock through transfers only.'),
+
             TextInput::make('location')
                 ->maxLength(255)
                 ->placeholder('e.g., Basement, Rooftop Bar'),
@@ -52,6 +62,14 @@ class WarehouseResource extends Resource
                 TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
+
+                TextColumn::make('type')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'storage' => 'success',
+                        'consumer' => 'info',
+                    })
+                    ->searchable(),
 
                 TextColumn::make('location')
                     ->icon('heroicon-m-map-pin')

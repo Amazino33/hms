@@ -13,10 +13,11 @@ class WarehouseTypeSeeder extends Seeder
     public function run(): void
     {
         // Set warehouse types
-        // Assuming warehouse ID 1 is the main storage
+        // Storage warehouses: can have direct quantity input
         WareHouse::where('id', 1)->update(['type' => 'storage']);
         
-        // Set consumer warehouses (bar, kitchen, etc.)
+        // Consumer warehouses: receive stock through transfers only
+        // Typically: ID 4 = Bar, ID 5 = Kitchen
         WareHouse::whereIn('id', [4, 5])->update(['type' => 'consumer']);
         
         // Any other warehouses default to storage

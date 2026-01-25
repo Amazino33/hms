@@ -199,17 +199,18 @@
         const allProducts = @json($products);
         const warehouses = @json($warehouses);
         const productAvailability = {}; // Store availability data
-
+        
         function getFilteredProducts(toWarehouseId) {
             if (!toWarehouseId) return allProducts;
             
             const warehouse = warehouses.find(w => w.id == toWarehouseId);
             if (!warehouse || warehouse.type !== 'consumer') return allProducts;
             
-            // For consumer warehouses, filter by category type
-            if (toWarehouseId == 4) { // Bar
+            // For consumer warehouses, filter by category type based on warehouse name
+            const warehouseName = warehouse.name.toLowerCase();
+            if (warehouseName.includes('bar')) {
                 return allProducts.filter(p => p.category && p.category.type === 'drink');
-            } else if (toWarehouseId == 5) { // Kitchen
+            } else if (warehouseName.includes('kitchen')) {
                 return allProducts.filter(p => p.category && p.category.type === 'food');
             }
             
