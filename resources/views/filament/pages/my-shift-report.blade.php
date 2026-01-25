@@ -26,6 +26,20 @@
                     ₦{{ number_format($pos_total) }}
                 </div>
             </div>
+
+            <div class="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
+                <div class="text-xs font-bold text-red-600 dark:text-red-400 uppercase">Outstanding Debt</div>
+                <div class="text-3xl font-black text-red-700 dark:text-red-300 mt-1">
+                    ₦{{ number_format($total_debt) }}
+                </div>
+            </div>
+
+            <div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                <div class="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase">Net Position</div>
+                <div class="text-3xl font-black text-gray-700 dark:text-gray-300 mt-1">
+                    ₦{{ number_format($total_collected - $total_debt) }}
+                </div>
+            </div>
         </div>
 
         <div class="bg-gray-800 text-white p-4 flex justify-between items-center px-8">
@@ -55,6 +69,28 @@
                     <div class="text-center text-gray-400 italic py-4">No transactions yet today.</div>
                 @endforelse
             </div>
+
+            @if($partial_orders->count() > 0)
+            <h3 class="font-bold text-sm text-gray-500 uppercase mb-3 mt-6">Outstanding Debts</h3>
+            
+            <div class="max-h-64 overflow-y-auto space-y-2 pr-2">
+                @foreach($partial_orders as $order)
+                    <div class="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg border border-transparent hover:border-gray-100 dark:hover:border-gray-700">
+                        <div>
+                            <div class="font-bold text-gray-800 dark:text-gray-200">
+                                #{{ $order->order_number }}
+                            </div>
+                            <div class="text-xs text-gray-400">
+                                {{ $order->created_at->format('h:i A') }} • {{ $order->guest ? $order->guest->name : 'Walk-in' }}
+                            </div>
+                        </div>
+                        <div class="font-mono font-bold text-red-600">
+                            ₦{{ number_format($order->total_amount - $order->amount_paid) }}
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+            @endif
         </div>
 
         <div class="p-6 bg-gray-50 dark:bg-gray-800 text-center border-t border-gray-200 dark:border-gray-700">

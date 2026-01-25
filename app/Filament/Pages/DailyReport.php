@@ -58,10 +58,8 @@ class DailyReport extends Page implements HasForms
         $cashHand = $payments->where('method', 'cash')->sum('amount');
         $posBank = $payments->whereIn('method', ['pos', 'transfer'])->sum('amount');
 
-        // 2. DEBT (Money we gave out as credit today)
-        // We look for orders created today that are 'partial' or 'pending'
-        $debtGiven = Order::whereDate('created_at', $targetDate)
-            ->where('status', 'partial')
+        // 2. DEBT (Total outstanding debt)
+        $totalDebt = Order::where('status', 'partial')
             ->get()
             ->sum(fn($order) => $order->total_amount - $order->amount_paid);
 
@@ -78,7 +76,7 @@ class DailyReport extends Page implements HasForms
             'totalCollected' => $totalCollected,
             'cashHand' => $cashHand,
             'posBank' => $posBank,
-            'debtGiven' => $debtGiven,
+            'totalDebt' => $totalDebt,
             'staffStats' => $staffStats,
         ];
     }

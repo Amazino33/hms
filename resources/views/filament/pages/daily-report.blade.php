@@ -45,13 +45,13 @@
                     <div class="p-2 bg-red-100 dark:bg-red-800 rounded-lg text-red-600 dark:text-red-300 mr-3">
                         <x-heroicon-m-exclamation-triangle class="w-6 h-6" />
                     </div>
-                    <span class="text-xs font-bold text-red-800 dark:text-red-300 uppercase tracking-wider">Credit Given</span>
+                    <span class="text-xs font-bold text-red-800 dark:text-red-300 uppercase tracking-wider">Total Debt</span>
                 </div>
                 <div class="text-3xl font-black text-red-700 dark:text-red-400 truncate">
-                    ₦{{ number_format($debtGiven) }}
+                    ₦{{ number_format($totalDebt) }}
                 </div>
                 <div class="text-xs text-red-600 dark:text-red-500 mt-2 font-medium">
-                    Unpaid sales today
+                    Outstanding balance
                 </div>
             </div>
         </div>

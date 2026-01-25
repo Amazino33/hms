@@ -40,14 +40,32 @@ class OrderSplitter
                 return $warehouseId === 4 ? 'bar' : ($warehouseId === 5 ? 'kitchen' : 'main');
             });
 
+            // Calculate total cart amount for proportional payment distribution
+            $totalCartAmount = 0;
+            foreach ($groups as $destination => $items) {
+                $totalCartAmount += collect($items)->sum(fn($i) => $i['price'] * $i['quantity']);
+            }
+
+            $paidAmount = $options['amount_paid'] ?? 0;
+            $orderStatus = $options['status'] ?? 'pending';
+
             foreach ($groups as $destination => $items) {
                 $groupTotal = collect($items)->sum(fn($i) => $i['price'] * $i['quantity']);
+
+                // Distribute payment proportionally for partial payments
+                if ($orderStatus === 'paid') {
+                    $amountPaid = $groupTotal;
+                } elseif ($orderStatus === 'partial' && $totalCartAmount > 0) {
+                    $amountPaid = round(($groupTotal / $totalCartAmount) * $paidAmount, 2);
+                } else {
+                    $amountPaid = $paidAmount; // For pending or other cases
+                }
 
                 $order = Order::create([
                     'order_number' => 'ORD-' . time() . '-' . strtoupper(substr($destination,0,1)),
                     'total_amount' => $groupTotal,
-                    'amount_paid' => $options['amount_paid'] ?? 0,
-                    'status' => $options['status'] ?? 'pending',
+                    'amount_paid' => $amountPaid,
+                    'status' => $orderStatus,
                     'payment_method' => $options['payment_method'] ?? 'cash',
                     'table_id' => $tableId,
                     'user_id' => $userId,

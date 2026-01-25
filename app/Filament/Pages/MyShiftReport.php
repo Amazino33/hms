@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use Filament\Pages\Page;
 use App\Models\OrderPayment;
+use App\Models\Order;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use BackedEnum;
@@ -31,6 +32,15 @@ class MyShiftReport extends Page
             ->whereDate('paid_at', $today)
             ->get();
 
+        // 2. My Debts (Partial orders I created today)
+        $myPartialOrders = Order::where('user_id', $userId)
+            ->where('status', 'partial')
+            ->whereDate('created_at', $today)
+            ->with('guest')
+            ->get();
+
+        $totalDebt = $myPartialOrders->sum(fn($order) => $order->total_amount - $order->amount_paid);
+
         return [
             'date' => $today->format('l, d M Y'),
             'cash_hand' => $myPayments->where('method', 'cash')->sum('amount'),
@@ -38,6 +48,8 @@ class MyShiftReport extends Page
             'total_collected' => $myPayments->sum('amount'),
             'transaction_count' => $myPayments->count(),
             'transactions' => $myPayments->sortByDesc('paid_at'),
+            'total_debt' => $totalDebt,
+            'partial_orders' => $myPartialOrders->sortByDesc('created_at'),
         ];
     }
 }

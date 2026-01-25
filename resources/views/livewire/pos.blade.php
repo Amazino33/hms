@@ -5,6 +5,7 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\OrderPayment;
 use App\Models\User;
 use App\Models\Guest;
 use Illuminate\Support\Facades\DB;
@@ -40,11 +41,6 @@ new class extends Component {
 
     public function updatedSelectedTableId($value)
     {
-        // Prevent reloading if the same table is selected and cart is already loaded
-        if ($value == $this->selectedTableId && (!empty($this->cart) || !empty($this->existingItems))) {
-            return;
-        }
-
         $this->selectedTableId = $value;
         $this->cart = [];
         $this->existingItems = [];
@@ -53,32 +49,39 @@ new class extends Component {
         if (!$value)
             return;
 
-        // Load all pending orders for the table and combine their items into existingItems
-        $orders = \App\Models\Order::where('table_id', $value)
-            ->where('status', 'pending')
-            ->with('items.product')
-            ->get();
+        // Get the selected table
+        $table = $this->tables->find($value);
+        if (!$table) return;
 
-        foreach ($orders as $order) {
-            foreach ($order->items as $item) {
-                if (isset($this->existingItems[$item->product_id])) {
-                    $this->existingItems[$item->product_id]['quantity'] += $item->quantity;
-                } else {
-                    $this->existingItems[$item->product_id] = [
-                        'id' => $item->product_id,
-                        'name' => $item->product_name,
-                        'price' => $item->unit_price,
-                        'quantity' => $item->quantity,
-                        'image' => $item->product->image ?? null,
-                    ];
+        // If table is occupied, load existing items from pending orders
+        if ($table->status === 'occupied') {
+            $orders = \App\Models\Order::where('table_id', $value)
+                ->where('status', 'pending')
+                ->with('items.product')
+                ->get();
+
+            foreach ($orders as $order) {
+                foreach ($order->items as $item) {
+                    if (isset($this->existingItems[$item->product_id])) {
+                        $this->existingItems[$item->product_id]['quantity'] += $item->quantity;
+                    } else {
+                        $this->existingItems[$item->product_id] = [
+                            'id' => $item->product_id,
+                            'name' => $item->product_name,
+                            'price' => $item->unit_price,
+                            'quantity' => $item->quantity,
+                            'image' => $item->product->image ?? null,
+                        ];
+                    }
                 }
             }
-        }
 
-        $this->updateTotal();
-        if ($orders->isNotEmpty()) {
-            Notification::make()->title('Order Resumed')->info()->send();
+            $this->updateTotal();
+            if ($orders->isNotEmpty()) {
+                Notification::make()->title('Order Resumed')->info()->send();
+            }
         }
+        // If table is free, cart remains empty
     }
 
     public function updateTotal()
@@ -97,28 +100,9 @@ new class extends Component {
         $this->categories = Category::has('products')->get();
         $this->activeCategoryId = $this->categories->first()?->id;
 
-        $tables = \App\Models\Table::all();
-        foreach ($tables as $table) {
-            $hasPendingOrder = $table->orders()->where('status', 'pending')->exists();
-            if ($hasPendingOrder && $table->status !== 'occupied') {
-                $table->update(['status' => 'occupied']);
-            } elseif (!$hasPendingOrder && $table->status !== 'available') {
-                $table->update(['status' => 'available']);
-            }
-        }
+        $this->loadTables();
 
-        // If table_id is provided, include it even if occupied
-        $query = \App\Models\Table::with(['orders' => fn($q) => $q->where('status', 'pending')]);
-        if ($table_id) {
-            $query->where(function($q) use ($table_id) {
-                $q->where('status', 'available')->orWhere('id', $table_id);
-            });
-        } else {
-            $query->where('status', 'available');
-        }
-        $this->tables = $query->get();
-
-        $this->selectedTableId = $table_id ?? $this->tables->first()?->id;
+        $this->selectedTableId = $table_id ?? $this->tables->first(fn($table) => $table->status === 'available')?->id ?? $this->tables->first()?->id;
 
         // Load existing order if table is selected
         if ($this->selectedTableId) {
@@ -256,11 +240,21 @@ new class extends Component {
             'guest_id' => $this->selectedGuestId,
         ]);
 
+        // Create payment record for shift tracking (only one for the total payment)
+        if ($this->paidAmount > 0 && !empty($orders)) {
+            \App\Models\OrderPayment::create([
+                'order_id' => $orders[0]->id,
+                'amount' => $this->paidAmount,
+                'method' => $this->paymentMethod,
+                'user_id' => auth()->id(),
+                'paid_at' => now(),
+            ]);
+        }
+
         \App\Models\Table::find($tableId)->update(['status' => $tableStatus]);
 
         // Reload tables to reflect status change
-        $query = \App\Models\Table::with(['orders' => fn($q) => $q->where('status', 'pending')]);
-        $this->tables = $query->get();
+        $this->loadTables();
 
         $balance = $this->total - $this->paidAmount;
         $msg = $orderStatus === 'paid' ? "Paid: ₦" . number_format($this->paidAmount) : "Debt Recorded: ₦" . number_format($balance);
@@ -294,6 +288,7 @@ new class extends Component {
             'payment_method' => 'cash',
         ]);
 
+        // Update table status to occupied when order is sent to kitchen
         \App\Models\Table::find($tableId)->update(['status' => 'occupied']);
 
         // Move cart items to existing items (grayed out)
@@ -321,6 +316,11 @@ new class extends Component {
             $query->where('category_id', $this->activeCategoryId);
 
         return ['products' => $query->get()];
+    }
+
+    private function loadTables()
+    {
+        $this->tables = \App\Models\Table::all();
     }
 
     // Helper to get Warehouse ID consistently
@@ -378,8 +378,8 @@ new class extends Component {
                 <option value="">-- Select a Table --</option>
                 @foreach($tables as $table)
                     <option value="{{ $table->id }}"
-                        class="{{ $table->orders->isNotEmpty() ? 'text-red-600 font-bold' : 'text-green-600' }}">
-                        {{ $table->name }} {{ $table->orders->isNotEmpty() ? '(Occupied)' : '(Free)' }}</option>
+                        class="{{ $table->status === 'occupied' ? 'text-red-600 font-bold' : 'text-green-600' }}">
+                        {{ $table->name }} {{ $table->status === 'occupied' ? '(Occupied)' : '(Free)' }}</option>
                 @endforeach
             </select>
         </div>
