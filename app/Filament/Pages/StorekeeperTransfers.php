@@ -1,0 +1,40 @@
+<?php
+
+namespace App\Filament\Pages;
+
+use Filament\Pages\Page;
+use BackedEnum;
+use Illuminate\Support\Facades\Auth;
+use App\Models\Product;
+use App\Models\WareHouse;
+use App\Models\StockTransfer;
+
+class StorekeeperTransfers extends Page
+{
+    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-arrows-right-left';
+    protected static ?string $navigationLabel = 'Stock Transfers';
+    protected string $view = 'filament.pages.storekeeper-transfers';
+
+    public function getViewData(): array
+    {
+        $products = Product::with('category')->orderBy('name')->get();
+        $warehouses = WareHouse::orderBy('name')->get();
+
+        $page = request()->get('page', 1);
+        $recent = StockTransfer::with(['items','fromWarehouse','toWarehouse'])->latest()->paginate(10, ['*'], 'page', $page);
+
+        return [
+            'products' => $products,
+            'warehouses' => $warehouses,
+            'recentTransfers' => $recent,
+        ];
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = Auth::user();
+        if (!$user) return false;
+
+        return $user->hasRole('storekeeper') || $user->hasRole('super_admin');
+    }
+}

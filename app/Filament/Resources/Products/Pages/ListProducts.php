@@ -20,28 +20,18 @@ class ListProducts extends ListRecords
     {
         return [
             Action::make('download_template')
-                ->label('Download Template')
+                ->label('Download Warehouse Import Template')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('gray')
-                
-                // 1. The Modal Form (This asks for the Warehouse)
-                ->schema([
-                    Select::make('warehouse_id')
-                        ->label('Select Target Warehouse')
-                        ->options(WareHouse::pluck('name', 'id')) // Get list from DB
-                        ->required()
-                        ->native(false),
-                ])
-                
-                // 2. The Action (Runs after they click "Submit" in the modal)
-                ->action(function (array $data) {
-                    // Find the name of the selected warehouse
-                    $warehouseName = Warehouse::find($data['warehouse_id'])->name;
+                ->action(function () {
+                    // Use the first storage warehouse for import template
+                    $storageWarehouse = WareHouse::where('type', 'storage')->first();
+                    $warehouseName = $storageWarehouse ? $storageWarehouse->name : 'Storage Warehouse';
 
-                    // Download the file, passing the name to the Export class
+                    // Download the file for storage warehouse
                     return FacadesExcel::download(
                         new ProductTemplateExport($warehouseName), 
-                        'import_template_' . strtolower(str_replace(' ', '_', $warehouseName)) . '.xlsx'
+                        'warehouse_import_template.xlsx'
                     );
                 }),
 

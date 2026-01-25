@@ -29,16 +29,49 @@ class InventoryRelationManager extends RelationManager
                 Select::make('warehouse_id')
                     ->relationship('warehouse', 'name')
                     ->required()
-                    // Disable selecting a warehouse that already has this product
-                    ->disableOptionWhen(fn ($value, $record, $livewire) => 
-                        $record === null // Only disable on create, not edit
-                        && $livewire->ownerRecord->inventory()->where('warehouse_id', $value)->exists()
-                    ),
+                    // Disable selecting a warehouse that already has this product, except for storage warehouses
+                    ->disableOptionWhen(function ($value, $record) {
+                        if ($record !== null) return false; // Allow editing existing records
+                        
+                        $warehouse = \App\Models\WareHouse::find($value);
+                        if (!$warehouse) return true;
+                        
+                        // Allow storage warehouses always, disable consumer warehouses that already have this product
+                        if ($warehouse->type === 'storage') return false;
+                        
+                        return $this->ownerRecord->inventory()->where('warehouse_id', $value)->exists();
+                    })
+                    ->live()
+                    ->afterStateUpdated(function ($state, callable $set) {
+                        // Reset quantity when warehouse changes
+                        $warehouse = \App\Models\WareHouse::find($state);
+                        if ($warehouse && $warehouse->type !== 'storage') {
+                            $set('quantity', 0);
+                        }
+                    }),
 
                 TextInput::make('quantity')
                     ->numeric()
                     ->default(0)
-                    ->required(),
+                    ->required()
+                    ->disabled(function (callable $get) {
+                        $warehouseId = $get('warehouse_id');
+                        if (!$warehouseId) return true;
+                        
+                        $warehouse = \App\Models\WareHouse::find($warehouseId);
+                        return !$warehouse || $warehouse->type !== 'storage';
+                    })
+                    ->helperText(function (callable $get) {
+                        $warehouseId = $get('warehouse_id');
+                        if (!$warehouseId) return '';
+                        
+                        $warehouse = \App\Models\WareHouse::find($warehouseId);
+                        if (!$warehouse) return '';
+                        
+                        return $warehouse->type === 'storage' 
+                            ? 'Enter quantity for storage warehouse' 
+                            : 'Quantity managed through transfers from storage warehouses';
+                    }),
             ]);
     }
 
@@ -51,14 +84,21 @@ class InventoryRelationManager extends RelationManager
                     ->label('Warehouse')
                     ->sortable(),
                 TextInputColumn::make('quantity') // Editable directly in the table!
-                    ->rules(['numeric', 'min:0']),
+                    ->rules(['numeric', 'min:0'])
+                    ->disabled(function ($record) {
+                        return $record->warehouse->type !== 'storage';
+                    })
+                    ->placeholder(function ($record) {
+                        return $record->warehouse->type !== 'storage' ? 'Managed via transfers' : 'Enter quantity';
+                    }),
             ])
             ->headerActions([
                 CreateAction::make()
                     ->label('Add to Warehouse'),
             ])
             ->actions([
-                DeleteAction::make(),
+                DeleteAction::make()
+                    ->hidden(fn ($record) => $record->warehouse->type === 'storage'), // Can't delete storage warehouse inventory
             ]);
     }
 }

@@ -9,4 +9,8 @@ class WareHouse extends Model
     protected $table = 'warehouses';
 
     protected $guarded = [];
+
+    protected $casts = [
+        'type' => 'string',
+    ];
 }
