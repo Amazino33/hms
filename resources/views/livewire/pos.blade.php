@@ -96,7 +96,21 @@ new class extends Component {
 
     public function addToCart($productId)
     {
-        $product = Product::find($productId);
+        $product = Product::with('category')->find($productId);
+
+        // Check stock availability for the product in its warehouse
+        $warehouseId = $this->getWarehouseId($product);
+        $available = (int) DB::table('inventory_items')
+            ->where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->value('quantity');
+
+        $currentQty = isset($this->cart[$productId]) ? $this->cart[$productId]['quantity'] : 0;
+        if ($available <= $currentQty) {
+            Notification::make()->title('Out of Stock')->danger()->send();
+            return;
+        }
+
         if (isset($this->cart[$productId])) {
             $this->cart[$productId]['quantity']++;
         } else {
@@ -106,6 +120,7 @@ new class extends Component {
                 'quantity' => 1,
             ];
         }
+
         $this->calculateTotal();
     }
 
