@@ -18,6 +18,7 @@ new class extends Component {
     public $activeCategoryId;
     public $currentOrderId = null;
     public $cart = [];
+    public $existingItems = [];
     public $total = 0;
     public $search = '';
 
@@ -39,30 +40,43 @@ new class extends Component {
 
     public function updatedSelectedTableId($value)
     {
+        // Prevent reloading if the same table is selected and cart is already loaded
+        if ($value == $this->selectedTableId && (!empty($this->cart) || !empty($this->existingItems))) {
+            return;
+        }
+
+        $this->selectedTableId = $value;
         $this->cart = [];
+        $this->existingItems = [];
         $this->currentOrderId = null;
 
         if (!$value)
             return;
 
-        $existingOrder = \App\Models\Order::where('table_id', $value)
+        // Load all pending orders for the table and combine their items into existingItems
+        $orders = \App\Models\Order::where('table_id', $value)
             ->where('status', 'pending')
-            ->with('items')
-            ->latest()
-            ->first();
+            ->with('items.product')
+            ->get();
 
-        if ($existingOrder) {
-            $this->currentOrderId = $existingOrder->id;
-            foreach ($existingOrder->items as $item) {
-                $this->cart[$item->product_id] = [
-                    'id' => $item->product_id,
-                    'name' => $item->product_name,
-                    'price' => $item->unit_price,
-                    'quantity' => $item->quantity,
-                    'image' => $item->product->image ?? null,
-                ];
+        foreach ($orders as $order) {
+            foreach ($order->items as $item) {
+                if (isset($this->existingItems[$item->product_id])) {
+                    $this->existingItems[$item->product_id]['quantity'] += $item->quantity;
+                } else {
+                    $this->existingItems[$item->product_id] = [
+                        'id' => $item->product_id,
+                        'name' => $item->product_name,
+                        'price' => $item->unit_price,
+                        'quantity' => $item->quantity,
+                        'image' => $item->product->image ?? null,
+                    ];
+                }
             }
-            $this->updateTotal();
+        }
+
+        $this->updateTotal();
+        if ($orders->isNotEmpty()) {
             Notification::make()->title('Order Resumed')->info()->send();
         }
     }
@@ -73,9 +87,12 @@ new class extends Component {
         foreach ($this->cart as $item) {
             $this->total += $item['price'] * $item['quantity'];
         }
+        foreach ($this->existingItems as $item) {
+            $this->total += $item['price'] * $item['quantity'];
+        }
     }
 
-    public function mount()
+    public function mount($table_id = null)
     {
         $this->categories = Category::has('products')->get();
         $this->activeCategoryId = $this->categories->first()?->id;
@@ -90,20 +107,34 @@ new class extends Component {
             }
         }
 
-        $this->tables = \App\Models\Table::with(['orders' => fn($q) => $q->where('status', 'pending')])->get();
-        $this->selectedTableId = $this->tables->first()?->id;
+        // If table_id is provided, include it even if occupied
+        $query = \App\Models\Table::with(['orders' => fn($q) => $q->where('status', 'pending')]);
+        if ($table_id) {
+            $query->where(function($q) use ($table_id) {
+                $q->where('status', 'available')->orWhere('id', $table_id);
+            });
+        } else {
+            $query->where('status', 'available');
+        }
+        $this->tables = $query->get();
+
+        $this->selectedTableId = $table_id ?? $this->tables->first()?->id;
+
+        // Load existing order if table is selected
+        if ($this->selectedTableId) {
+            $this->updatedSelectedTableId($this->selectedTableId);
+        }
     }
 
     public function addToCart($productId)
     {
         $product = Product::with('category')->find($productId);
 
-        // Check stock availability for the product in its warehouse
-        $warehouseId = $this->getWarehouseId($product);
+        // Check stock availability in consumer warehouses
         $available = (int) DB::table('inventory_items')
             ->where('product_id', $productId)
-            ->where('warehouse_id', $warehouseId)
-            ->value('quantity');
+            ->where('warehouse_id', '!=', 3)
+            ->sum('quantity');
 
         $currentQty = isset($this->cart[$productId]) ? $this->cart[$productId]['quantity'] : 0;
         if ($available <= $currentQty) {
@@ -132,14 +163,14 @@ new class extends Component {
 
     public function calculateTotal()
     {
-        $this->total = collect($this->cart)->sum(fn($item) => $item['price'] * $item['quantity']);
+        $this->total = collect($this->cart)->sum(fn($item) => $item['price'] * $item['quantity']) + collect($this->existingItems)->sum(fn($item) => $item['price'] * $item['quantity']);
     }
 
     // --- PAYMENT LOGIC ---
 
     public function openPaymentModal()
     {
-        if (empty($this->cart))
+        if (empty($this->cart) && empty($this->existingItems))
             return;
         $this->calculateTotal();
         $this->paidAmount = $this->total;
@@ -189,29 +220,36 @@ new class extends Component {
         $orderStatus = ($this->paidAmount >= $this->total) ? 'paid' : 'partial';
         $tableStatus = 'available';
 
-        // 1. Restore old stock & delete previous single order (if any)
-        if ($this->currentOrderId) {
-            $existingOrder = Order::with('items')->find($this->currentOrderId);
-            if ($existingOrder) {
-                foreach ($existingOrder->items as $item) {
-                    $product = Product::with('category')->find($item->product_id);
-                    if ($product) {
-                        $warehouseId = $this->getWarehouseId($product);
-                        DB::table('inventory_items')
-                            ->where('product_id', $item->product_id)
-                            ->where('warehouse_id', $warehouseId)
-                            ->increment('quantity', $item->quantity);
-                    }
+        // 1. Restore old stock & delete all previous orders for the table
+        $existingOrders = Order::where('table_id', $tableId)->where('status', 'pending')->with('items')->get();
+        foreach ($existingOrders as $existingOrder) {
+            foreach ($existingOrder->items as $item) {
+                $product = Product::with('category')->find($item->product_id);
+                if ($product) {
+                    $warehouseId = $this->getWarehouseId($product);
+                    DB::table('inventory_items')
+                        ->where('product_id', $item->product_id)
+                        ->where('warehouse_id', $warehouseId)
+                        ->increment('quantity', $item->quantity);
                 }
-                // Remove the old order header and its lines so we'll recreate per destination
-                $existingOrder->items()->delete();
-                $existingOrder->delete();
+            }
+            $existingOrder->items()->delete();
+            $existingOrder->delete();
+        }
+
+        // Prepare all items for OrderSplitter (combine existing and new, summing quantities)
+        $allItems = $this->existingItems;
+        foreach ($this->cart as $productId => $item) {
+            if (isset($allItems[$productId])) {
+                $allItems[$productId]['quantity'] += $item['quantity'];
+            } else {
+                $allItems[$productId] = $item;
             }
         }
 
         // Use OrderSplitter service to create separate orders per destination
         $splitter = new OrderSplitter();
-        $orders = $splitter->handle($this->cart, $tableId, auth()->id(), [
+        $orders = $splitter->handle($allItems, $tableId, auth()->id(), [
             'amount_paid' => $this->paidAmount,
             'payment_method' => $this->paymentMethod,
             'status' => $orderStatus,
@@ -220,12 +258,17 @@ new class extends Component {
 
         \App\Models\Table::find($tableId)->update(['status' => $tableStatus]);
 
+        // Reload tables to reflect status change
+        $query = \App\Models\Table::with(['orders' => fn($q) => $q->where('status', 'pending')]);
+        $this->tables = $query->get();
+
         $balance = $this->total - $this->paidAmount;
         $msg = $orderStatus === 'paid' ? "Paid: ₦" . number_format($this->paidAmount) : "Debt Recorded: ₦" . number_format($balance);
         Notification::make()->title($msg)->success()->send();
 
         // Reset UI
         $this->showPaymentModal = false;
+        $this->existingItems = [];
         $this->cart = [];
         $this->currentOrderId = null;
         $this->selectedTableId = null;
@@ -237,27 +280,12 @@ new class extends Component {
     public function checkout($action = 'update')
     {
         if (empty($this->cart)) return;
+        if (!$this->selectedTableId) {
+            Notification::make()->title('Please select a table first')->warning()->send();
+            return;
+        }
         $tableId = $this->selectedTableId;
         $tableName = \App\Models\Table::find($tableId)?->name ?? 'Unknown';
-
-        // 1. Restore old stock & delete previous single order (if any)
-        if ($this->currentOrderId) {
-            $existingOrder = Order::with('items')->find($this->currentOrderId);
-            if ($existingOrder) {
-                foreach ($existingOrder->items as $item) {
-                    $product = Product::with('category')->find($item->product_id);
-                    if ($product) {
-                        $warehouseId = $this->getWarehouseId($product);
-                        DB::table('inventory_items')
-                            ->where('product_id', $item->product_id)
-                            ->where('warehouse_id', $warehouseId)
-                            ->increment('quantity', $item->quantity);
-                    }
-                }
-                $existingOrder->items()->delete();
-                $existingOrder->delete();
-            }
-        }
 
         // Use OrderSplitter to create separate orders for 'update' checkout
         $splitter = new OrderSplitter();
@@ -268,8 +296,19 @@ new class extends Component {
 
         \App\Models\Table::find($tableId)->update(['status' => 'occupied']);
 
+        // Move cart items to existing items (grayed out)
+        foreach ($this->cart as $productId => $item) {
+            $this->existingItems[$productId] = [
+                'id' => $productId,
+                'name' => $item['name'],
+                'price' => $item['price'],
+                'quantity' => $item['quantity'],
+                'image' => null, // Could fetch from product if needed
+            ];
+        }
+
         $this->cart = [];
-        $this->total = 0;
+        $this->updateTotal();
         Notification::make()->title('Order Updated')->success()->send();
     }
 
@@ -345,6 +384,21 @@ new class extends Component {
             </select>
         </div>
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
+            @if(!empty($existingItems))
+                <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
+                @foreach($existingItems as $id => $item)
+                    <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
+                        <div class="flex-1">
+                            <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                        </div>
+                        <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                    </div>
+                @endforeach
+                @if(!empty($cart))
+                    <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 mt-4">New Items</h4>
+                @endif
+            @endif
             @foreach($cart as $id => $item)
                 <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
                     <div class="flex-1">

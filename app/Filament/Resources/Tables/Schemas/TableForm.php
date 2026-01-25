@@ -34,9 +34,11 @@ class TableForm
                         // 3. Status
                         Select::make('status')
                             ->options([
-                                'available' => 'Available',
-                                'occupied' => 'Occupied',
-                                'reserved' => 'Reserved',
+                                'available' => 'Available - Ready for guests',
+                                'occupied' => 'Occupied - Guest seated',
+                                'reserved' => 'Reserved - Booked for future use',
+                                'cleaning' => 'Cleaning - Being cleaned by staff',
+                                'maintenance' => 'Maintenance - Out of service',
                             ])
                             ->default('available')
                             ->required()
