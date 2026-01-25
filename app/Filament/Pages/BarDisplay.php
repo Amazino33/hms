@@ -21,6 +21,7 @@ class BarDisplay extends Page
         return [
             'orders' => Order::with('items')
                 ->where('status', 'pending') // Only show active orders
+                ->where('destination', 'bar') // only bar orders
                 ->oldest() // First in, First out
                 ->get(),
         ];

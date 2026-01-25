@@ -22,6 +22,7 @@ class KitchenDisplay extends Page
         return [
             'orders' => Order::with('items')
                 ->where('status', 'pending') // Only show active orders
+                ->where('destination', 'kitchen') // only kitchen orders
                 ->oldest() // First in, First out
                 ->get(),
         ];

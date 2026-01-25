@@ -12,9 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('orders', function (Blueprint $table) {
+        // Only attempt raw enum ALTER on drivers that support it (e.g. MySQL)
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
             DB::statement("ALTER TABLE orders MODIFY COLUMN status ENUM('pending', 'preparing', 'ready', 'served', 'paid', 'cancelled', 'partial') NOT NULL DEFAULT 'pending'");
-        });
+        }
     }
 
     /**
@@ -22,8 +23,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('orders', function (Blueprint $table) {
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
             DB::statement("ALTER TABLE orders MODIFY COLUMN status ENUM('pending', 'preparing', 'ready', 'served', 'paid') NOT NULL DEFAULT 'pending'");
-        });
+        }
     }
 };

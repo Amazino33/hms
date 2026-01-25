@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Guest;
 use Illuminate\Support\Facades\DB;
 use Filament\Notifications\Notification;
+use App\Services\OrderSplitter;
 
 new class extends Component {
     public $categories;
@@ -169,88 +170,44 @@ new class extends Component {
         ]);
 
         $tableId = $this->selectedTableId;
-        
-        DB::transaction(function () use ($tableId) {
-            $orderStatus = ($this->paidAmount >= $this->total) ? 'paid' : 'partial';
-            $tableStatus = 'available';
 
-            // 1. 👇 RESTORE OLD STOCK (Crucial Step!)
-            // If we are updating an existing order, put the items back on the shelf first.
-            if ($this->currentOrderId) {
-                $existingOrder = Order::with('items')->find($this->currentOrderId);
-                if ($existingOrder) {
-                    foreach ($existingOrder->items as $item) {
-                        $product = Product::with('category')->find($item->product_id);
-                        if ($product) {
-                            $warehouseId = $this->getWarehouseId($product);
-                            DB::table('inventory_items')
-                                ->where('product_id', $item->product_id)
-                                ->where('warehouse_id', $warehouseId)
-                                ->increment('quantity', $item->quantity); // (+) Add back
-                        }
+        $orderStatus = ($this->paidAmount >= $this->total) ? 'paid' : 'partial';
+        $tableStatus = 'available';
+
+        // 1. Restore old stock & delete previous single order (if any)
+        if ($this->currentOrderId) {
+            $existingOrder = Order::with('items')->find($this->currentOrderId);
+            if ($existingOrder) {
+                foreach ($existingOrder->items as $item) {
+                    $product = Product::with('category')->find($item->product_id);
+                    if ($product) {
+                        $warehouseId = $this->getWarehouseId($product);
+                        DB::table('inventory_items')
+                            ->where('product_id', $item->product_id)
+                            ->where('warehouse_id', $warehouseId)
+                            ->increment('quantity', $item->quantity);
                     }
-                    // Now delete the old lines
-                    $existingOrder->items()->delete();
                 }
+                // Remove the old order header and its lines so we'll recreate per destination
+                $existingOrder->items()->delete();
+                $existingOrder->delete();
             }
+        }
 
-            // 2. Create/Update the Order Header
-            $order = Order::updateOrCreate(
-                ['id' => $this->currentOrderId],
-                [
-                    'order_number' => 'ORD-' . time(),
-                    'total_amount' => $this->total,
-                    'amount_paid' => $this->paidAmount,
-                    'status' => $orderStatus,
-                    'payment_method' => $this->paymentMethod,
-                    'table_id' => $tableId,
-                    'user_id' => auth()->id(),
-                    'guest_id' => $this->selectedGuestId,
-                ]
-            );
+        // Use OrderSplitter service to create separate orders per destination
+        $splitter = new OrderSplitter();
+        $orders = $splitter->handle($this->cart, $tableId, auth()->id(), [
+            'amount_paid' => $this->paidAmount,
+            'payment_method' => $this->paymentMethod,
+            'status' => $orderStatus,
+            'guest_id' => $this->selectedGuestId,
+        ]);
 
-            // 3. Process New Items (Check Stock & Deduct)
-            foreach ($this->cart as $productId => $item) {
-                $product = Product::with('category')->find($productId);
-                
-                // Get correct warehouse (4=Bar, 5=Kitchen)
-                $warehouseId = $this->getWarehouseId($product);
+        \App\Models\Table::find($tableId)->update(['status' => $tableStatus]);
 
-                // Check Available Stock
-                $currentStock = DB::table('inventory_items')
-                    ->where('product_id', $productId)
-                    ->where('warehouse_id', $warehouseId)
-                    ->value('quantity');
-
-                // If stock is too low (and we are trying to sell more than 0)
-                if (($currentStock ?? 0) < $item['quantity']) {
-                    // 💥 ROLLBACK! Cancel everything.
-                    throw new \Exception("Out of Stock: Only {$currentStock} left of {$item['name']}");
-                }
-
-                // Save Item
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'product_id' => $productId,
-                    'product_name' => $item['name'],
-                    'quantity' => $item['quantity'],
-                    'unit_price' => $item['price'],
-                    'subtotal' => $item['price'] * $item['quantity'],
-                ]);
-
-                // Deduct Stock (-)
-                DB::table('inventory_items')
-                    ->where('product_id', $productId)
-                    ->where('warehouse_id', $warehouseId)
-                    ->decrement('quantity', $item['quantity']);
-            }
-
-            \App\Models\Table::find($tableId)->update(['status' => $tableStatus]);
-
-            $balance = $this->total - $this->paidAmount;
-            $msg = $orderStatus === 'paid' ? "Paid: ₦" . number_format($this->paidAmount) : "Debt Recorded: ₦" . number_format($balance);
-            Notification::make()->title($msg)->success()->send();
-        });
+        $balance = $this->total - $this->paidAmount;
+        $msg = $orderStatus === 'paid' ? "Paid: ₦" . number_format($this->paidAmount) : "Debt Recorded: ₦" . number_format($balance);
+        Notification::make()->title($msg)->success()->send();
 
         // Reset UI
         $this->showPaymentModal = false;
@@ -268,48 +225,33 @@ new class extends Component {
         $tableId = $this->selectedTableId;
         $tableName = \App\Models\Table::find($tableId)?->name ?? 'Unknown';
 
-        DB::transaction(function () use ($tableId, $action, $tableName) {
-            
-            // 1. 👇 RESTORE OLD STOCK
-            if ($this->currentOrderId) {
-                $existingOrder = Order::with('items')->find($this->currentOrderId);
-                if ($existingOrder) {
-                    foreach ($existingOrder->items as $item) {
-                        $product = Product::with('category')->find($item->product_id);
-                        if ($product) {
-                            $warehouseId = $this->getWarehouseId($product);
-                            DB::table('inventory_items')
-                                ->where('product_id', $item->product_id)
-                                ->where('warehouse_id', $warehouseId)
-                                ->increment('quantity', $item->quantity);
-                        }
+        // 1. Restore old stock & delete previous single order (if any)
+        if ($this->currentOrderId) {
+            $existingOrder = Order::with('items')->find($this->currentOrderId);
+            if ($existingOrder) {
+                foreach ($existingOrder->items as $item) {
+                    $product = Product::with('category')->find($item->product_id);
+                    if ($product) {
+                        $warehouseId = $this->getWarehouseId($product);
+                        DB::table('inventory_items')
+                            ->where('product_id', $item->product_id)
+                            ->where('warehouse_id', $warehouseId)
+                            ->increment('quantity', $item->quantity);
                     }
-                    $existingOrder->items()->delete();
                 }
+                $existingOrder->items()->delete();
+                $existingOrder->delete();
             }
+        }
 
-            // 2. Update Order
-            $order = Order::updateOrCreate(
-                ['id' => $this->currentOrderId],
-                ['order_number' => 'ORD-' . time(), 'total_amount' => $this->total, 'status' => 'pending', 'payment_method' => 'cash', 'table_id' => $tableId, 'user_id' => auth()->id()]
-            );
+        // Use OrderSplitter to create separate orders for 'update' checkout
+        $splitter = new OrderSplitter();
+        $orders = $splitter->handle($this->cart, $tableId, auth()->id(), [
+            'status' => 'pending',
+            'payment_method' => 'cash',
+        ]);
 
-            // 3. Process Cart & Deduct Stock
-            foreach ($this->cart as $productId => $item) {
-                $product = Product::with('category')->find($productId);
-                $warehouseId = $this->getWarehouseId($product);
-
-                OrderItem::create(['order_id' => $order->id, 'product_id' => $productId, 'product_name' => $item['name'], 'quantity' => $item['quantity'], 'unit_price' => $item['price'], 'subtotal' => $item['price'] * $item['quantity']]);
-
-                // Deduct Stock
-                DB::table('inventory_items')
-                    ->where('product_id', $productId)
-                    ->where('warehouse_id', $warehouseId)
-                    ->decrement('quantity', $item['quantity']);
-            }
-
-            \App\Models\Table::find($tableId)->update(['status' => 'occupied']);
-        });
+        \App\Models\Table::find($tableId)->update(['status' => 'occupied']);
 
         $this->cart = [];
         $this->total = 0;

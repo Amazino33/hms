@@ -13,11 +13,15 @@ return new class extends Migration
     {
         Schema::table('orders', function (Blueprint $table) {
             // We track what they actually paid vs the total
-            $table->decimal('amount_paid', 10, 2)->default(0)->after('total_amount');
-            
+            if (!Schema::hasColumn('orders', 'amount_paid')) {
+                $table->decimal('amount_paid', 10, 2)->default(0)->after('total_amount');
+            }
+
             // We track the payment method for the *paid portion*
-            $table->string('payment_method')->nullable(); // Ensure this exists
-            
+            if (!Schema::hasColumn('orders', 'payment_method')) {
+                $table->string('payment_method')->nullable(); // Ensure this exists
+            }
+
             // Optional: Link to a customer profile for debt tracking
             if (!Schema::hasColumn('orders', 'guest_id')) { // Rename from customer_id to guest_id
                 $table->foreignId('guest_id') // clearer name
