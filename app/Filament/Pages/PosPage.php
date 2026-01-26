@@ -24,4 +24,9 @@ class PosPage extends Page
     {
         $this->table_id = request('table_id');
     }
+
+    public function getTitle(): string
+    {
+        return '';
+    }
 }

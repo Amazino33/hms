@@ -435,38 +435,9 @@ new class extends Component {
     </div>
 
     <!-- Mobile Layout (Hidden on Desktop) -->
-    <div class="lg:hidden min-h-screen flex flex-col pb-32 pt-[62px]">
-        <!-- Mobile Header -->
-        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-0 left-0 right-0 z-30">
-            <div class="flex items-center justify-between">
-                <h1 class="text-lg font-bold text-gray-900 dark:text-white">POS</h1>
-                <div class="flex items-center space-x-2">
-                    <!-- Table Selector -->
-                    <select wire:model.live="selectedTableId"
-                        class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold">
-                        <option value="">Table</option>
-                        @foreach($tables as $table)
-                            <option value="{{ $table->id }}" class="{{ $table->status === 'occupied' ? 'text-red-600' : 'text-green-600' }}">
-                                {{ $table->name }}</option>
-                        @endforeach
-                    </select>
-                    <!-- Cart Toggle -->
-                    <button wire:click="$toggle('showCart')" class="relative p-2 bg-blue-600 text-white rounded-lg">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.1 5H19M7 13v8a2 2 0 002 2h10a2 2 0 002-2v-3"></path>
-                        </svg>
-                        @if(!empty($cart) || !empty($existingItems))
-                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                                {{ count($cart) + count($existingItems) }}
-                            </span>
-                        @endif
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Mobile Search -->
-        <div class="bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+    <div class="lg:hidden min-h-screen flex flex-col">
+        <!-- Mobile Search - Fixed -->
+        <div class="bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700 fixed top-[62px] left-0 right-0 z-20">
             <div class="relative">
                 <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search products..."
                     class="w-full px-4 py-3 pl-12 text-base border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
@@ -485,8 +456,8 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Categories -->
-        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        <!-- Mobile Categories - Fixed -->
+        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed top-[135px] left-0 right-0 z-20">
             <div class="flex overflow-x-auto p-3 space-x-2">
                 <button wire:click="$set('activeCategoryId', null)"
                     class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation {{ !$activeCategoryId ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
@@ -501,8 +472,8 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Products Grid -->
-        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4">
+        <!-- Mobile Products Grid - Scrollable -->
+        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[183px] mb-[120px]">
             <div class="grid grid-cols-2 gap-3">
                 @foreach($products as $product)
                     <div wire:click="addToCart({{ $product->id }})"
@@ -522,8 +493,8 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Bottom Actions - Fixed -->
-        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-[62px] left-0 right-0 z-20">
+        <!-- Mobile Total - Fixed above POS bar -->
+        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-[73px] left-0 right-0 z-25">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
                     <div class="text-center">
@@ -540,6 +511,32 @@ new class extends Component {
                 <div class="flex space-x-2">
                     <!-- Send and Pay buttons moved to cart modal -->
                 </div>
+            </div>
+        </div>
+
+        <!-- Mobile POS Bar - Fixed at bottom -->
+        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-0 left-0 right-0 z-30">
+            <div class="flex items-center justify-between">
+                <!-- Table Selector -->
+                <select wire:model.live="selectedTableId"
+                    class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold">
+                    <option value="">Table</option>
+                    @foreach($tables as $table)
+                        <option value="{{ $table->id }}" class="{{ $table->status === 'occupied' ? 'text-red-600' : 'text-green-600' }}">
+                            {{ $table->name }}</option>
+                    @endforeach
+                </select>
+                <!-- Cart Toggle -->
+                <button wire:click="$toggle('showCart')" class="relative p-2 bg-blue-600 text-white rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.1 5H19M7 13v8a2 2 0 002 2h10a2 2 0 002-2v-3"></path>
+                    </svg>
+                    @if(!empty($cart) || !empty($existingItems))
+                        <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                            {{ count($cart) + count($existingItems) }}
+                        </span>
+                    @endif
+                </button>
             </div>
         </div>
 
