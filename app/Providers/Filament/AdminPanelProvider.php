@@ -32,6 +32,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
+            ->globalSearch(false)
             ->databaseNotifications()
             ->databaseNotificationsPolling('5s')
             ->colors([
@@ -129,6 +130,27 @@ class AdminPanelProvider extends PanelProvider
                     }
                 }, 2000);
             </script>
+
+            <!-- Shift Manager Component -->
+            @livewire('shift-manager')
+        HTML)
+        );
+
+        // Add shift management menu item
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::USER_MENU_BEFORE,
+            fn () => Blade::render(<<<'HTML'
+            <li>
+                <a href="#"
+                   wire:click.prevent="$dispatch('open-shift-modal')"
+                   class="flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer touch-manipulation"
+                   title="Shift Management"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </a>
+            </li>
         HTML)
         );
     }

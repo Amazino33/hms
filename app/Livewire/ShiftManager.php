@@ -10,6 +10,9 @@ class ShiftManager extends Component
 {
     public $currentShift;
     public $shiftDuration;
+    public $showModal = false;
+
+    protected $listeners = ['open-shift-modal' => 'openModal'];
 
     public function mount()
     {
@@ -45,6 +48,16 @@ class ShiftManager extends Component
         } catch (\Exception $e) {
             Notification::make()->title('Error ending shift')->danger()->send();
         }
+    }
+
+    public function openModal()
+    {
+        $this->showModal = true;
+    }
+
+    public function closeModal()
+    {
+        $this->showModal = false;
     }
 
     public function render()

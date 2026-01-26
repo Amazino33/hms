@@ -375,9 +375,6 @@ new class extends Component {
             </div>
 
             <div class="col-span-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full lg:h-full max-h-[50vh] lg:max-h-none">
-                <!-- Shift Manager Component -->
-                <livewire:shift-manager />
-
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                     <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Select Table</label>
                     <select wire:model.live="selectedTableId"
@@ -558,11 +555,6 @@ new class extends Component {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
-                    </div>
-
-                    <!-- Shift Manager Component -->
-                    <div class="border-b border-gray-200 dark:border-gray-700">
-                        <livewire:shift-manager />
                     </div>
 
                     <div class="flex-1 overflow-y-auto p-4 space-y-3">
