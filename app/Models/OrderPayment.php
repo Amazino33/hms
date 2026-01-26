@@ -22,4 +22,9 @@ class OrderPayment extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class);
+    }
 }

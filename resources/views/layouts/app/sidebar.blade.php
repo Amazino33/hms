@@ -66,7 +66,13 @@
                     <flux:menu.separator />
 
                     <flux:menu.radio.group>
-                        <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>
+                        <flux:menu.item :href="route('dashboard')" wire:navigate icon="home">
+                            {{ __('Dashboard') }}
+                        </flux:menu.item>
+                        <flux:menu.item :href="route('pos.index')" wire:navigate icon="shopping-cart">
+                            {{ __('POS') }}
+                        </flux:menu.item>
+                        <flux:menu.item :href="route('profile.edit')" wire:navigate icon="cog">
                             {{ __('Settings') }}
                         </flux:menu.item>
                     </flux:menu.radio.group>

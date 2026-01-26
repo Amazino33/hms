@@ -47,6 +47,44 @@
     }
 }
 
+/* Mobile-friendly enhancements */
+@layer utilities {
+    .touch-manipulation {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Improve button and interactive element sizes on mobile */
+    @media (max-width: 640px) {
+        button, .btn, input[type="button"], input[type="submit"] {
+            min-height: 44px;
+            min-width: 44px;
+        }
+
+        /* Better text sizing on mobile */
+        .text-xs {
+            font-size: 0.8125rem;
+            line-height: 1rem;
+        }
+
+        .text-sm {
+            font-size: 0.9375rem;
+            line-height: 1.25rem;
+        }
+    }
+
+    /* Prevent horizontal scroll on mobile */
+    .mobile-scroll {
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    /* Better focus states for accessibility */
+    .focus-ring:focus {
+        @apply outline-none ring-2 ring-blue-500 ring-offset-2;
+    }
+}
+
 [data-flux-field]:not(ui-radio, ui-checkbox) {
     @apply grid gap-2;
 }

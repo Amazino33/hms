@@ -12,6 +12,8 @@ class TableDetail extends Page
 {
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-eye';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected string $view = 'filament.pages.table-detail';
 
     protected static ?string $title = 'Table Details';

@@ -70,6 +70,25 @@ class AdminPanelProvider extends PanelProvider
 
     public function boot()
     {
+        // Register mobile sidebar close button
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::SIDEBAR_NAV_START,
+            fn () => Blade::render(<<<'HTML'
+            <div class="lg:hidden absolute z-50" style="top: 1rem; right: 1rem;">
+                <button
+                    x-data="{}"
+                    x-on:click="$store.sidebar.close()"
+                    class="flex items-center justify-center w-8 h-8 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white rounded-full transition-colors shadow-sm"
+                    title="Close Menu"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            HTML)
+        );
+
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             fn () => Blade::render(<<<'HTML'

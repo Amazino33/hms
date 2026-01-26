@@ -23,6 +23,9 @@ new class extends Component {
     public $total = 0;
     public $search = '';
 
+    // Mobile-specific properties
+    public $showCart = false;
+
     // Payment Properties
     public $showPaymentModal = false;
     public $paidAmount = 0;
@@ -161,6 +164,7 @@ new class extends Component {
         $this->paymentMethod = 'cash';
         $this->selectedGuestId = null;
         $this->showPaymentModal = true;
+        $this->showCart = false; // Close cart on mobile when opening payment
     }
 
     // 👇 NEW: Logic to Save a Guest instantly
@@ -247,6 +251,7 @@ new class extends Component {
                 'amount' => $this->paidAmount,
                 'method' => $this->paymentMethod,
                 'user_id' => auth()->id(),
+                'shift_id' => auth()->user()->currentShift()?->id,
                 'paid_at' => now(),
             ]);
         }
@@ -268,6 +273,7 @@ new class extends Component {
         $this->selectedTableId = null;
         $this->paidAmount = 0;
         $this->selectedGuestId = null;
+        $this->showCart = false; // Close cart on mobile after payment
     }
 
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
@@ -304,6 +310,7 @@ new class extends Component {
 
         $this->cart = [];
         $this->updateTotal();
+        $this->showCart = false; // Close cart on mobile after checkout
         Notification::make()->title('Order Updated')->success()->send();
     }
 
@@ -337,105 +344,297 @@ new class extends Component {
 };
 ?>
 
-<div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
-    <div
-        class="col-span-8 flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div class="m-6">
-            <div class="relative">
-                <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search Item Name or Barcode..."
-                    class="w-full px-4 py-3 pl-12 text-lg border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    autofocus>
-            </div>
-        </div>
-        <div
-            class="flex overflow-x-auto p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2">
-            @foreach($categories as $category)
-                <button wire:click="$set('activeCategoryId', {{ $category->id }})"
-                    class="px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">{{ $category->name }}</button>
-            @endforeach
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-4 content-start">
-            @foreach($products as $product)
-                <div wire:click="addToCart({{ $product->id }})"
-                    class="relative cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:shadow-md rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-32 group">
-                    <span
-                        class="absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold {{ ($product->available_stock ?? 0) > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">{{ $product->available_stock ?? 0 }}
-                        left</span>
-                    <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2">{{ $product->name }}</div>
-                    <div class="text-amber-600 dark:text-amber-500 font-mono mt-1">₦{{ number_format($product->price) }}
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <!-- Desktop Layout (Hidden on Mobile) -->
+    <div class="hidden lg:block">
+        <div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
+            <div class="col-span-8 flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div class="p-4 lg:m-0 lg:relative">
+                    <div class="relative">
+                        <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search Item Name or Barcode..."
+                            class="w-full px-4 py-3 pl-12 text-base lg:text-lg border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            autofocus>
                     </div>
                 </div>
-            @endforeach
+                <div class="flex overflow-x-auto p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2">
+                    @foreach($categories as $category)
+                        <button wire:click="$set('activeCategoryId', {{ $category->id }})"
+                            class="px-3 py-2 lg:px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors touch-manipulation {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">{{ $category->name }}</button>
+                    @endforeach
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 content-start">
+                    @foreach($products as $product)
+                        <div wire:click="addToCart({{ $product->id }})"
+                            class="relative cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:shadow-md rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
+                            <span class="absolute top-2 right-2 px-1.5 py-0.5 lg:px-2 lg:py-0.5 rounded-full text-xs font-bold {{ ($product->available_stock ?? 0) > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">{{ $product->available_stock ?? 0 }} left</span>
+                            <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $product->name }}</div>
+                            <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($product->price) }}</div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+
+            <div class="col-span-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full lg:h-full max-h-[50vh] lg:max-h-none">
+                <!-- Shift Manager Component -->
+                <livewire:shift-manager />
+
+                <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Select Table</label>
+                    <select wire:model.live="selectedTableId"
+                        class="w-full p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold touch-manipulation">
+                        <option value="">-- Select a Table --</option>
+                        @foreach($tables as $table)
+                            <option value="{{ $table->id }}" class="{{ $table->status === 'occupied' ? 'text-red-600 font-bold' : 'text-green-600' }}">
+                                {{ $table->name }} {{ $table->status === 'occupied' ? '(Occupied)' : '(Free)' }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                    @if(!empty($existingItems))
+                        <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
+                        @foreach($existingItems as $id => $item)
+                            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
+                                <div class="flex-1">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                                </div>
+                                <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                            </div>
+                        @endforeach
+                        @if(!empty($cart))
+                            <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 mt-4">New Items</h4>
+                        @endif
+                    @endif
+                    @foreach($cart as $id => $item)
+                        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
+                            <div class="flex-1">
+                                <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                            </div>
+                            <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                            <button wire:click="removeFromCart({{ $id }})" class="ml-3 text-red-500 hover:text-red-700 touch-manipulation p-1"><span class="text-lg">×</span></button>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex justify-between text-xl lg:text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+                        <span>Total:</span><span>₦{{ number_format($total) }}</span>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <button wire:click="checkout('update')"
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">👨‍🍳 Update Order</span></button>
+                        <button wire:click="openPaymentModal"
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">💰 Collect Payment</span></button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div
-        class="col-span-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full">
-        <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Select Table</label>
-            <select wire:model.live="selectedTableId"
-                class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold">
-                <option value="">-- Select a Table --</option>
-                @foreach($tables as $table)
-                    <option value="{{ $table->id }}"
-                        class="{{ $table->status === 'occupied' ? 'text-red-600 font-bold' : 'text-green-600' }}">
-                        {{ $table->name }} {{ $table->status === 'occupied' ? '(Occupied)' : '(Free)' }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 space-y-3">
-            @if(!empty($existingItems))
-                <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
-                @foreach($existingItems as $id => $item)
-                    <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
-                        <div class="flex-1">
-                            <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
-                        </div>
-                        <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
-                    </div>
-                @endforeach
-                @if(!empty($cart))
-                    <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 mt-4">New Items</h4>
-                @endif
-            @endif
-            @foreach($cart as $id => $item)
-                <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
-                    <div class="flex-1">
-                        <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x
-                            {{ $item['quantity'] }}</div>
-                    </div>
-                    <div class="font-mono font-bold text-gray-700 dark:text-gray-300">
-                        ₦{{ number_format($item['price'] * $item['quantity']) }}</div>
-                    <button wire:click="removeFromCart({{ $id }})" class="ml-3 text-red-500 hover:text-red-700">X</button>
+    <!-- Mobile Layout (Hidden on Desktop) -->
+    <div class="lg:hidden min-h-screen flex flex-col">
+        <!-- Mobile Header -->
+        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 sticky top-0 z-40">
+            <div class="flex items-center justify-between">
+                <h1 class="text-lg font-bold text-gray-900 dark:text-white">🍽️ POS</h1>
+                <div class="flex items-center space-x-2">
+                    <!-- Table Selector -->
+                    <select wire:model.live="selectedTableId"
+                        class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold">
+                        <option value="">Table</option>
+                        @foreach($tables as $table)
+                            <option value="{{ $table->id }}" class="{{ $table->status === 'occupied' ? 'text-red-600' : 'text-green-600' }}">
+                                {{ $table->name }}</option>
+                        @endforeach
+                    </select>
+                    <!-- Cart Toggle -->
+                    <button wire:click="$toggle('showCart')" class="relative p-2 bg-blue-600 text-white rounded-lg">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.1 5H19M7 13v8a2 2 0 002 2h10a2 2 0 002-2v-3"></path>
+                        </svg>
+                        @if(!empty($cart) || !empty($existingItems))
+                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                {{ count($cart) + count($existingItems) }}
+                            </span>
+                        @endif
+                    </button>
                 </div>
-            @endforeach
-        </div>
-        <div class="p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-            <div class="flex justify-between text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-                <span>Total:</span><span>₦{{ number_format($total) }}</span>
             </div>
+        </div>
+
+        <!-- Mobile Search -->
+        <div class="bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <div class="relative">
+                <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search products..."
+                    class="w-full px-4 py-3 pl-12 text-base border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <div class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+                @if($search)
+                    <button wire:click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                @endif
+            </div>
+        </div>
+
+        <!-- Mobile Categories -->
+        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex overflow-x-auto p-3 space-x-2">
+                <button wire:click="$set('activeCategoryId', null)"
+                    class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation {{ !$activeCategoryId ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
+                    All
+                </button>
+                @foreach($categories as $category)
+                    <button wire:click="$set('activeCategoryId', {{ $category->id }})"
+                        class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
+                        {{ $category->name }}
+                    </button>
+                @endforeach
+            </div>
+        </div>
+
+        <!-- Mobile Products Grid -->
+        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4">
             <div class="grid grid-cols-2 gap-3">
-                <button wire:click="checkout('update')"
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex flex-col items-center justify-center"><span
-                        class="text-sm">👨‍🍳 Update</span></button>
-                <button wire:click="openPaymentModal"
-                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg flex flex-col items-center justify-center"><span
-                        class="text-sm">💰 Collect Cash</span></button>
+                @foreach($products as $product)
+                    <div wire:click="addToCart({{ $product->id }})"
+                        class="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation active:scale-95">
+                        <div class="absolute top-2 right-2">
+                            <span class="px-1.5 py-0.5 rounded-full text-xs font-bold {{ ($product->available_stock ?? 0) > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                {{ $product->available_stock ?? 0 }}
+                            </span>
+                        </div>
+                        <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $product->name }}</div>
+                        <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($product->price) }}</div>
+                        <div class="mt-2">
+                            <div class="bg-amber-500 text-white text-xs px-2 py-1 rounded-full font-bold">TAP TO ADD</div>
+                        </div>
+                    </div>
+                @endforeach
             </div>
         </div>
+
+        <!-- Mobile Bottom Actions -->
+        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="text-center">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Total</div>
+                        <div class="text-lg font-bold text-gray-900 dark:text-white">₦{{ number_format($total) }}</div>
+                    </div>
+                    @if(!empty($cart) || !empty($existingItems))
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Items</div>
+                            <div class="text-lg font-bold text-blue-600">{{ count($cart) + count($existingItems) }}</div>
+                        </div>
+                    @endif
+                </div>
+                <div class="flex space-x-2">
+                    <button wire:click="checkout('update')"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-3 rounded-lg text-sm transition-colors touch-manipulation">
+                        👨‍🍳 Send
+                    </button>
+                    <button wire:click="openPaymentModal"
+                        class="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-3 rounded-lg text-sm transition-colors touch-manipulation">
+                        💰 Pay
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Cart Sidebar -->
+        @if(isset($showCart) && $showCart)
+            <div class="fixed inset-0 bg-black bg-opacity-50 z-50 flex">
+                <div class="ml-auto w-80 bg-white dark:bg-gray-900 h-full flex flex-col">
+                    <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">🛒 Cart</h3>
+                        <button wire:click="$toggle('showCart')" class="text-gray-400 hover:text-red-500 p-2">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Shift Manager Component -->
+                    <div class="border-b border-gray-200 dark:border-gray-700">
+                        <livewire:shift-manager />
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                        @if(!empty($existingItems))
+                            <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
+                            @foreach($existingItems as $id => $item)
+                                <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
+                                    <div class="flex-1">
+                                        <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                                    </div>
+                                    <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                                </div>
+                            @endforeach
+                        @endif
+
+                        @if(!empty($cart))
+                            <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 {{ !empty($existingItems) ? 'mt-4' : '' }}">New Items</h4>
+                            @foreach($cart as $id => $item)
+                                <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
+                                    <div class="flex-1">
+                                        <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                                    </div>
+                                    <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                                    <button wire:click="removeFromCart({{ $id }})" class="ml-3 text-red-500 hover:text-red-700 touch-manipulation p-1">
+                                        <span class="text-lg">×</span>
+                                    </button>
+                                </div>
+                            @endforeach
+                        @endif
+
+                        @if(empty($cart) && empty($existingItems))
+                            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                                <div class="text-4xl mb-2">🛒</div>
+                                <div>Your cart is empty</div>
+                                <div class="text-sm">Tap on products to add them</div>
+                            </div>
+                        @endif
+                    </div>
+
+                    @if(!empty($cart) || !empty($existingItems))
+                        <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                            <div class="flex justify-between text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+                                <span>Total:</span><span>₦{{ number_format($total) }}</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button wire:click="checkout('update')"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                                    👨‍🍳 Update Order
+                                </button>
+                                <button wire:click="openPaymentModal"
+                                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                                    💰 Collect Payment
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        @endif
     </div>
 
     @if($showPaymentModal)
         <div class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
             <div
-                class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 relative">
+                class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 relative max-h-[90vh] overflow-y-auto">
 
                 <div
-                    class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0">
                     <h3 class="text-xl font-bold text-gray-900 dark:text-white">💰 Checkout</h3>
-                    <button wire:click="$set('showPaymentModal', false)" class="text-gray-400 hover:text-red-500"><span
+                    <button wire:click="$set('showPaymentModal', false)" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
                             class="text-2xl">&times;</span></button>
                 </div>
 
@@ -443,15 +642,15 @@ new class extends Component {
                     <div class="text-center mb-6">
                         <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wider font-bold">Total Due
                         </div>
-                        <div class="text-4xl font-black text-gray-900 dark:text-white">₦{{ number_format($total) }}</div>
+                        <div class="text-3xl lg:text-4xl font-black text-gray-900 dark:text-white">₦{{ number_format($total) }}</div>
                     </div>
 
                     <div>
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Amount Received</label>
                         <div class="relative">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₦</span>
-                            <input type="number" wire:model.live="paidAmount"
-                                class="w-full pl-8 pr-4 py-3 text-lg font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
+                            <input type="number" wire:model.live="paidAmount" inputmode="decimal"
+                                class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
                                 placeholder="0.00">
                         </div>
                     </div>
@@ -460,14 +659,14 @@ new class extends Component {
 
                     @if($balance < 0)
                         <div
-                            class="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 text-center">
+                            class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800 text-center">
                             <span class="text-green-700 dark:text-green-400 font-bold text-sm">Change:</span>
                             <div class="text-2xl font-black text-green-600 dark:text-green-400">
                                 ₦{{ number_format(abs($balance)) }}</div>
                         </div>
                     @elseif($balance > 0)
                         <div
-                            class="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800 text-center animate-pulse">
+                            class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800 text-center animate-pulse">
                             <span class="text-red-700 dark:text-red-400 font-bold text-sm">⚠️ Remaining Debt:</span>
                             <div class="text-2xl font-black text-red-600 dark:text-red-400">₦{{ number_format($balance) }}</div>
                         </div>
@@ -476,14 +675,14 @@ new class extends Component {
                             <label class="block text-sm font-bold text-red-600 mb-1">Select Guest for Debt *</label>
                             <div class="flex gap-2">
                                 <select wire:model="selectedGuestId"
-                                    class="w-full p-2 border border-red-300 rounded-lg dark:bg-gray-800 dark:border-red-900">
+                                    class="w-full p-3 text-base border border-red-300 rounded-lg dark:bg-gray-800 dark:border-red-900 touch-manipulation">
                                     <option value="">-- Select Guest --</option>
                                     @foreach(\App\Models\Guest::all() as $guest)
                                         <option value="{{ $guest->id }}">{{ $guest->name }}</option>
                                     @endforeach
                                 </select>
                                 <button wire:click="$set('showGuestModal', true)"
-                                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-lg text-lg font-bold flex items-center justify-center">
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-xl font-bold flex items-center justify-center touch-manipulation">
                                     +
                                 </button>
                             </div>
@@ -497,17 +696,17 @@ new class extends Component {
                         <div class="grid grid-cols-3 gap-2">
                             @foreach(['cash' => '💵 Cash', 'pos' => '💳 POS', 'transfer' => '🏦 Transfer'] as $key => $label)
                                 <button wire:click="$set('paymentMethod', '{{ $key }}')"
-                                    class="p-2 border rounded-lg font-bold text-sm transition-colors {{ $paymentMethod === $key ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600' }}">{{ $label }}</button>
+                                    class="p-3 border rounded-lg font-bold text-sm transition-colors touch-manipulation {{ $paymentMethod === $key ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600' }}">{{ $label }}</button>
                             @endforeach
                         </div>
                     </div>
                 </div>
 
-                <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3">
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3 sticky bottom-0 bg-white dark:bg-gray-900">
                     <button wire:click="$set('showPaymentModal', false)"
-                        class="px-4 py-2 font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">Cancel</button>
+                        class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 touch-manipulation">Cancel</button>
                     <button wire:click="processPayment"
-                        class="px-4 py-2 font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-600/30 flex items-center justify-center gap-2"><span>Confirm</span></button>
+                        class="px-4 py-3 font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 touch-manipulation"><span>Confirm</span></button>
                 </div>
             </div>
         </div>
@@ -520,31 +719,31 @@ new class extends Component {
                 <div
                     class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white">👤 Add New Guest</h3>
-                    <button wire:click="$set('showGuestModal', false)" class="text-gray-400 hover:text-red-500"><span
+                    <button wire:click="$set('showGuestModal', false)" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
                             class="text-2xl">&times;</span></button>
                 </div>
 
                 <div class="p-6 space-y-4">
                     <div>
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
-                        <input type="text" wire:model="newGuestName"
-                            class="w-full p-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600"
+                        <input type="text" wire:model="newGuestName" inputmode="text"
+                            class="w-full p-3 text-base border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 touch-manipulation"
                             placeholder="e.g. Mr. John Doe">
                         @error('newGuestName') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
                     </div>
                     <div>
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
-                        <input type="text" wire:model="newGuestPhone"
-                            class="w-full p-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600"
+                        <input type="tel" wire:model="newGuestPhone" inputmode="tel"
+                            class="w-full p-3 text-base border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 touch-manipulation"
                             placeholder="e.g. 08012345678">
                     </div>
                 </div>
 
                 <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3">
                     <button wire:click="$set('showGuestModal', false)"
-                        class="px-4 py-2 font-bold text-gray-700 bg-gray-100 rounded-lg">Cancel</button>
+                        class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg touch-manipulation">Cancel</button>
                     <button wire:click="saveNewGuest"
-                        class="px-4 py-2 font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Guest</button>
+                        class="px-4 py-3 font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 touch-manipulation">Save Guest</button>
                 </div>
             </div>
         </div>

@@ -7,7 +7,12 @@
                 SHIFT SUMMARY
             </h2>
             <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {{ auth()->user()->name }} • {{ $date }}
+                {{ auth()->user()->name }} • 
+                @if($shift_active)
+                    Shift Started: {{ $shift_start }} ({{ $shift_duration }})
+                @else
+                    No Active Shift
+                @endif
             </div>
         </div>
 
@@ -66,7 +71,13 @@
                         </div>
                     </div>
                 @empty
-                    <div class="text-center text-gray-400 italic py-4">No transactions yet today.</div>
+                    <div class="text-center text-gray-400 italic py-4">
+                        @if($shift_active)
+                            No transactions yet this shift.
+                        @else
+                            No active shift to display transactions.
+                        @endif
+                    </div>
                 @endforelse
             </div>
 
@@ -93,11 +104,54 @@
             @endif
         </div>
 
+        @if($shift_history->count() > 0)
+        <div class="p-6 border-t border-gray-200 dark:border-gray-700">
+            <h3 class="font-bold text-sm text-gray-500 uppercase mb-3">Today's Shift History</h3>
+            
+            <div class="space-y-3">
+                @foreach($shift_history as $shift)
+                    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="font-bold text-gray-800 dark:text-gray-200">
+                                    Shift #{{ $shift['id'] }}
+                                </div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    {{ $shift['started_at']->format('M j, g:i A') }} - {{ $shift['ended_at']->format('g:i A') }} 
+                                    ({{ $shift['duration'] }} minutes)
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-mono font-bold text-green-600 dark:text-green-400">
+                                    ₦{{ number_format($shift['total_payments']) }}
+                                </div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    {{ $shift['transaction_count'] }} transactions
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400">
+                            <span>Cash: ₦{{ number_format($shift['cash_payments']) }}</span>
+                            <span>POS/Transfer: ₦{{ number_format($shift['pos_payments']) }}</span>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+
         <div class="p-6 bg-gray-50 dark:bg-gray-800 text-center border-t border-gray-200 dark:border-gray-700">
-            <p class="text-xs text-gray-400 mb-4">By closing, I confirm these amounts are correct.</p>
-            <button onclick="window.print()" class="w-full py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg">
-                🖨️ Print / Save Report
-            </button>
+            @if($shift_active)
+                <p class="text-xs text-gray-400 mb-4">By closing, I confirm these amounts are correct for this shift.</p>
+                <button onclick="window.print()" class="w-full py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg">
+                    🖨️ Print / Save Shift Report
+                </button>
+            @else
+                <p class="text-xs text-gray-400 mb-4">Start a shift to begin tracking your transactions.</p>
+                <button disabled class="w-full py-3 bg-gray-300 text-gray-500 rounded-xl font-bold cursor-not-allowed">
+                    No Active Shift
+                </button>
+            @endif
         </div>
 
     </div>
