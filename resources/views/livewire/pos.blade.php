@@ -362,10 +362,10 @@ new class extends Component {
                             autofocus>
                     </div>
                 </div>
-                <div class="flex overflow-x-auto p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2">
+                <div class="flex overflow-x-auto overflow-y-hidden p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2 flex-nowrap">
                     @foreach($categories as $category)
                         <button wire:click="$set('activeCategoryId', {{ $category->id }})"
-                            class="px-3 py-2 lg:px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors touch-manipulation {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">{{ $category->name }}</button>
+                            class="px-3 py-2 lg:px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">{{ $category->name }}</button>
                     @endforeach
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 content-start">
@@ -458,14 +458,14 @@ new class extends Component {
 
         <!-- Mobile Categories - Fixed -->
         <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed top-[135px] left-0 right-0 z-20">
-            <div class="flex overflow-x-auto p-3 space-x-2">
+            <div class="flex overflow-x-auto overflow-y-hidden p-3 space-x-2 flex-nowrap">
                 <button wire:click="$set('activeCategoryId', null)"
-                    class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation {{ !$activeCategoryId ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
+                    class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ !$activeCategoryId ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
                     All
                 </button>
                 @foreach($categories as $category)
                     <button wire:click="$set('activeCategoryId', {{ $category->id }})"
-                        class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
+                        class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
                         {{ $category->name }}
                     </button>
                 @endforeach
@@ -473,7 +473,7 @@ new class extends Component {
         </div>
 
         <!-- Mobile Products Grid - Scrollable -->
-        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[183px] mb-[120px]">
+        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[103px] mb-[120px]">
             <div class="grid grid-cols-2 gap-3">
                 @foreach($products as $product)
                     <div wire:click="addToCart({{ $product->id }})"
@@ -494,7 +494,7 @@ new class extends Component {
         </div>
 
         <!-- Mobile Total - Fixed above POS bar -->
-        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-[73px] left-0 right-0 z-25">
+        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-[62px] left-0 right-0 z-25">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
                     <div class="text-center">
@@ -515,7 +515,7 @@ new class extends Component {
         </div>
 
         <!-- Mobile POS Bar - Fixed at bottom -->
-        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-0 left-0 right-0 z-30">
+        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-0 left-0 right-0 z-25">
             <div class="flex items-center justify-between">
                 <!-- Table Selector -->
                 <select wire:model.live="selectedTableId"
