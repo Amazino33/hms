@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manifest Test</title>
+    <link rel="manifest" href="/site.webmanifest">
+</head>
+<body>
+    <h1>Manifest Test Page</h1>
+    <p>Open browser DevTools and check the Application tab for manifest detection.</p>
+
+    <script>
+        console.log('Testing manifest...');
+
+        // Test manifest fetch
+        fetch('/site.webmanifest')
+        .then(response => {
+            console.log('Response status:', response.status);
+            console.log('Content-Type:', response.headers.get('content-type'));
+            return response.json();
+        })
+        .then(data => {
+            console.log('Manifest data:', data);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    </script>
+</body>
+</html>

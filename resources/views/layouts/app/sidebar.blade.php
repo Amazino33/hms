@@ -98,5 +98,8 @@
         {{ $slot }}
 
         @fluxScripts
+
+        <!-- PWA Install Component -->
+        @livewire('pwa-install')
     </body>
 </html>

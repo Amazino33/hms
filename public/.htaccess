@@ -23,3 +23,8 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# PWA Manifest MIME Type
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>

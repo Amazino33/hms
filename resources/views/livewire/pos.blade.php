@@ -195,6 +195,12 @@ new class extends Component {
 
     public function processPayment()
     {
+        // Ensure user is authenticated
+        if (!auth()->check()) {
+            Notification::make()->title('Authentication Required')->danger()->send();
+            return;
+        }
+
         $this->validate([
             'paidAmount' => 'required|numeric|min:0',
             'paymentMethod' => 'required',
@@ -251,7 +257,7 @@ new class extends Component {
                 'amount' => $this->paidAmount,
                 'method' => $this->paymentMethod,
                 'user_id' => auth()->id(),
-                'shift_id' => auth()->user()->currentShift()?->id,
+                'shift_id' => auth()->user()?->currentShift()?->id,
                 'paid_at' => now(),
             ]);
         }
@@ -532,14 +538,7 @@ new class extends Component {
                     @endif
                 </div>
                 <div class="flex space-x-2">
-                    <button wire:click="checkout('update')"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-3 rounded-lg text-sm transition-colors touch-manipulation">
-                        👨‍🍳 Send
-                    </button>
-                    <button wire:click="openPaymentModal"
-                        class="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-3 rounded-lg text-sm transition-colors touch-manipulation">
-                        💰 Pay
-                    </button>
+                    <!-- Send and Pay buttons moved to cart modal -->
                 </div>
             </div>
         </div>
@@ -604,11 +603,11 @@ new class extends Component {
                             <div class="grid grid-cols-2 gap-3">
                                 <button wire:click="checkout('update')"
                                     class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    👨‍🍳 Update Order
+                                    👨‍🍳 Send
                                 </button>
                                 <button wire:click="openPaymentModal"
                                     class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    💰 Collect Payment
+                                    💰 Pay
                                 </button>
                             </div>
                         </div>

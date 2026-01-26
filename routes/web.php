@@ -1,6 +1,22 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\PwaController;
+
+// PWA Manifest - must be publicly accessible
+Route::get('/site.webmanifest', [PwaController::class, 'manifest'])->name('pwa.manifest');
+
+// Debug route to test manifest
+Route::get('/test-manifest', function () {
+    return response()->json(['test' => 'manifest working'], 200, [
+        'Content-Type' => 'application/json'
+    ]);
+});
+
+// Debug route for manifest test page
+Route::get('/manifest-test', function () {
+    return file_get_contents(public_path('manifest-test.html'));
+});
 
 // Redirect the homepage directly to the Admin Panel
 Route::get('/', function () {

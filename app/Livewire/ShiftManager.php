@@ -21,6 +21,11 @@ class ShiftManager extends Component
 
     public function loadCurrentShift()
     {
+        if (!auth()->check()) {
+            $this->currentShift = null;
+            return;
+        }
+
         $this->currentShift = auth()->user()->currentShift();
         if ($this->currentShift) {
             $seconds = \Carbon\Carbon::now()->diffInSeconds($this->currentShift->started_at);
@@ -30,6 +35,11 @@ class ShiftManager extends Component
 
     public function startShift()
     {
+        if (!auth()->check()) {
+            Notification::make()->title('Authentication Required')->danger()->send();
+            return;
+        }
+
         try {
             $shift = auth()->user()->startShift();
             $this->loadCurrentShift();
@@ -41,6 +51,11 @@ class ShiftManager extends Component
 
     public function endShift()
     {
+        if (!auth()->check()) {
+            Notification::make()->title('Authentication Required')->danger()->send();
+            return;
+        }
+
         try {
             $shift = auth()->user()->endShift();
             $this->loadCurrentShift();
