@@ -435,11 +435,11 @@ new class extends Component {
     </div>
 
     <!-- Mobile Layout (Hidden on Desktop) -->
-    <div class="lg:hidden min-h-screen flex flex-col">
+    <div class="lg:hidden min-h-screen flex flex-col pb-32 pt-[62px]">
         <!-- Mobile Header -->
-        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 sticky top-0 z-40">
+        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-0 left-0 right-0 z-30">
             <div class="flex items-center justify-between">
-                <h1 class="text-lg font-bold text-gray-900 dark:text-white">🍽️ POS</h1>
+                <h1 class="text-lg font-bold text-gray-900 dark:text-white">POS</h1>
                 <div class="flex items-center space-x-2">
                     <!-- Table Selector -->
                     <select wire:model.live="selectedTableId"
@@ -522,8 +522,8 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Bottom Actions -->
-        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+        <!-- Mobile Bottom Actions - Fixed -->
+        <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-[62px] left-0 right-0 z-20">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
                     <div class="text-center">
