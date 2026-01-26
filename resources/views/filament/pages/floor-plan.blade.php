@@ -1,6 +1,34 @@
 <x-filament-panels::page>
     <div wire:poll.1s>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- Page Header -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 md:p-4 mx-3 md:mx-6 my-4 md:my-6 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center shadow-md">
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-lg md:text-xl font-bold text-gray-900 dark:text-white">Floor Plan</h1>
+                        <p class="text-xs md:text-sm text-gray-500 dark:text-gray-400">Table Management & Order Overview</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                        <span class="text-gray-600 dark:text-gray-400">{{ $this->getViewData()['tables']->where('status', 'available')->count() }} Available</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+                        <span class="text-gray-600 dark:text-gray-400">{{ $this->getViewData()['tables']->where('status', 'occupied')->count() }} Occupied</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             @foreach($this->getViewData()['tables'] as $table)
                 @php
                     $isOccupied = $table->status === 'occupied';
@@ -16,7 +44,7 @@
                     $orderStatus = $activeOrder ? $activeOrder->status : null;
                 @endphp
 
-                <div class="relative p-4 rounded-xl border shadow-sm transition hover:shadow-md
+                <div class="relative p-3 md:p-4 rounded-xl border shadow-sm transition hover:shadow-md mx-2 my-2 md:mx-0 md:my-0
                     {{ $isOccupied ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 cursor-pointer' :
                        ($isReserved ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' :
                        ($isCleaning ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' :
@@ -26,7 +54,7 @@
 
                     {{-- Header: Name & Icon --}}
                     <div class="flex justify-between items-start mb-2">
-                        <h3 class="text-xl font-black {{
+                        <h3 class="text-lg md:text-xl font-black {{
                             $isOccupied ? 'text-red-800 dark:text-red-300' :
                             ($isReserved ? 'text-yellow-800 dark:text-yellow-300' :
                             ($isCleaning ? 'text-blue-800 dark:text-blue-300' :
@@ -47,9 +75,9 @@
                     </div>
 
                     {{-- Body: Details --}}
-                    <div class="space-y-1 mb-4">
+                    <div class="space-y-1 mb-3 md:mb-4">
                         @if($isOccupied && $activeOrder)
-                            <div class="text-2xl font-bold text-gray-800 dark:text-gray-200">₦{{ number_format($total) }}</div>
+                            <div class="text-xl md:text-2xl font-bold text-gray-800 dark:text-gray-200">₦{{ number_format($total) }}</div>
                             <div class="text-xs text-gray-500 dark:text-gray-400">Seated {{ $orderTime }}</div>
                             <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Order: #{{ $activeOrder->order_number }}</div>
 
@@ -86,21 +114,21 @@
                     </div>
 
                     {{-- Footer: Actions --}}
-                    <div class="grid grid-cols-2 gap-2 mt-2">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                         {{-- 1. BUTTON: Go to POS (Opens in new tab with ID) --}}
                         @if($isAvailable)
                             <a href="/admin/pos-page?table_id={{ $table->id }}"
-                            class="col-span-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-3 px-4 rounded-lg text-sm font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm">
+                            class="text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 md:py-3 px-3 md:px-4 rounded-lg text-sm font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm">
                                 ➕ New Order
                             </a>
                         @elseif($isOccupied && $activeOrder)
                             <a href="/admin/table-detail?table_id={{ $table->id }}"
-                            class="col-span-2 text-center bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-4 rounded-lg text-sm font-bold transition shadow-sm">
+                            class="text-center bg-indigo-600 hover:bg-indigo-700 text-white py-2 md:py-3 px-3 md:px-4 rounded-lg text-sm font-bold transition shadow-sm">
                                 ⚡ Manage
                             </a>
                         @else
                             <button disabled
-                            class="col-span-2 text-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 py-2 rounded text-sm font-bold cursor-not-allowed">
+                            class="text-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 py-2 rounded text-sm font-bold cursor-not-allowed">
                                 {{ $isCleaning ? '🧽 Cleaning' : ($isReserved ? '📅 Reserved' : '🔧 Maintenance') }}
                             </button>
                         @endif
