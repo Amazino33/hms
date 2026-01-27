@@ -56,8 +56,8 @@ new class extends Component {
         $table = $this->tables->find($value);
         if (!$table) return;
 
-        // If table is occupied, load existing items from pending orders
-        if ($table->status === 'occupied') {
+        // If table has active orders, load existing items
+        if ($table->orders->isNotEmpty()) {
             $orders = \App\Models\Order::where('table_id', $value)
                 ->where('status', 'pending')
                 ->with('items.product')
@@ -105,7 +105,10 @@ new class extends Component {
 
         $this->loadTables();
 
-        $this->selectedTableId = $table_id ?? $this->tables->first(fn($table) => $table->status === 'available')?->id ?? $this->tables->first()?->id;
+        $this->selectedTableId = $table_id ?? $this->tables->first(function($table) {
+            $hasActiveOrder = $table->orders->isNotEmpty();
+            return $table->status === 'available' || (!$hasActiveOrder && $table->status === 'occupied');
+        })?->id ?? $this->tables->first()?->id;
 
         // Load existing order if table is selected
         if ($this->selectedTableId) {
@@ -333,7 +336,10 @@ new class extends Component {
 
     private function loadTables()
     {
-        $this->tables = \App\Models\Table::all();
+        $this->tables = \App\Models\Table::with(['orders' => function ($q) {
+            $q->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
+                ->latest();
+        }])->get();
     }
 
     // Helper to get Warehouse ID consistently
@@ -387,8 +393,12 @@ new class extends Component {
                         class="w-full p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold touch-manipulation">
                         <option value="">-- Select a Table --</option>
                         @foreach($tables as $table)
-                            <option value="{{ $table->id }}" class="{{ $table->status === 'occupied' ? 'text-red-600 font-bold' : 'text-green-600' }}">
-                                {{ $table->name }} {{ $table->status === 'occupied' ? '(Occupied)' : '(Free)' }}</option>
+                            @php
+                                $hasActiveOrder = $table->orders->isNotEmpty();
+                                $isOccupied = $table->status === 'occupied' && $hasActiveOrder;
+                            @endphp
+                            <option value="{{ $table->id }}" class="{{ $isOccupied ? 'text-red-600 font-bold' : 'text-green-600' }}">
+                                {{ $table->name }} {{ $isOccupied ? '(Occupied)' : '(Free)' }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -522,7 +532,11 @@ new class extends Component {
                     class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold">
                     <option value="">Table</option>
                     @foreach($tables as $table)
-                        <option value="{{ $table->id }}" class="{{ $table->status === 'occupied' ? 'text-red-600' : 'text-green-600' }}">
+                        @php
+                            $hasActiveOrder = $table->orders->isNotEmpty();
+                            $isOccupied = $table->status === 'occupied' && $hasActiveOrder;
+                        @endphp
+                        <option value="{{ $table->id }}" class="{{ $isOccupied ? 'text-red-600' : 'text-green-600' }}">
                             {{ $table->name }}</option>
                     @endforeach
                 </select>

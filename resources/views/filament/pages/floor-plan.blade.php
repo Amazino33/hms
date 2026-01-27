@@ -18,11 +18,11 @@
                 <div class="flex items-center gap-3">
                     <div class="flex items-center gap-2 text-sm">
                         <span class="w-2 h-2 bg-green-500 rounded-full"></span>
-                        <span class="text-gray-600 dark:text-gray-400">{{ $this->getViewData()['tables']->where('status', 'available')->count() }} Available</span>
+                        <span class="text-gray-600 dark:text-gray-400">{{ $this->getViewData()['tables']->filter(function($table) { return $table->status === 'available' || ($table->status === 'occupied' && $table->orders->isEmpty()); })->count() }} Available</span>
                     </div>
                     <div class="flex items-center gap-2 text-sm">
                         <span class="w-2 h-2 bg-red-500 rounded-full"></span>
-                        <span class="text-gray-600 dark:text-gray-400">{{ $this->getViewData()['tables']->where('status', 'occupied')->count() }} Occupied</span>
+                        <span class="text-gray-600 dark:text-gray-400">{{ $this->getViewData()['tables']->filter(function($table) { return $table->status === 'occupied' && $table->orders->isNotEmpty(); })->count() }} Occupied</span>
                     </div>
                 </div>
             </div>
@@ -31,17 +31,17 @@
         <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             @foreach($this->getViewData()['tables'] as $table)
                 @php
-                    $isOccupied = $table->status === 'occupied';
-                    $isReserved = $table->status === 'reserved';
-                    $isCleaning = $table->status === 'cleaning';
-                    $isMaintenance = $table->status === 'maintenance';
-                    $isAvailable = $table->status === 'available';
-
                     // Get order details
                     $activeOrder = $table->orders->first();
                     $total = $activeOrder ? $activeOrder->total_amount : 0;
                     $orderTime = $activeOrder ? $activeOrder->created_at->diffForHumans() : '';
                     $orderStatus = $activeOrder ? $activeOrder->status : null;
+
+                    $isOccupied = $table->status === 'occupied' && $activeOrder;
+                    $isReserved = $table->status === 'reserved';
+                    $isCleaning = $table->status === 'cleaning';
+                    $isMaintenance = $table->status === 'maintenance';
+                    $isAvailable = $table->status === 'available' || (!$activeOrder && $table->status === 'occupied');
                 @endphp
 
                 <div class="relative p-3 md:p-4 rounded-xl border shadow-sm transition hover:shadow-md mx-2 my-2 md:mx-0 md:my-0
@@ -114,7 +114,7 @@
                     </div>
 
                     {{-- Footer: Actions --}}
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                    <div class="grid grid-cols-1 gap-2 mt-2">
                         {{-- 1. BUTTON: Go to POS (Opens in new tab with ID) --}}
                         @if($isAvailable)
                             <a href="/admin/pos-page?table_id={{ $table->id }}"
@@ -128,7 +128,7 @@
                             </a>
                         @else
                             <button disabled
-                            class="text-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 py-2 rounded text-sm font-bold cursor-not-allowed">
+                            class="text-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 py-2 md:py-3 px-3 md:px-4 rounded-lg text-sm font-bold cursor-not-allowed">
                                 {{ $isCleaning ? '🧽 Cleaning' : ($isReserved ? '📅 Reserved' : '🔧 Maintenance') }}
                             </button>
                         @endif
