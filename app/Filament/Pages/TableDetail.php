@@ -53,6 +53,38 @@ class TableDetail extends Page
         $this->order = $orders->first();
     }
 
+    public function cancelOrder()
+    {
+        // Find all pending orders for this table and cancel them
+        $orders = Order::where('table_id', $this->table->id)
+            ->where('status', 'pending')
+            ->get();
+
+        if ($orders->isEmpty()) {
+            \Filament\Notifications\Notification::make()
+                ->title('No active orders to cancel')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        // Update order statuses to cancelled
+        foreach ($orders as $order) {
+            $order->update(['status' => 'cancelled']);
+        }
+
+        // Set table status to available
+        $this->table->update(['status' => 'available']);
+
+        \Filament\Notifications\Notification::make()
+            ->title('Order cancelled successfully')
+            ->success()
+            ->send();
+
+        // Redirect back to floor plan
+        return redirect('/admin/floor-plan');
+    }
+
     public function getTitle(): string
     {
         return "Table {$this->table?->name} - Details";

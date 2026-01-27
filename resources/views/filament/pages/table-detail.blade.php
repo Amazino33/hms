@@ -129,6 +129,15 @@
                         </svg>
                         Manage Order (POS)
                     </a>
+
+                    <button wire:click="cancelOrder"
+                       class="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition"
+                       onclick="return confirm('Are you sure you want to cancel this order?')">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        Cancel Order
+                    </button>
                 @else
                     <a href="/admin/pos-page?table_id={{ $table->id }}"
                        class="inline-flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition">

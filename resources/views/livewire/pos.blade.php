@@ -323,6 +323,45 @@ new class extends Component {
         Notification::make()->title('Order Updated')->success()->send();
     }
 
+    public function cancelOrder()
+    {
+        if (!$this->selectedTableId) {
+            Notification::make()->title('Please select a table first')->warning()->send();
+            return;
+        }
+
+        $tableId = $this->selectedTableId;
+
+        // Find all pending orders for this table and cancel them
+        $orders = Order::where('table_id', $tableId)
+            ->where('status', 'pending')
+            ->get();
+
+        if ($orders->isEmpty()) {
+            Notification::make()->title('No active orders to cancel')->warning()->send();
+            return;
+        }
+
+        // Update order statuses to cancelled
+        foreach ($orders as $order) {
+            $order->update(['status' => 'cancelled']);
+        }
+
+        // Set table status to available
+        \App\Models\Table::find($tableId)->update(['status' => 'available']);
+
+        // Clear cart and existing items
+        $this->cart = [];
+        $this->existingItems = [];
+        $this->currentOrderId = null;
+        $this->total = 0;
+
+        // Reload tables to reflect status change
+        $this->loadTables();
+
+        Notification::make()->title('Order Cancelled')->success()->send();
+    }
+
     public function with()
     {
         $query = Product::where('is_active', true)->withSum(['inventory as available_stock' => fn($q) => $q->where('warehouse_id', '!=', 3)], 'quantity');
@@ -433,11 +472,13 @@ new class extends Component {
                     <div class="flex justify-between text-xl lg:text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">
                         <span>Total:</span><span>₦{{ number_format($total) }}</span>
                     </div>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
                         <button wire:click="checkout('update')"
-                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">👨‍🍳 Update Order</span></button>
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Send</span></button>
                         <button wire:click="openPaymentModal"
-                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">💰 Collect Payment</span></button>
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Pay</span></button>
+                        <button wire:click="cancelOrder"
+                            class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Cancel</span></button>
                     </div>
                 </div>
             </div>
@@ -611,14 +652,18 @@ new class extends Component {
                             <div class="flex justify-between text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
                                 <span>Total:</span><span>₦{{ number_format($total) }}</span>
                             </div>
-                            <div class="grid grid-cols-2 gap-3">
+                            <div class="grid grid-cols-3 gap-3">
                                 <button wire:click="checkout('update')"
                                     class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    👨‍🍳 Send
+                                    Send
                                 </button>
                                 <button wire:click="openPaymentModal"
                                     class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    💰 Pay
+                                    Pay
+                                </button>
+                                <button wire:click="cancelOrder"
+                                    class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                                    Cancel
                                 </button>
                             </div>
                         </div>
