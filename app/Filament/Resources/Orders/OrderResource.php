@@ -196,6 +196,12 @@ class OrderResource extends Resource
                     ->sortable()
                     ->weight('bold'),
 
+                TextColumn::make('table.name')
+                    ->label('Table')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn(string $state): string => match ($state) {
