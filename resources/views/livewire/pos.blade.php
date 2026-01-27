@@ -474,7 +474,7 @@ new class extends Component {
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
                         <button wire:click="checkout('update')"
-                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Send</span></button>
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Order</span></button>
                         <button wire:click="openPaymentModal"
                             class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Pay</span></button>
                         <button wire:click="cancelOrder"
@@ -655,7 +655,7 @@ new class extends Component {
                             <div class="grid grid-cols-3 gap-3">
                                 <button wire:click="checkout('update')"
                                     class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    Send
+                                    Order
                                 </button>
                                 <button wire:click="openPaymentModal"
                                     class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
