@@ -46,6 +46,12 @@ class OrderResource extends Resource
                     Section::make('Order Details')
                         ->schema([
                             Grid::make(3)->schema([
+                                TextInput::make('total_amount')
+                                    ->label('GRAND TOTAL')
+                                    ->prefix('₦')
+                                    ->formatStateUsing(fn($state) => number_format($state ?? 0))
+                                    ->readOnly()
+                                    ->extraInputAttributes(['class' => 'text-2xl font-black text-primary-600']),
                                 // A. The Table - CHANGED to Select
                                 Select::make('table_id')
                                     ->label('Table')
@@ -78,18 +84,6 @@ class OrderResource extends Resource
                             ]),
                         ])
                         ->columnSpan(2),
-
-                    // RIGHT: Grand Total (Left exactly as you had it)
-                    Section::make('Total')
-                        ->schema([
-                            TextInput::make('total_amount')
-                                ->label('GRAND TOTAL')
-                                ->prefix('₦')
-                                ->formatStateUsing(fn($state) => number_format($state ?? 0))
-                                ->readOnly()
-                                ->extraInputAttributes(['class' => 'text-2xl font-black text-primary-600']),
-                        ])
-                        ->columnSpan(1),
                 ]),
 
                 // 2. FULL WIDTH SECTION: The Items List
@@ -221,19 +215,19 @@ class OrderResource extends Resource
                     ->color('danger')
                     ->weight('bold')
                     ->state(function (Order $record) {
-                            // 1. If Paid or Pending, return null (shows nothing)
-                            if ($record->amount_paid >= $record->total_amount || $record->status === 'pending') {
-                                return null;
-                            }
+                        // 1. If Paid or Pending, return null (shows nothing)
+                        if ($record->amount_paid >= $record->total_amount || $record->status === 'pending') {
+                            return null;
+                        }
 
-                            // 2. Otherwise, return the calculation
-                            return max(0, $record->total_amount - $record->amount_paid);
-                        }),
+                        // 2. Otherwise, return the calculation
+                        return max(0, $record->total_amount - $record->amount_paid);
+                    }),
 
                 TextColumn::make('total_amount')
                     ->money('NGN')
                     ->sortable(),
-                
+
                 TextColumn::make('guest.name')
                     ->label('Debtor')
                     ->searchable()
