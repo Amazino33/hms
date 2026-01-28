@@ -370,7 +370,10 @@ new class extends Component {
         $cacheKey = 'products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search;
 
         return Cache::remember($cacheKey, 1800, function () {
-            $query = Product::where('is_active', true)->withSum(['inventory as available_stock' => fn($q) => $q->where('warehouse_id', '!=', 3)], 'quantity');
+            $query = Product::where('is_active', true)
+                ->with(['inventory.warehouse', 'category'])
+                ->withSum(['inventory as available_stock' => fn($q) => $q->where('warehouse_id', '!=', 3)], 'quantity');
+            
             if (!empty($this->search))
                 $query->where(fn($q) => $q->where('name', 'like', "%{$this->search}%")->orWhere('sku', 'like', "%{$this->search}%"));
             elseif ($this->activeCategoryId)
@@ -426,9 +429,11 @@ new class extends Component {
                     @foreach($products as $product)
                         <div wire:click="addToCart({{ $product->id }})"
                             class="relative cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:shadow-md rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
-                            <span class="absolute top-2 right-2 px-1.5 py-0.5 lg:px-2 lg:py-0.5 rounded-full text-xs font-bold {{ ($product->available_stock ?? 0) > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">{{ $product->available_stock ?? 0 }} left</span>
                             <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $product->name }}</div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($product->price) }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {{ $product->inventory->map(fn($inv) => $inv->warehouse->name . ': ' . $inv->quantity)->join(', ') }}
+                            </div>
                         </div>
                     @endforeach
                 </div>
@@ -538,15 +543,10 @@ new class extends Component {
                 @foreach($products as $product)
                     <div wire:click="addToCart({{ $product->id }})"
                         class="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation active:scale-95">
-                        <div class="absolute top-2 right-2">
-                            <span class="px-1.5 py-0.5 rounded-full text-xs font-bold {{ ($product->available_stock ?? 0) > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                {{ $product->available_stock ?? 0 }}
-                            </span>
-                        </div>
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $product->name }}</div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($product->price) }}</div>
-                        <div class="mt-2">
-                            <div class="bg-amber-500 text-white text-xs px-2 py-1 rounded-full font-bold">TAP TO ADD</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {{ $product->inventory->map(fn($inv) => $inv->warehouse->name . ': ' . $inv->quantity)->join(', ') }}
                         </div>
                     </div>
                 @endforeach
