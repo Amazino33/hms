@@ -71,6 +71,7 @@ class CategoryResource extends Resource
                 ->color('danger')
                 ->action(fn (Category $record) => $record->delete()),
         ])
+        ->paginated([10, 25, 50, 100])
         ->toolbarActions([
             BulkAction::make('delete')
                 ->requiresConfirmation()

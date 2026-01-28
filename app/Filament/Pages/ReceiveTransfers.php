@@ -52,6 +52,22 @@ class ReceiveTransfers extends Page
             ];
         }
 
+        // If no role-based warehouse and user has assigned warehouse, use it
+        if (!$warehouseId && $user->warehouse) {
+            $warehouseId = $user->warehouse->id;
+            $warehouseName = $user->warehouse->name;
+        }
+
+        // If still no warehouse, show the error
+        if (!$warehouseId) {
+            return [
+                'error' => 'No Warehouse Assigned - Your role is not mapped to a warehouse. Contact an administrator.',
+                'transfers' => collect(),
+                'warehouseId' => null,
+                'warehouseName' => null,
+            ];
+        }
+
         $transfers = collect();
         if ($warehouseId) {
             $transfers = StockTransfer::where('to_warehouse_id', $warehouseId)

@@ -26,6 +26,11 @@ class ProductResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->with(['category']);
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([

@@ -34,6 +34,11 @@ class BookingResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->with(['guest', 'room']);
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema
@@ -153,6 +158,7 @@ class BookingResource extends Resource
                 ->color('danger')
                 ->action(fn (Booking $record) => $record->delete()),
         ])
+        ->paginated([10, 25, 50, 100])
         ->toolbarActions([
             BulkAction::make('delete')
             ->requiresConfirmation()

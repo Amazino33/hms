@@ -176,7 +176,7 @@ class OrderResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        $query = parent::getEloquentQuery();
+        $query = parent::getEloquentQuery()->with(['table', 'user', 'guest', 'orderItems.product']);
 
         // Check if the user is NOT an admin (assuming admin has ID 1 or specific role)
         // Adjust 'waiter' to match your actual role name
@@ -246,6 +246,7 @@ class OrderResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('created_at', 'desc')
+            ->paginated([10, 25, 50, 100])
             ->recordActions([
                 Action::make('edit')
                     ->icon('heroicon-o-pencil')

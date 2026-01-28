@@ -18,6 +18,7 @@ class UsersTable
             ->filters([
                 //
             ])
+            ->paginated([10, 25, 50, 100])
             ->recordActions([
                 EditAction::make(),
             ])

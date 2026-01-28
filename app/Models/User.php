@@ -114,4 +114,12 @@ class User extends Authenticatable
         }
         return $shift;
     }
+
+    /**
+     * Get the user's assigned warehouse
+     */
+    public function warehouse()
+    {
+        return $this->belongsTo(\App\Models\WareHouse::class);
+    }
 }

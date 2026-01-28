@@ -28,6 +28,11 @@ class UserResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->with(['roles', 'warehouse']);
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema
@@ -48,6 +53,12 @@ class UserResource extends Resource
                 ->dehydrated(fn ($state) => filled($state)) // Only save if user typed something
                 ->required(fn (string $context): bool => $context === 'create'), // Required only on create
 
+            Select::make('warehouse_id')
+                ->label('Warehouse')
+                ->relationship('warehouse', 'name')
+                ->preload()
+                ->searchable(),
+
             // 👇 THE MAGIC PART: Assign Roles here
             Select::make('roles')
                 ->relationship('roles', 'name')
@@ -64,6 +75,11 @@ class UserResource extends Resource
             TextColumn::make('name')->searchable(),
             TextColumn::make('email')->searchable(),
             
+            TextColumn::make('warehouse.name')
+                ->label('Warehouse')
+                ->searchable()
+                ->placeholder('—'),
+            
             // Show their Role in the table
             TextColumn::make('roles.name')
                 ->badge()
@@ -71,6 +87,7 @@ class UserResource extends Resource
                 
             TextColumn::make('created_at')->dateTime(),
         ])
+        ->paginated([10, 25, 50, 100])
         ->recordActions([
             Action::make('edit')
                 ->label('Edit')

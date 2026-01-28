@@ -114,6 +114,7 @@ class GuestResource extends Resource
                 ->requiresConfirmation()
                 ->color('danger'),
         ])
+        ->paginated([10, 25, 50, 100])
         ->toolbarActions([
             BulkAction::make('delete')
                 ->icon('heroicon-o-trash')

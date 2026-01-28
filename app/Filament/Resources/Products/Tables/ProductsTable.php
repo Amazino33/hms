@@ -21,8 +21,9 @@ class ProductsTable
                 TextColumn::make('sku')
                     ->label('SKU')
                     ->searchable(),
-                TextColumn::make('category_id')
-                    ->numeric()
+                TextColumn::make('category.name')
+                    ->label('Category')
+                    ->searchable()
                     ->sortable(),
                 TextColumn::make('price')
                     ->money('NGN')
@@ -44,6 +45,7 @@ class ProductsTable
             ->filters([
                 //
             ])
+            ->paginated([10, 25, 50, 100])
             ->recordActions([
                 EditAction::make(),
             ])

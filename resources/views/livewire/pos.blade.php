@@ -9,6 +9,7 @@ use App\Models\OrderPayment;
 use App\Models\User;
 use App\Models\Guest;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Filament\Notifications\Notification;
 use App\Services\OrderSplitter;
 
@@ -100,7 +101,9 @@ new class extends Component {
 
     public function mount($table_id = null)
     {
-        $this->categories = Category::has('products')->get();
+        $this->categories = Cache::remember('categories', 3600, function () {
+            return Category::has('products')->get();
+        });
         $this->activeCategoryId = $this->categories->first()?->id;
 
         $this->loadTables();
@@ -364,21 +367,27 @@ new class extends Component {
 
     public function with()
     {
-        $query = Product::where('is_active', true)->withSum(['inventory as available_stock' => fn($q) => $q->where('warehouse_id', '!=', 3)], 'quantity');
-        if (!empty($this->search))
-            $query->where(fn($q) => $q->where('name', 'like', "%{$this->search}%")->orWhere('sku', 'like', "%{$this->search}%"));
-        elseif ($this->activeCategoryId)
-            $query->where('category_id', $this->activeCategoryId);
+        $cacheKey = 'products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search;
 
-        return ['products' => $query->get()];
+        return Cache::remember($cacheKey, 1800, function () {
+            $query = Product::where('is_active', true)->withSum(['inventory as available_stock' => fn($q) => $q->where('warehouse_id', '!=', 3)], 'quantity');
+            if (!empty($this->search))
+                $query->where(fn($q) => $q->where('name', 'like', "%{$this->search}%")->orWhere('sku', 'like', "%{$this->search}%"));
+            elseif ($this->activeCategoryId)
+                $query->where('category_id', $this->activeCategoryId);
+
+            return ['products' => $query->limit(100)->get()];
+        });
     }
 
     private function loadTables()
     {
-        $this->tables = \App\Models\Table::with(['orders' => function ($q) {
-            $q->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
-                ->latest();
-        }])->get();
+        $this->tables = Cache::remember('tables_with_active_orders', 300, function () {
+            return \App\Models\Table::with(['orders' => function ($q) {
+                $q->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
+                    ->latest();
+            }])->get();
+        });
     }
 
     // Helper to get Warehouse ID consistently
