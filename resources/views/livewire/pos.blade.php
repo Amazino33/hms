@@ -60,7 +60,7 @@ new class extends Component {
         // If table has active orders, load existing items
         if ($table->orders->isNotEmpty()) {
             $orders = \App\Models\Order::where('table_id', $value)
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
                 ->with('items.product')
                 ->get();
 
@@ -221,7 +221,7 @@ new class extends Component {
         $tableStatus = 'available';
 
         // 1. Restore old stock & delete all previous orders for the table
-        $existingOrders = Order::where('table_id', $tableId)->where('status', 'pending')->with('items')->get();
+        $existingOrders = Order::where('table_id', $tableId)->whereIn('status', ['pending', 'preparing', 'ready', 'served'])->with('items')->get();
         foreach ($existingOrders as $existingOrder) {
             foreach ($existingOrder->items as $item) {
                 $product = Product::with('category')->find($item->product_id);
@@ -335,9 +335,9 @@ new class extends Component {
 
         $tableId = $this->selectedTableId;
 
-        // Find all pending orders for this table and cancel them
+        // Find all unpaid orders for this table and cancel them
         $orders = Order::where('table_id', $tableId)
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
             ->get();
 
         if ($orders->isEmpty()) {

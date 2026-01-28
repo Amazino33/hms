@@ -26,6 +26,11 @@ class Order extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function processedByUser()
+    {
+        return $this->belongsTo(User::class, 'processed_by_user_id');
+    }
+
     public function guest()
     {
         return $this->belongsTo(Guest::class);

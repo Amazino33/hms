@@ -176,7 +176,7 @@ class OrderResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        $query = parent::getEloquentQuery()->with(['table', 'user', 'guest', 'orderItems.product']);
+        $query = parent::getEloquentQuery()->with(['table', 'user', 'guest', 'processedByUser', 'items.product']);
 
         // Check if the user is NOT an admin (assuming admin has ID 1 or specific role)
         // Adjust 'waiter' to match your actual role name

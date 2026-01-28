@@ -19,12 +19,37 @@ class KitchenDisplay extends Page
     // Fetch orders for the view
     public function getViewData(): array
     {
+        // Get recent completed orders for history (last 7 days instead of just today)
+        $recentHistory = Order::with('items.product')
+            ->where('destination', 'kitchen')
+            ->whereIn('status', ['ready', 'served', 'paid'])
+            ->where('created_at', '>=', now()->subDays(7)->startOfDay())
+            ->latest()
+            ->limit(10)
+            ->get();
+
+        // Get total items sold today
+        $itemsSold = \DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->join('products', 'order_items.product_id', '=', 'products.id')
+            ->join('categories', 'products.category_id', '=', 'categories.id')
+            ->where('orders.destination', 'kitchen')
+            ->whereIn('orders.status', ['ready', 'served', 'paid'])
+            ->where('orders.created_at', '>=', now()->startOfDay())
+            ->where('categories.type', 'food')
+            ->select('products.name', \DB::raw('SUM(order_items.quantity) as total_sold'))
+            ->groupBy('products.id', 'products.name')
+            ->orderBy('total_sold', 'desc')
+            ->get();
+
         return [
             'orders' => Order::with('items')
                 ->where('status', 'pending') // Only show active orders
                 ->where('destination', 'kitchen') // only kitchen orders
                 ->oldest() // First in, First out
                 ->get(),
+            'recentHistory' => $recentHistory,
+            'itemsSold' => $itemsSold,
         ];
     }
 
@@ -33,7 +58,10 @@ class KitchenDisplay extends Page
         // Use findOrFail so the editor knows it found a real record
         $order = Order::findOrFail($orderId);
         
-        $order->update(['status' => 'ready']);
+        $order->update([
+            'status' => 'ready',
+            'processed_by_user_id' => auth()->id()
+        ]);
 
         // 1. Get the list of items (e.g., "2x Rice, 1x Coke")
         $itemList = $order->items->map(function ($item) {

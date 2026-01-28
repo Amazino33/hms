@@ -39,14 +39,19 @@ class StaffReportService
     /**
      * Get staff history grouped by day for a user.
      * Returns array keyed by YYYY-MM-DD => [orders: Collection, total: decimal, payments: Collection, payments_total]
+     * Includes both orders created by the user and orders processed by the user
      */
     public function staffDailyHistory(int $userId, ?Carbon $from = null, ?Carbon $to = null): array
     {
         $from = $from?->startOfDay() ?? Carbon::now()->subDays(30)->startOfDay();
         $to = $to?->endOfDay() ?? Carbon::now()->endOfDay();
 
+        // Get orders created by the user OR orders processed by the user
         $orders = Order::with(['items', 'payments'])
-            ->where('user_id', $userId)
+            ->where(function($query) use ($userId) {
+                $query->where('user_id', $userId) // Orders created by user
+                      ->orWhere('processed_by_user_id', $userId); // Orders processed by user
+            })
             ->whereBetween('created_at', [$from, $to])
             ->orderByDesc('created_at')
             ->get()

@@ -22,7 +22,14 @@
                     <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded flex justify-between">
                         <div>
                             <div class="font-bold text-gray-800 dark:text-gray-100">Order #{{ $order->order_number }} — {{ ucfirst($order->destination ?? 'main') }}</div>
-                            <div class="text-sm text-gray-600 dark:text-gray-300">Table: {{ $order->table?->name }} — Status: {{ $order->status }}</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-300">
+                                Table: {{ $order->table?->name }} — Status: {{ $order->status }}
+                                @if($order->processed_by_user_id == $user->id && $order->user_id != $user->id)
+                                    <span class="text-blue-600 dark:text-blue-400">(Processed by you)</span>
+                                @elseif($order->user_id == $user->id)
+                                    <span class="text-green-600 dark:text-green-400">(Created by you)</span>
+                                @endif
+                            </div>
                             <div class="text-xs mt-2 text-gray-700 dark:text-gray-200">@foreach($order->items as $it) <span class="mr-2">{{ $it->quantity }}x {{ $it->product_name }}</span> @endforeach</div>
                         </div>
                         <div class="text-right">
