@@ -8,6 +8,10 @@ class PwaInstall extends Component
 {
     public $showInstallButton = false;
     public $isInstalled = false;
+    public $installing = false;
+    public $installSuccess = false;
+    public $installError = false;
+    public $errorMessage = '';
 
     public function mount()
     {
@@ -17,14 +21,48 @@ class PwaInstall extends Component
 
     public function checkIfInstalled()
     {
-        // This will be checked via JavaScript
+        // Check if running in standalone mode (installed PWA)
+        if (isset($_SERVER['HTTP_USER_AGENT'])) {
+            // This will be properly checked via JavaScript
+            return false;
+        }
         return false;
     }
 
     public function installApp()
     {
-        // This will trigger the JavaScript install function
+        $this->installing = true;
+        $this->installError = false;
+        $this->errorMessage = '';
+
+        // Dispatch event to trigger JavaScript install
         $this->dispatch('install-pwa');
+    }
+
+    public function markAsInstalled()
+    {
+        $this->isInstalled = true;
+        $this->showInstallButton = false;
+        $this->installing = false;
+        $this->installSuccess = true;
+
+        // Hide success message after 3 seconds
+        $this->dispatch('hide-success-message');
+    }
+
+    public function markInstallError($message = 'Installation failed. Please try again.')
+    {
+        $this->installing = false;
+        $this->installError = true;
+        $this->errorMessage = $message;
+
+        // Hide error message after 5 seconds
+        $this->dispatch('hide-error-message');
+    }
+
+    public function dismissPrompt()
+    {
+        $this->showInstallButton = false;
     }
 
     public function render()

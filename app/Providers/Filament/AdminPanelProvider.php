@@ -71,6 +71,28 @@ class AdminPanelProvider extends PanelProvider
 
     public function boot()
     {
+        // Register PWA meta tags and service worker
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn () => Blade::render(<<<'HTML'
+            <!-- PWA Meta Tags -->
+            <link rel="icon" href="/favicon.ico" sizes="any">
+            <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+            <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+            <link rel="manifest" href="/site.webmanifest">
+            <meta name="theme-color" content="#1f2937">
+            <meta name="apple-mobile-web-app-capable" content="yes">
+            <meta name="apple-mobile-web-app-status-bar-style" content="default">
+            <meta name="apple-mobile-web-app-title" content="HMS">
+            <meta name="mobile-web-app-capable" content="yes">
+            <meta name="msapplication-TileColor" content="#1f2937">
+            <meta name="msapplication-config" content="/browserconfig.xml">
+            
+            <!-- Load PWA Service Worker -->
+            @vite(['resources/js/app.js'])
+            HTML)
+        );
+
         // Register mobile sidebar close button
         FilamentView::registerRenderHook(
             PanelsRenderHook::SIDEBAR_NAV_START,
@@ -135,6 +157,9 @@ class AdminPanelProvider extends PanelProvider
 
             <!-- Shift Manager Component -->
             @livewire('shift-manager')
+
+            <!-- PWA Install Component -->
+            @livewire('pwa-install')
         HTML)
         );
 
@@ -142,7 +167,7 @@ class AdminPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::USER_MENU_BEFORE,
             fn () => Blade::render(<<<'HTML'
-            <li>
+            <li wire:poll.10s>
                 <a href="#"
                    wire:click.prevent="$dispatch('open-shift-modal')"
                    class="relative flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer touch-manipulation"
