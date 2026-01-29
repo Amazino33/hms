@@ -3,3 +3,12 @@
 @source '../../../../app/Filament/**/*';
 @source '../../../../resources/views/filament/**/*';
 @config '../../../../tailwind.config.js';
+
+/* Hide list markers globally for menu items */
+li {
+    list-style: none;
+}
+
+li::marker {
+    display: none;
+}

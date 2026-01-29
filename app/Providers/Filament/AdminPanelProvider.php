@@ -114,7 +114,9 @@ class AdminPanelProvider extends PanelProvider
 
                 // Monitor notification badge for changes
                 setInterval(() => {
-                    const badge = document.querySelector('.fi-icon-btn-badge, [class*="badge"]');
+                    // Look specifically for the notification icon button's badge
+                    const notificationButton = document.querySelector('[data-action="open-notifications"]');
+                    const badge = notificationButton ? notificationButton.querySelector('.fi-icon-btn-badge') : null;
                     
                     if (badge) {
                         const currentCount = parseInt(badge.textContent) || 0;

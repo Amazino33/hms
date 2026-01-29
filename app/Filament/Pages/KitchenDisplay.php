@@ -68,17 +68,24 @@ class KitchenDisplay extends Page
             return "{$item->quantity}x {$item->product->name}";
         })->join(', ');
         
-        Notification::make()
-            ->title("Order #{$order->order_number} Ready!")
-            ->body("Order #{$order->id} for {$order->table->name}\n\rItems: {$itemList}\n\r is ready for pickup.")
-            ->success()
-            ->actions([
-                // Add a button to the notification to jump to the order
-                ActionsAction::make('view')
-                    ->button()
-                    ->url(OrderResource::getUrl('view', ['record' => $order->id])),
-            ])
-            ->sendToDatabase($order->user);
+        // Send database notification to all staff users
+        $staffUsers = \App\Models\User::whereHas('roles', function($q) {
+            $q->whereIn('name', ['super_admin', 'chef', 'waiter']);
+        })->get();
+        
+        foreach ($staffUsers as $staffUser) {
+            Notification::make()
+                ->title("Order #{$order->order_number} Ready!")
+                ->body("Order #{$order->id} for {$order->table->name}\n\rItems: {$itemList}\n\r is ready for pickup.")
+                ->success()
+                ->actions([
+                    // Add a button to the notification to jump to the order
+                    ActionsAction::make('view')
+                        ->button()
+                        ->url(OrderResource::getUrl('view', ['record' => $order->id])),
+                ])
+                ->sendToDatabase($staffUser);
+        }
     }
 
     public static function canAccess(): bool

@@ -7,6 +7,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 use App\Events\OrderCreated;
+use Filament\Actions\Action;
 
 class OrderSplitter
 {
@@ -107,6 +108,25 @@ class OrderSplitter
                 }
 
                 event(new OrderCreated($order));
+                
+                // Send database notification to all staff users
+                $staffUsers = \App\Models\User::whereHas('roles', function($q) {
+                    $q->whereIn('name', ['super_admin', 'chef', 'waiter']);
+                })->get();
+                
+                foreach ($staffUsers as $staffUser) {
+                    \Filament\Notifications\Notification::make()
+                        ->title("New Order: {$order->order_number}")
+                        ->body("New {$order->destination} order for table {$order->table->name}")
+                        ->info()
+                        ->actions([
+                            Action::make('view')
+                                ->button()
+                                ->url(\App\Filament\Resources\Orders\OrderResource::getUrl('view', ['record' => $order->id])),
+                        ])
+                        ->sendToDatabase($staffUser);
+                }
+                
                 $created[] = $order;
             }
         });
