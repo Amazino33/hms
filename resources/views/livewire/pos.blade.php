@@ -633,7 +633,7 @@ new class extends Component {
         </div>
 
         <!-- Mobile Products Grid - Scrollable -->
-        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[154px] mb-[120px] relative">
+        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[50px] mb-[120px] relative">
             @if(!auth()->user()->currentShift())
                 <div class="absolute inset-0 bg-gray-900/30 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
                     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
