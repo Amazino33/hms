@@ -11,7 +11,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Add performance headers middleware
+        $middleware->append(\App\Http\Middleware\AddPerformanceHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

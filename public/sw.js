@@ -6,17 +6,21 @@ const DYNAMIC_CACHE = 'hms-dynamic-v2.0';
 // Resources to cache immediately
 const STATIC_ASSETS = [
     '/',
-    '/dashboard',
-    '/pos',
+    '/admin',
     '/offline',
     '/offline.html',
-    '/css/app.css',
-    '/js/app.js',
     '/favicon.ico',
     '/apple-touch-icon.png',
     '/site.webmanifest',
     '/favicon.svg'
 ];
+
+// Cache duration settings (in seconds)
+const CACHE_DURATION = {
+    STATIC: 7 * 24 * 60 * 60, // 7 days
+    DYNAMIC: 24 * 60 * 60, // 1 day
+    API: 5 * 60, // 5 minutes
+};
 
 // API endpoints to cache
 const API_ENDPOINTS = [

@@ -12,6 +12,16 @@ export default defineConfig({
         }),
         tailwindcss(),
     ],
+    build: {
+        // Enable minification (using esbuild - faster than terser)
+        minify: 'esbuild',
+        // Enable CSS code splitting
+        cssCodeSplit: true,
+        // Set chunk size warning limit
+        chunkSizeWarningLimit: 1000,
+        // Optimize dependencies
+        reportCompressedSize: false, // Faster builds
+    },
     server: {
         cors: true,
         watch: {
