@@ -281,11 +281,15 @@ new class extends Component {
         $this->showPaymentModal = false;
         $this->existingItems = [];
         $this->cart = [];
+        $this->updateTotal(); // Recalculate total after clearing cart
         $this->currentOrderId = null;
         $this->selectedTableId = null;
         $this->paidAmount = 0;
         $this->selectedGuestId = null;
         $this->showCart = false; // Close cart on mobile after payment
+        
+        // Clear product cache to refresh inventory display
+        Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
     }
 
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
@@ -323,6 +327,10 @@ new class extends Component {
         $this->cart = [];
         $this->updateTotal();
         $this->showCart = false; // Close cart on mobile after checkout
+        
+        // Clear product cache to refresh inventory display
+        Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
+        
         Notification::make()->title('Order Updated')->success()->send();
     }
 
@@ -361,6 +369,9 @@ new class extends Component {
 
         // Reload tables to reflect status change
         $this->loadTables();
+        
+        // Clear product cache to refresh inventory display
+        Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
 
         Notification::make()->title('Order Cancelled')->success()->send();
     }
