@@ -7,6 +7,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 use App\Events\OrderCreated;
+use App\Services\InventoryService;
 use Filament\Actions\Action;
 
 class OrderSplitter
@@ -83,15 +84,6 @@ class OrderSplitter
                         default => 3,
                     };
 
-                    // Check stock
-                    $currentStock = DB::table('inventory_items')
-                        ->where('product_id', $productId)
-                        ->where('warehouse_id', $warehouseId)
-                        ->value('quantity');
-
-                    if (($currentStock ?? 0) < $item['quantity']) {
-                        throw new \Exception("Out of Stock: Only {$currentStock} left of {$item['name']}");
-                    }
                     OrderItem::create([
                         'order_id' => $order->id,
                         'product_id' => $productId,
@@ -100,12 +92,10 @@ class OrderSplitter
                         'unit_price' => $item['price'],
                         'subtotal' => $item['price'] * $item['quantity'],
                     ]);
-
-                    DB::table('inventory_items')
-                        ->where('product_id', $productId)
-                        ->where('warehouse_id', $warehouseId)
-                        ->decrement('quantity', $item['quantity']);
                 }
+
+                // Deduct inventory for all items in this order
+                InventoryService::deductInventoryForOrderItems($order);
 
                 event(new OrderCreated($order));
                 

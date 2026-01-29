@@ -11,8 +11,12 @@ class ShiftManager extends Component
     public $currentShift;
     public $shiftDuration;
     public $showModal = false;
+    public $isProcessing = false;
 
-    protected $listeners = ['open-shift-modal' => 'openModal'];
+    protected $listeners = [
+        'open-shift-modal' => 'openModal',
+        'close-modal-safely' => 'closeModalSafely'
+    ];
 
     public function mount()
     {
@@ -21,58 +25,124 @@ class ShiftManager extends Component
 
     public function loadCurrentShift()
     {
+        // Skip if modal is open and we're processing to avoid hydration conflicts
+        if ($this->showModal && $this->isProcessing) {
+            return;
+        }
+
         if (!auth()->check()) {
             $this->currentShift = null;
+            $this->shiftDuration = null;
             return;
         }
 
         $this->currentShift = auth()->user()->currentShift();
-        if ($this->currentShift) {
-            $seconds = \Carbon\Carbon::now()->diffInSeconds($this->currentShift->started_at);
-            $this->shiftDuration = round($seconds / 60, 1);
+        if ($this->currentShift && $this->currentShift->started_at) {
+            $seconds = now()->diffInSeconds($this->currentShift->started_at);
+            $minutes = round($seconds / 60);
+            
+            if ($minutes < 60) {
+                $this->shiftDuration = $minutes . 'm';
+            } else {
+                $hours = floor($minutes / 60);
+                $remainingMinutes = $minutes % 60;
+                if ($remainingMinutes > 0) {
+                    $this->shiftDuration = $hours . 'h ' . $remainingMinutes . 'm';
+                } else {
+                    $this->shiftDuration = $hours . 'h';
+                }
+            }
+        } else {
+            $this->shiftDuration = null;
         }
     }
 
     public function startShift()
     {
-        if (!auth()->check()) {
-            Notification::make()->title('Authentication Required')->danger()->send();
+        if ($this->isProcessing || !auth()->check()) {
             return;
         }
+
+        $this->isProcessing = true;
 
         try {
             $shift = auth()->user()->startShift();
             $this->loadCurrentShift();
             Notification::make()->title('Shift Started')->success()->send();
+
+            // Close modal after successful shift start
+            $this->showModal = false;
+
         } catch (\Exception $e) {
-            Notification::make()->title('Error starting shift')->danger()->send();
+            Notification::make()->title('Error starting shift: ' . $e->getMessage())->danger()->send();
+        } finally {
+            $this->isProcessing = false;
         }
     }
 
     public function endShift()
     {
-        if (!auth()->check()) {
-            Notification::make()->title('Authentication Required')->danger()->send();
+        if ($this->isProcessing || !auth()->check()) {
             return;
         }
+
+        $this->isProcessing = true;
 
         try {
             $shift = auth()->user()->endShift();
             $this->loadCurrentShift();
             Notification::make()->title('Shift Ended Successfully')->success()->send();
+
+            // Close modal after successful shift end
+            $this->showModal = false;
+
         } catch (\Exception $e) {
-            Notification::make()->title('Error ending shift')->danger()->send();
+            Notification::make()->title('Error ending shift: ' . $e->getMessage())->danger()->send();
+        } finally {
+            $this->isProcessing = false;
         }
     }
 
     public function openModal()
     {
+        if ($this->isProcessing) {
+            // Determine which operation is in progress
+            $operation = $this->currentShift ? 'stopping' : 'starting';
+            Notification::make()
+                ->title("Please wait, shift is {$operation}...")
+                ->warning()
+                ->duration(3000)
+                ->send();
+            return;
+        }
+
         $this->showModal = true;
     }
 
     public function closeModal()
     {
+        // Add a small delay to ensure any pending operations complete
+        $this->dispatch('close-modal-safely', ['delay' => 100]);
+    }
+
+    public function closeModalSafely()
+    {
         $this->showModal = false;
+        $this->loadCurrentShift(); // Ensure fresh data
+    }
+
+    public function updatedShowModal($value)
+    {
+        // When modal opens, ensure we have fresh data
+        if ($value) {
+            $this->loadCurrentShift();
+        }
+    }
+
+    public function dehydrate()
+    {
+        // Ensure clean state before serialization
+        $this->isProcessing = false;
     }
 
     public function render()

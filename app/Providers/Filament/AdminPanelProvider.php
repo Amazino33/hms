@@ -145,12 +145,15 @@ class AdminPanelProvider extends PanelProvider
             <li>
                 <a href="#"
                    wire:click.prevent="$dispatch('open-shift-modal')"
-                   class="flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer touch-manipulation"
+                   class="relative flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer touch-manipulation"
                    title="Shift Management"
                 >
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
+                    @if(auth()->user() && auth()->user()->currentShift())
+                        <div class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse border border-white dark:border-gray-800"></div>
+                    @endif
                 </a>
             </li>
         HTML)

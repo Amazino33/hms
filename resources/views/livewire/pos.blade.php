@@ -99,6 +99,12 @@ new class extends Component {
         }
     }
 
+    public function loadCurrentShift()
+    {
+        // This method exists to enable polling for shift status updates
+        // The actual shift data is accessed via auth()->user()->currentShift() in the view
+    }
+
     public function mount($table_id = null)
     {
         $this->categories = Cache::remember('categories', 3600, function () {
@@ -121,6 +127,12 @@ new class extends Component {
 
     public function addToCart($productId)
     {
+        // Check if user has an active shift
+        if (!auth()->user()->currentShift()) {
+            Notification::make()->title('No Active Shift')->body('You must start a shift before adding items to cart.')->danger()->send();
+            return;
+        }
+
         $product = Product::with('category')->find($productId);
 
         // Check stock availability in consumer warehouses
@@ -201,6 +213,12 @@ new class extends Component {
 
     public function processPayment()
     {
+        // Check if user has an active shift
+        if (!auth()->user()->currentShift()) {
+            Notification::make()->title('No Active Shift')->body('You must start a shift before processing payments.')->danger()->send();
+            return;
+        }
+
         // Ensure user is authenticated
         if (!auth()->check()) {
             Notification::make()->title('Authentication Required')->danger()->send();
@@ -295,6 +313,12 @@ new class extends Component {
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
     public function checkout($action = 'update')
     {
+        // Check if user has an active shift
+        if (!auth()->user()->currentShift()) {
+            Notification::make()->title('No Active Shift')->body('You must start a shift before sending orders to kitchen.')->danger()->send();
+            return;
+        }
+
         if (empty($this->cart)) return;
         if (!$this->selectedTableId) {
             Notification::make()->title('Please select a table first')->warning()->send();
@@ -336,6 +360,12 @@ new class extends Component {
 
     public function cancelOrder()
     {
+        // Check if user has an active shift
+        if (!auth()->user()->currentShift()) {
+            Notification::make()->title('No Active Shift')->body('You must start a shift before canceling orders.')->danger()->send();
+            return;
+        }
+
         if (!$this->selectedTableId) {
             Notification::make()->title('Please select a table first')->warning()->send();
             return;
@@ -419,6 +449,32 @@ new class extends Component {
 ?>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <!-- Shift Status Indicator -->
+    <div wire:poll.10s="loadCurrentShift" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                @if(auth()->user()->currentShift())
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                        <span class="text-sm font-medium text-green-700 dark:text-green-300">Shift Active</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">
+                            Started: {{ auth()->user()->currentShift()->started_at->format('g:i A') }}
+                        </span>
+                    </div>
+                @else
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                        <span class="text-sm font-medium text-red-700 dark:text-red-300">No Active Shift</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">Start a shift to process sales</span>
+                    </div>
+                @endif
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+                {{ now()->format('M j, Y g:i A') }}
+            </div>
+        </div>
+    </div>
+
     <!-- Desktop Layout (Hidden on Mobile) -->
     <div class="hidden lg:block">
         <div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
@@ -426,20 +482,33 @@ new class extends Component {
                 <div class="p-4 lg:m-0 lg:relative">
                     <div class="relative">
                         <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search Item Name or Barcode..."
-                            class="w-full px-4 py-3 pl-12 text-base lg:text-lg border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            autofocus>
+                            class="w-full px-4 py-3 pl-12 text-base lg:text-lg border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm {{ auth()->user()->currentShift() ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' }}"
+                            {{ auth()->user()->currentShift() ? 'autofocus' : 'disabled' }}>
                     </div>
                 </div>
                 <div class="flex overflow-x-auto overflow-y-hidden p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2 flex-nowrap">
                     @foreach($categories as $category)
-                        <button wire:click="$set('activeCategoryId', {{ $category->id }})"
-                            class="px-3 py-2 lg:px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' }}">{{ $category->name }}</button>
+                        <button @if(auth()->user()->currentShift()) wire:click="$set('activeCategoryId', {{ $category->id }})" @endif
+                            class="px-3 py-2 lg:px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
+                            {{ auth()->user()->currentShift() ? '' : 'disabled' }}>{{ $category->name }}</button>
                     @endforeach
                 </div>
-                <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 content-start">
+                <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 content-start relative">
+                    @if(!auth()->user()->currentShift())
+                        <div class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                                <div class="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                    </svg>
+                                </div>
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Start shift to add items</p>
+                            </div>
+                        </div>
+                    @endif
                     @foreach($products as $product)
-                        <div wire:click="addToCart({{ $product->id }})"
-                            class="relative cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:shadow-md rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
+                        <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }})" @endif
+                            class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
                             <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $product->name }}</div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($product->price) }}</div>
                             <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -466,7 +535,19 @@ new class extends Component {
                         @endforeach
                     </select>
                 </div>
-                <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                <div class="flex-1 overflow-y-auto p-4 space-y-3 relative">
+                    @if(!auth()->user()->currentShift())
+                        <div class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                                <div class="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                    </svg>
+                                </div>
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Cart disabled - start shift</p>
+                            </div>
+                        </div>
+                    @endif
                     @if(!empty($existingItems))
                         <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
                         @foreach($existingItems as $id => $item)
@@ -489,7 +570,7 @@ new class extends Component {
                                 <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
                             </div>
                             <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
-                            <button wire:click="removeFromCart({{ $id }})" class="ml-3 text-red-500 hover:text-red-700 touch-manipulation p-1"><span class="text-lg">×</span></button>
+                            <button @if(auth()->user()->currentShift()) wire:click="removeFromCart({{ $id }})" @endif class="ml-3 {{ auth()->user()->currentShift() ? 'text-red-500 hover:text-red-700 cursor-pointer' : 'text-gray-400 cursor-not-allowed' }} touch-manipulation p-1"><span class="text-lg">×</span></button>
                         </div>
                     @endforeach
                 </div>
@@ -498,12 +579,12 @@ new class extends Component {
                         <span>Total:</span><span>₦{{ number_format($total) }}</span>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        <button wire:click="checkout('update')"
-                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Order</span></button>
-                        <button wire:click="openPaymentModal"
-                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Pay</span></button>
-                        <button wire:click="cancelOrder"
-                            class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Cancel</span></button>
+                        <button @if(auth()->user()->currentShift()) wire:click="checkout('update')" @endif
+                            class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Order</span></button>
+                        <button @if(auth()->user()->currentShift()) wire:click="openPaymentModal" @endif
+                            class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Pay</span></button>
+                        <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
+                            class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Cancel</span></button>
                     </div>
                 </div>
             </div>
@@ -516,14 +597,15 @@ new class extends Component {
         <div class="bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700 fixed top-[62px] left-0 right-0 z-20">
             <div class="relative">
                 <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search products..."
-                    class="w-full px-4 py-3 pl-12 text-base border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    class="w-full px-4 py-3 pl-12 text-base border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm {{ auth()->user()->currentShift() ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' }}"
+                    {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                 <div class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                     </svg>
                 </div>
                 @if($search)
-                    <button wire:click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <button @if(auth()->user()->currentShift()) wire:click="clearSearch" @endif class="absolute right-3 top-1/2 -translate-y-1/2 {{ auth()->user()->currentShift() ? 'text-gray-400 hover:text-gray-600 cursor-pointer' : 'text-gray-300 cursor-not-allowed' }}">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
@@ -533,15 +615,17 @@ new class extends Component {
         </div>
 
         <!-- Mobile Categories - Fixed -->
-        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed top-[135px] left-0 right-0 z-20">
+        <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed top-[137px] left-0 right-0 z-20">
             <div class="flex overflow-x-auto overflow-y-hidden p-3 space-x-2 flex-nowrap">
-                <button wire:click="$set('activeCategoryId', null)"
-                    class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ !$activeCategoryId ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
+                <button @if(auth()->user()->currentShift()) wire:click="$set('activeCategoryId', null)" @endif
+                    class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ !$activeCategoryId ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
+                    {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                     All
                 </button>
                 @foreach($categories as $category)
-                    <button wire:click="$set('activeCategoryId', {{ $category->id }})"
-                        class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }}">
+                    <button @if(auth()->user()->currentShift()) wire:click="$set('activeCategoryId', {{ $category->id }})" @endif
+                        class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
+                        {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                         {{ $category->name }}
                     </button>
                 @endforeach
@@ -549,11 +633,23 @@ new class extends Component {
         </div>
 
         <!-- Mobile Products Grid - Scrollable -->
-        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[103px] mb-[120px]">
+        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[154px] mb-[120px] relative">
+            @if(!auth()->user()->currentShift())
+                <div class="absolute inset-0 bg-gray-900/30 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                        <div class="w-6 h-6 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <svg class="w-3 h-3 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                        </div>
+                        <p class="text-xs font-medium text-gray-900 dark:text-white">Start shift to add items</p>
+                    </div>
+                </div>
+            @endif
             <div class="grid grid-cols-2 gap-3">
                 @foreach($products as $product)
-                    <div wire:click="addToCart({{ $product->id }})"
-                        class="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation active:scale-95">
+                    <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }})" @endif
+                        class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $product->name }}</div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($product->price) }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -589,8 +685,9 @@ new class extends Component {
         <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-0 left-0 right-0 z-25">
             <div class="flex items-center justify-between">
                 <!-- Table Selector -->
-                <select wire:model.live="selectedTableId"
-                    class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold">
+                <select @if(auth()->user()->currentShift()) wire:model.live="selectedTableId" @endif
+                    class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg {{ auth()->user()->currentShift() ? 'bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' }} font-bold"
+                    {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                     <option value="">Table</option>
                     @foreach($tables as $table)
                         @php
@@ -628,7 +725,19 @@ new class extends Component {
                         </button>
                     </div>
 
-                    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                    <div class="flex-1 overflow-y-auto p-4 space-y-3 relative">
+                        @if(!auth()->user()->currentShift())
+                            <div class="absolute inset-0 bg-gray-900/30 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                                    <div class="w-6 h-6 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <svg class="w-3 h-3 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                        </svg>
+                                    </div>
+                                    <p class="text-xs font-medium text-gray-900 dark:text-white">Cart disabled</p>
+                                </div>
+                            </div>
+                        @endif
                         @if(!empty($existingItems))
                             <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
                             @foreach($existingItems as $id => $item)
@@ -651,7 +760,7 @@ new class extends Component {
                                         <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
                                     </div>
                                     <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
-                                    <button wire:click="removeFromCart({{ $id }})" class="ml-3 text-red-500 hover:text-red-700 touch-manipulation p-1">
+                                    <button @if(auth()->user()->currentShift()) wire:click="removeFromCart({{ $id }})" @endif class="ml-3 {{ auth()->user()->currentShift() ? 'text-red-500 hover:text-red-700 cursor-pointer' : 'text-gray-400 cursor-not-allowed' }} touch-manipulation p-1">
                                         <span class="text-lg">×</span>
                                     </button>
                                 </div>
@@ -673,16 +782,16 @@ new class extends Component {
                                 <span>Total:</span><span>₦{{ number_format($total) }}</span>
                             </div>
                             <div class="grid grid-cols-3 gap-3">
-                                <button wire:click="checkout('update')"
-                                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                                <button @if(auth()->user()->currentShift()) wire:click="checkout('update')" @endif
+                                    class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                                     Order
                                 </button>
-                                <button wire:click="openPaymentModal"
-                                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                                <button @if(auth()->user()->currentShift()) wire:click="openPaymentModal" @endif
+                                    class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                                     Pay
                                 </button>
-                                <button wire:click="cancelOrder"
-                                    class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                                <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
+                                    class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                                     Cancel
                                 </button>
                             </div>

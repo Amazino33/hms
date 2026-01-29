@@ -1,12 +1,46 @@
-<div>
+<div wire:poll.30s="loadCurrentShift">
 @if($showModal)
 <div class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
     <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-gray-700 relative max-h-[90vh] overflow-y-auto">
-        <div class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0">
-            <h3 class="text-xl font-bold text-gray-900 dark:text-white">⏰ Shift Management</h3>
-            <button wire:click="closeModal" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span class="text-2xl">&times;</span></button>
+        <!-- Loading Overlay -->
+        <div wire:loading wire:target="startShift,endShift" class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10 rounded-2xl">
+            <div class="flex flex-col items-center space-y-3">
+                <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <span wire:loading wire:target="startShift">Starting your shift...</span>
+                    <span wire:loading wire:target="endShift">Ending your shift...</span>
+                </p>
+            </div>
         </div>
-        <div class="p-4 sm:p-6" wire:poll.30s="loadCurrentShift">
+        <div class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+                <span wire:loading wire:target="startShift,endShift" class="opacity-50">⏰ Shift Management</span>
+                <span wire:loading.remove wire:target="startShift,endShift">⏰ Shift Management</span>
+            </h3>
+            <button wire:click="closeModal" 
+                    wire:loading.attr="disabled" wire:target="startShift,endShift"
+                    class="text-gray-400 hover:text-red-500 touch-manipulation p-2">
+                <span class="text-2xl">&times;</span>
+            </button>
+        </div>
+        <div class="p-4 sm:p-6">
+            <!-- Processing Message -->
+            @if($isProcessing)
+                <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 mb-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-5 h-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+                        <div>
+                            <div class="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                                {{ $currentShift ? 'Stopping your shift...' : 'Starting your shift...' }}
+                            </div>
+                            <div class="text-xs text-yellow-600 dark:text-yellow-400">
+                                Please wait while we process your request.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
             <!-- Mobile-First Layout (default for all screens) -->
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white">⏰ Shift</h3>
@@ -36,13 +70,19 @@
                             </div>
                             <div>
                                 <div class="text-sm font-bold text-green-800 dark:text-green-300">On Shift</div>
-                                <div class="text-xs text-green-600 dark:text-green-400">{{ $shiftDuration }}m active</div>
+                                <div class="text-xs text-green-600 dark:text-green-400">{{ $shiftDuration }} active</div>
                             </div>
                         </div>
                         <button wire:click="endShift"
+                            wire:loading.attr="disabled"
+                            @if($isProcessing) disabled @endif
                             onclick="return confirm(\"Are you sure you want to end your current shift? This action cannot be undone.\")"
-                            class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation">
-                            End Shift
+                            class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
+                            <svg wire:loading wire:target="endShift" class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            <span wire:loading.remove wire:target="endShift">End Shift</span>
+                            <span wire:loading wire:target="endShift">Stopping Shift...</span>
                         </button>
                     </div>
 
@@ -109,12 +149,18 @@
                     <h4 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">Ready to Start?</h4>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">Begin your shift to start processing orders</p>
                     <button wire:click="startShift"
-                        class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95">
-                        🚀 Start Shift
+                        wire:loading.attr="disabled"
+                        @if($isProcessing) disabled @endif
+                        class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95 flex items-center justify-center space-x-2">
+                        <svg wire:loading wire:target="startShift" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span wire:loading.remove wire:target="startShift">🚀 Start Shift</span>
+                        <span wire:loading wire:target="startShift">Starting Shift...</span>
                     </button>
                 </div>
             @endif
         </div>
 
-@endif
+    @endif
 </div>
