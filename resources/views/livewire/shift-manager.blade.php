@@ -103,7 +103,7 @@
                             <strong>Total Payments:</strong> ₦{{ number_format($currentShift->payments->sum("amount")) }}
                         </div>
                         <div class="text-xs text-green-600 dark:text-green-500">
-                            Duration: {{ $shiftDuration }} minutes
+                            Duration: {{ $shiftDuration }}
                         </div>
                     </div>
                 </div>
@@ -163,4 +163,44 @@
         </div>
 
     @endif
+
+    <!-- Toast Notification Container -->
+    <div x-data="{
+        show: false,
+        message: '',
+        type: 'success',
+        showToast(event) {
+            this.message = event.detail[0].message;
+            this.type = event.detail[0].type;
+            this.show = true;
+            setTimeout(() => { this.show = false; }, 3000);
+        }
+    }"
+    @notify.window="showToast($event)"
+    x-show="show"
+    x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="transform translate-x-full"
+    x-transition:enter-end="transform translate-x-0"
+    x-transition:leave="transition ease-in duration-200"
+    x-transition:leave-start="transform translate-x-0"
+    x-transition:leave-end="transform translate-x-full"
+    class="fixed top-20 right-6 z-[60] max-w-sm w-full"
+    style="display: none;">
+        <div :class="{
+            'bg-green-500': type === 'success',
+            'bg-red-500': type === 'error',
+            'bg-yellow-500': type === 'warning',
+            'bg-blue-500': type === 'info'
+        }" class="px-6 py-4 rounded-xl shadow-2xl text-white font-medium">
+            <div class="flex items-center space-x-3">
+                <svg x-show="type === 'success'" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <svg x-show="type === 'error'" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span x-text="message"></span>
+            </div>
+        </div>
+    </div>
 </div>

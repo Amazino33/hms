@@ -38,7 +38,8 @@ class ShiftManager extends Component
 
         $this->currentShift = auth()->user()->currentShift();
         if ($this->currentShift && $this->currentShift->started_at) {
-            $seconds = now()->diffInSeconds($this->currentShift->started_at);
+            // Calculate elapsed time (always positive)
+            $seconds = $this->currentShift->started_at->diffInSeconds(now());
             $minutes = round($seconds / 60);
             
             if ($minutes < 60) {
@@ -68,12 +69,22 @@ class ShiftManager extends Component
         try {
             $shift = auth()->user()->startShift();
             $this->loadCurrentShift();
+            
+            // Send notification immediately
+            $this->dispatch('notify', [
+                'type' => 'success',
+                'message' => 'Shift Started Successfully!'
+            ]);
             Notification::make()->title('Shift Started')->success()->send();
 
             // Close modal after successful shift start
             $this->showModal = false;
 
         } catch (\Exception $e) {
+            $this->dispatch('notify', [
+                'type' => 'error',
+                'message' => 'Error starting shift: ' . $e->getMessage()
+            ]);
             Notification::make()->title('Error starting shift: ' . $e->getMessage())->danger()->send();
         } finally {
             $this->isProcessing = false;
@@ -91,12 +102,22 @@ class ShiftManager extends Component
         try {
             $shift = auth()->user()->endShift();
             $this->loadCurrentShift();
+            
+            // Send notification immediately
+            $this->dispatch('notify', [
+                'type' => 'success',
+                'message' => 'Shift Ended Successfully!'
+            ]);
             Notification::make()->title('Shift Ended Successfully')->success()->send();
 
             // Close modal after successful shift end
             $this->showModal = false;
 
         } catch (\Exception $e) {
+            $this->dispatch('notify', [
+                'type' => 'error',
+                'message' => 'Error ending shift: ' . $e->getMessage()
+            ]);
             Notification::make()->title('Error ending shift: ' . $e->getMessage())->danger()->send();
         } finally {
             $this->isProcessing = false;
