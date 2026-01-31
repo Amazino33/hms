@@ -44,6 +44,7 @@ class AdminPanelProvider extends PanelProvider
                 Dashboard::class,
                 \App\Filament\Pages\StorekeeperTransfers::class,
                 \App\Filament\Pages\ReceiveTransfers::class,
+                \App\Filament\Pages\QuickInventoryUpdate::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
