@@ -192,5 +192,13 @@ class AdminPanelProvider extends PanelProvider
         if ($this->app->environment('production')) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }
+
+        // 2. The Super Admin Bypass (The "God Mode" Switch)
+        // This MUST be in AppServiceProvider, NOT AdminPanelProvider
+        \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
+            if ($user->hasRole('super_admin')) {
+                return true;
+            }
+        });
     }
 }
