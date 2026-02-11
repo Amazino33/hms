@@ -22,6 +22,11 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Spatie\Permission\Models\Permission;
+use App\Policies\RolePolicy;
+use App\Policies\PermissionPolicy;
+use Illuminate\Support\Facades\Gate;
+use Spatie\Permission\Models\Role;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -79,7 +84,7 @@ class AdminPanelProvider extends PanelProvider
         // Register PWA meta tags and service worker
         FilamentView::registerRenderHook(
             PanelsRenderHook::HEAD_END,
-            fn () => Blade::render(<<<'HTML'
+            fn() => Blade::render(<<<'HTML'
             <!-- PWA Meta Tags -->
             <link rel="icon" href="/favicon.ico" sizes="any">
             <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -101,7 +106,7 @@ class AdminPanelProvider extends PanelProvider
         // Register mobile sidebar close button
         FilamentView::registerRenderHook(
             PanelsRenderHook::SIDEBAR_NAV_START,
-            fn () => Blade::render(<<<'HTML'
+            fn() => Blade::render(<<<'HTML'
             <div class="lg:hidden absolute z-50" style="top: 1rem; right: 1rem;">
                 <button
                     x-data="{}"
@@ -119,7 +124,7 @@ class AdminPanelProvider extends PanelProvider
 
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
-            fn () => Blade::render(<<<'HTML'
+            fn() => Blade::render(<<<'HTML'
             <audio id="notification-sound" src="/sounds/notification.wav" preload="auto"></audio>
 
             <script>
@@ -171,7 +176,7 @@ class AdminPanelProvider extends PanelProvider
         // Add shift management menu item
         FilamentView::registerRenderHook(
             PanelsRenderHook::USER_MENU_BEFORE,
-            fn () => Blade::render(<<<'HTML'
+            fn() => Blade::render(<<<'HTML'
             <li wire:poll.10s>
                 <a href="#"
                    wire:click.prevent="$dispatch('open-shift-modal')"
@@ -188,5 +193,14 @@ class AdminPanelProvider extends PanelProvider
             </li>
         HTML)
         );
+
+        // Explicitly tell Laravel which policy governs which model
+        Gate::policy(Role::class, RolePolicy::class);
+        // Gate::policy(Permission::class, PermissionPolicy::class);
+
+        // Allow Super Admin to bypass all checks
+        Gate::before(function ($user, $ability) {
+            return $user->hasRole('super_admin') ? true : null;
+        });
     }
 }
