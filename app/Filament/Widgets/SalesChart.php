@@ -6,13 +6,14 @@ use Filament\Widgets\ChartWidget;
 use App\Models\Order;
 use Flowframe\Trend\Trend;
 use Flowframe\Trend\TrendValue;
+use Illuminate\Support\Facades\Cache;
 
 class SalesChart extends ChartWidget
 {
     protected ?string $heading = 'Revenue (Last 7 Days)';
     
-    // Refresh chart every 15 seconds to match the Stats Overview
-    protected ?string $pollingInterval = '15s';
+    // Refresh chart every 30s to reduce DB load (data changes slower)
+    protected ?string $pollingInterval = '30s';
     
     // Sort order: Higher number = lower on the dashboard
     protected static ?int $sort = 2;
@@ -25,14 +26,15 @@ class SalesChart extends ChartWidget
 
     protected function getData(): array
     {
-        // 1. Use the Trend Package to group data automatically
-        $data = Trend::model(Order::class)
-            ->between(
-                start: now()->subDays(7),
-                end: now(),
-            )
-            ->perDay()
-            ->sum('total_amount'); // Sums the 'total_amount' column
+        $data = Cache::remember('sales_chart:7d', 60, function () {
+            return Trend::model(Order::class)
+                ->between(
+                    start: now()->subDays(7),
+                    end: now(),
+                )
+                ->perDay()
+                ->sum('total_amount');
+        });
 
         // 2. Format for Chart.js
         return [

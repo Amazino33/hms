@@ -6,6 +6,7 @@ use App\Models\Order;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class WaiterShiftStats extends BaseWidget
 {
@@ -15,15 +16,19 @@ class WaiterShiftStats extends BaseWidget
     protected function getStats(): array
     {
         // 1. Get stats for THIS USER for TODAY only
-        $orders = Order::query()
-            ->where('user_id', auth()->id()) // Only my orders
-            ->whereDate('created_at', today()) // Only today
-            ->select(
-                DB::raw('SUM(total_amount) as expected'),
-                DB::raw('SUM(amount_paid) as collected'),
-                DB::raw('SUM(total_amount - amount_paid) as debt')
-            )
-            ->first();
+        $userId = auth()->id();
+        $dateKey = today()->toDateString();
+        $orders = Cache::remember("waiter_shift:{$userId}:{$dateKey}", 30, function () use ($userId) {
+            return Order::query()
+                ->where('user_id', $userId)
+                ->whereDate('created_at', today())
+                ->select(
+                    DB::raw('SUM(total_amount) as expected'),
+                    DB::raw('SUM(amount_paid) as collected'),
+                    DB::raw('SUM(total_amount - amount_paid) as debt')
+                )
+                ->first();
+        });
 
         // Handle case where no orders exist yet
         $expected = $orders->expected ?? 0;

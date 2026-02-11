@@ -9,11 +9,12 @@ use App\Models\Order;
 use App\Models\Booking;
 use App\Models\Room;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class StatOverview extends StatsOverviewWidget
 {
-    // Poll updates every 15 seconds so the dashboard feels "live"
-    protected ?string $pollingInterval = '15s';
+    // Poll a bit slower to reduce DB churn while still feeling live
+    protected ?string $pollingInterval = '20s';
 
     protected function getStats(): array
     {
@@ -22,17 +23,24 @@ class StatOverview extends StatsOverviewWidget
         // 👑 SCENARIO 1: ADMIN & MANAGER (See Money)
         if ($user->hasRole(['super_admin', 'manager'])) {
             // 1. Calculate Restaurant Revenue (Today)
-            $restaurantRevenue = Order::whereDate('created_at', Carbon::today())
-                ->where('status', '!=', 'cancelled') // Exclude cancelled
-                ->sum('total_amount');
+            $todayKey = Carbon::today()->toDateString();
+            $monthKey = Carbon::now()->format('Y-m');
 
-            // 2. Calculate Hotel Revenue (This Month)
-            $hotelRevenue = Booking::whereMonth('created_at', Carbon::now()->month)
-                ->sum('total_price');
+            $restaurantRevenue = Cache::remember("stat:restaurant_revenue:{$todayKey}", 30, fn () =>
+                Order::whereDate('created_at', $todayKey)
+                    ->where('status', '!=', 'cancelled')
+                    ->sum('total_amount')
+            );
 
-            // 3. Check Room Occupancy
-            $totalRooms = Room::count();
-            $occupiedRooms = Room::where('status', 'occupied')->count();
+            $hotelRevenue = Cache::remember("stat:hotel_revenue:{$monthKey}", 60, fn () =>
+                Booking::whereMonth('created_at', Carbon::now()->month)
+                    ->sum('total_price')
+            );
+
+            [$totalRooms, $occupiedRooms] = Cache::remember('stat:rooms', 60, fn () => [
+                Room::count(),
+                Room::where('status', 'occupied')->count(),
+            ]);
 
             return [
                 Stat::make('Restaurant Sales (Today)', '₦' . number_format($restaurantRevenue))
@@ -54,8 +62,8 @@ class StatOverview extends StatsOverviewWidget
 
         // 👨‍🍳 SCENARIO 2: CHEF (See Workload)
         if ($user->hasRole('chef')) {
-            $pending = \App\Models\Order::where('status', 'pending')->count();
-            $preparing = \App\Models\Order::where('status', 'preparing')->count();
+            $pending = Cache::remember('stat:chef:pending', 20, fn () => \App\Models\Order::where('status', 'pending')->count());
+            $preparing = Cache::remember('stat:chef:preparing', 20, fn () => \App\Models\Order::where('status', 'preparing')->count());
 
             return [
                 Stat::make('New Orders', $pending)
@@ -73,14 +81,20 @@ class StatOverview extends StatsOverviewWidget
         if ($user->hasRole('waiter')) {
             
             // 1. "My Ready Orders" (Only show orders created by THIS waiter that are ready)
-            $myReady = \App\Models\Order::where('user_id', $user->id) // 👈 Filter by User
-                ->where('status', 'ready')
-                ->count();
+            $cacheKeyReady = "stat:waiter:ready:{$user->id}";
+            $cacheKeySales = "stat:waiter:sales:{$user->id}:{$todayKey}";
 
-            // 2. "My Sales" (Only sum orders created by THIS waiter)
-            $mySales = \App\Models\Order::where('user_id', $user->id) // 👈 Filter by User
-                ->whereDate('created_at', now())
-                ->sum('total_amount');
+            $myReady = Cache::remember($cacheKeyReady, 20, fn () =>
+                \App\Models\Order::where('user_id', $user->id)
+                    ->where('status', 'ready')
+                    ->count()
+            );
+
+            $mySales = Cache::remember($cacheKeySales, 20, fn () =>
+                \App\Models\Order::where('user_id', $user->id)
+                    ->whereDate('created_at', Carbon::today())
+                    ->sum('total_amount')
+            );
 
             return [
                 Stat::make('Ready for Pickup', $myReady)

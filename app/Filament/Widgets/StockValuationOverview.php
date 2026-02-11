@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use App\Models\Product;
+use Illuminate\Support\Facades\Cache;
 
 class StockValuationOverview extends BaseWidget
 {
@@ -16,14 +17,16 @@ class StockValuationOverview extends BaseWidget
 
     protected function getStats(): array
     {
-        // 1. Get products with inventory sums
-        $products = Product::withSum('inventory', 'quantity')->get();
+        $totals = Cache::remember('stock_valuation:totals', 120, function () {
+            $products = Product::withSum('inventory', 'quantity')->get();
 
-        // 2. Calculate Totals
-        $totalCost = $products->sum(fn($p) => $p->cost_price * $p->inventory_sum_quantity);
-        $totalRevenue = $products->sum(fn($p) => $p->price * $p->inventory_sum_quantity);
-        $potentialProfit = $totalRevenue - $totalCost;
-        $totalItems = $products->sum('inventory_sum_quantity');
+            $totalCost = $products->sum(fn($p) => $p->cost_price * $p->inventory_sum_quantity);
+            $totalRevenue = $products->sum(fn($p) => $p->price * $p->inventory_sum_quantity);
+            $potentialProfit = $totalRevenue - $totalCost;
+            $totalItems = $products->sum('inventory_sum_quantity');
+
+            return compact('totalCost', 'totalRevenue', 'potentialProfit', 'totalItems');
+        });
 
         return [
             Stat::make('Total Cost', '₦' . number_format($totalCost))
