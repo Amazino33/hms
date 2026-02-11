@@ -13,7 +13,7 @@ class BarDisplay extends Page
 {
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-sparkles';
     protected static ?string $navigationLabel = 'Bar Display';
-    protected string $view = 'filament.pages.Bar-display';
+    protected string $view = 'filament.pages.bar-display';
 
     // Fetch orders for the view
     public function getViewData(): array
