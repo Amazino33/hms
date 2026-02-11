@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -120,6 +122,12 @@ class User extends Authenticatable
      */
     public function warehouse()
     {
-        return $this->belongsTo(\App\Models\WareHouse::class);
+        return $this->belongsTo(\App\Models\Warehouse::class);
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        // If you are NOT using HasPanelShield, this MUST be here:
+        return $this->hasRole('super_admin') || str_ends_with($this->email, '@selum.com.ng');
     }
 }
