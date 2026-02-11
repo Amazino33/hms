@@ -2,51 +2,52 @@
 
 namespace App\Policies;
 
-use App\Models\User;
+use Illuminate\Foundation\Auth\User as AuthUser;
 use Spatie\Permission\Models\Role;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class RolePolicy
 {
     use HandlesAuthorization;
-
-    /**
+    
+   /**
      * Determine whether the user can view any models.
      */
-    public function viewAny(User $user): bool
+    public function viewAny(AuthUser $authUser): bool
     {
-        return $user->hasRole('super_admin');
+        return $authUser->can('ViewAny:Role');
     }
 
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, Role $role): bool
+    public function view(AuthUser $authUser, Role $role): bool
     {
-        return $user->hasRole('super_admin');
+        return $authUser->can('View:Role');
     }
 
     /**
      * Determine whether the user can create models.
      */
-    public function create(User $user): bool
+    public function create(AuthUser $authUser): bool
     {
-        return $user->hasRole('super_admin');
+        return $authUser->can('Create:Role');
     }
 
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, Role $role): bool
+    public function update(AuthUser $authUser, Role $role): bool
     {
-        return $user->hasRole('super_admin');
+        return $authUser->can('Update:Role');
     }
 
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, Role $role): bool
+    public function delete(AuthUser $authUser, Role $role): bool
     {
-        return $user->hasRole('super_admin');
+        return $authUser->can('Delete:Role');
     }
+
 }
