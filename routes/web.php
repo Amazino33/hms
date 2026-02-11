@@ -21,6 +21,24 @@ Route::get('/sw.js', function () {
     ]);
 })->name('pwa.service-worker');
 
+Route::get('/debug-login', function () {
+    // 1. Force Login as your user (ID 2 based on your previous output)
+    $user = \App\Models\User::find(2); 
+    auth()->login($user);
+
+    // 2. Check the "Panel Access" Gate specifically
+    // This is the gate that throws the 403 error on the dashboard
+    $canAccessPanel = $user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+    return [
+        'User Email' => $user->email,
+        'User Role' => $user->getRoleNames(),
+        'Is Logged In?' => auth()->check() ? 'YES' : 'NO',
+        'Can Access Panel?' => $canAccessPanel ? 'YES' : 'NO (This is the problem!)',
+        'Environment' => app()->environment(),
+    ];
+});
+
 Route::get('/browserconfig.xml', function () {
     $content = file_get_contents(public_path('browserconfig.xml'));
     return response($content, 200, [
