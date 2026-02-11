@@ -28,6 +28,11 @@ class StockValuationOverview extends BaseWidget
             return compact('totalCost', 'totalRevenue', 'potentialProfit', 'totalItems');
         });
 
+        $totalCost = $totals['totalCost'] ?? 0;
+        $totalRevenue = $totals['totalRevenue'] ?? 0;
+        $potentialProfit = $totals['potentialProfit'] ?? 0;
+        $totalItems = $totals['totalItems'] ?? 0;
+
         return [
             Stat::make('Total Cost', '₦' . number_format($totalCost))
                 ->color('danger'),
