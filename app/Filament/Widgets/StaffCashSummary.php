@@ -6,6 +6,7 @@ use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use App\Services\StaffReportService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class StaffCashSummary extends StatsOverviewWidget
@@ -16,6 +17,7 @@ class StaffCashSummary extends StatsOverviewWidget
     {
         $user = Auth::user();
         $service = new StaffReportService();
+        $ttl = 60; // seconds
 
         // Default date range: today
         $from = Carbon::today();
@@ -23,7 +25,7 @@ class StaffCashSummary extends StatsOverviewWidget
 
         // Bartender
         if ($user->hasRole('bartender')) {
-            $data = $service->expectedCashByDestination('bar', $from, $to);
+            $data = Cache::remember("staff_cash:bartender:{$user->id}", $ttl, fn () => $service->expectedCashByDestination('bar', $from, $to));
             return [
                 Stat::make('Bar Expected', '₦' . number_format($data['expected']))
                     ->description('Due to Bar')
@@ -36,7 +38,7 @@ class StaffCashSummary extends StatsOverviewWidget
 
         // Chef
         if ($user->hasRole('chef')) {
-            $data = $service->expectedCashByDestination('kitchen', $from, $to);
+            $data = Cache::remember("staff_cash:chef:{$user->id}", $ttl, fn () => $service->expectedCashByDestination('kitchen', $from, $to));
             return [
                 Stat::make('Kitchen Expected', '₦' . number_format($data['expected']))
                     ->description('Due to Kitchen')
@@ -49,7 +51,7 @@ class StaffCashSummary extends StatsOverviewWidget
 
         // Waiter: show payments collected by this user today
         if ($user->hasRole('waiter')) {
-            $history = $service->staffDailyHistory($user->id, $from, $to);
+            $history = Cache::remember("staff_cash:waiter:{$user->id}", $ttl, fn () => $service->staffDailyHistory($user->id, $from, $to));
             $todayKey = $from->format('Y-m-d');
             $paymentsTotal = $history[$todayKey]['payments_total'] ?? 0;
 

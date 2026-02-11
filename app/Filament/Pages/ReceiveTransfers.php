@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use App\Models\StockTransfer;
 
 class ReceiveTransfers extends Page
@@ -44,7 +45,12 @@ class ReceiveTransfers extends Page
 
         if ($user->hasRole('storekeeper') || $user->hasRole('super_admin')) {
             // Storekeeper can see all transfers regardless of warehouse
-            $transfers = StockTransfer::with(['items','fromWarehouse','toWarehouse'])->whereIn('status', ['pending','sent'])->latest()->get();
+            $transfers = Cache::remember('receive_transfers:all', 5, fn () =>
+                StockTransfer::with(['items','fromWarehouse','toWarehouse'])
+                    ->whereIn('status', ['pending','sent'])
+                    ->latest()
+                    ->get()
+            );
             return [
                 'transfers' => $transfers,
                 'warehouseId' => 'all',
@@ -70,11 +76,14 @@ class ReceiveTransfers extends Page
 
         $transfers = collect();
         if ($warehouseId) {
-            $transfers = StockTransfer::where('to_warehouse_id', $warehouseId)
-                ->whereIn('status', ['pending','sent'])
-                ->with(['items','fromWarehouse','toWarehouse'])
-                ->latest()
-                ->get();
+            $cacheKey = "receive_transfers:wh:{$warehouseId}";
+            $transfers = Cache::remember($cacheKey, 5, fn () =>
+                StockTransfer::where('to_warehouse_id', $warehouseId)
+                    ->whereIn('status', ['pending','sent'])
+                    ->with(['items','fromWarehouse','toWarehouse'])
+                    ->latest()
+                    ->get()
+            );
         }
 
         return [

@@ -41,7 +41,7 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->globalSearch(false)
             ->databaseNotifications()
-            ->databaseNotificationsPolling('5s')
+            ->databaseNotificationsPolling('15s')
             ->colors([
                 'primary' => Color::Amber,
             ])
