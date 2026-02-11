@@ -62,7 +62,7 @@ class User extends Authenticatable
         return Str::of($this->name)
             ->explode(' ')
             ->take(2)
-            ->map(fn ($word) => Str::substr($word, 0, 1))
+            ->map(fn($word) => Str::substr($word, 0, 1))
             ->implode('');
     }
 
@@ -123,5 +123,10 @@ class User extends Authenticatable
     public function warehouse()
     {
         return $this->belongsTo(\App\Models\Warehouse::class);
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return str_ends_with($this->email, '@selum.com.ng');
     }
 }
