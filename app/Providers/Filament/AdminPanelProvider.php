@@ -3,7 +3,8 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Resources\Ingredients\IngredientResource;
-use App\Models\Permission;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use App\Policies\PermissionPolicy;
 use App\Policies\RolePolicy;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -208,7 +209,7 @@ class AdminPanelProvider extends PanelProvider
         });
 
         // Register the policies
-        Gate::policy(PermissionPolicy::class, PermissionPolicy::class);
-        Gate::policy(RolePolicy::class, RolePolicy::class);
+        Gate::policy(Permission::class, PermissionPolicy::class);
+        Gate::policy(Role::class, RolePolicy::class);
     }
 }
