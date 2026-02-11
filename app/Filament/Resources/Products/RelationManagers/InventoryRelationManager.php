@@ -33,7 +33,7 @@ class InventoryRelationManager extends RelationManager
                     ->disableOptionWhen(function ($value, $record) {
                         if ($record !== null) return false; // Allow editing existing records
                         
-                        $warehouse = \App\Models\Warehouse::find($value);
+                        $warehouse = \App\Models\WareHouse::find($value);
                         if (!$warehouse) return true;
                         
                         // Allow storage warehouses always, disable consumer warehouses that already have this product
@@ -44,7 +44,7 @@ class InventoryRelationManager extends RelationManager
                     ->live()
                     ->afterStateUpdated(function ($state, callable $set) {
                         // Reset quantity when warehouse changes
-                        $warehouse = \App\Models\Warehouse::find($state);
+                        $warehouse = \App\Models\WareHouse::find($state);
                         if ($warehouse && $warehouse->type !== 'storage') {
                             $set('quantity', 0);
                         }
@@ -58,14 +58,14 @@ class InventoryRelationManager extends RelationManager
                         $warehouseId = $get('warehouse_id');
                         if (!$warehouseId) return true;
                         
-                        $warehouse = \App\Models\Warehouse::find($warehouseId);
+                        $warehouse = \App\Models\WareHouse::find($warehouseId);
                         return !$warehouse || $warehouse->type !== 'storage';
                     })
                     ->helperText(function (callable $get) {
                         $warehouseId = $get('warehouse_id');
                         if (!$warehouseId) return '';
                         
-                        $warehouse = \App\Models\Warehouse::find($warehouseId);
+                        $warehouse = \App\Models\WareHouse::find($warehouseId);
                         if (!$warehouse) return '';
                         
                         return $warehouse->type === 'storage' 

@@ -21,7 +21,7 @@ class ReceiveTransfers extends Page
 
         if ($user->hasRole('bartender')) {
             // Find the bar warehouse (consumer type, typically the first consumer warehouse)
-            $barWarehouse = \App\Models\Warehouse::where('type', 'consumer')->orderBy('id')->first();
+            $barWarehouse = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first();
             if ($barWarehouse) {
                 $warehouseId = $barWarehouse->id;
                 $warehouseName = $barWarehouse->name;
@@ -30,7 +30,7 @@ class ReceiveTransfers extends Page
 
         if ($user->hasRole('chef')) {
             // Find the kitchen warehouse (consumer type, typically the second consumer warehouse)
-            $consumerWarehouses = \App\Models\Warehouse::where('type', 'consumer')->orderBy('id')->get();
+            $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
             if ($consumerWarehouses->count() > 1) {
                 $kitchenWarehouse = $consumerWarehouses[1]; // Second consumer warehouse
                 $warehouseId = $kitchenWarehouse->id;

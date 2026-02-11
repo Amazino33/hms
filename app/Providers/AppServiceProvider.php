@@ -27,11 +27,6 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->registerObservers();
-
-        if ($this->app->environment('production')) {
-            \Illuminate\Support\Facades\URL::forceScheme('https');
-            $this->app['request']->server->set('HTTPS', 'on'); // <--- Add this line too!
-        }
     }
 
     protected function configureDefaults(): void
@@ -42,15 +37,14 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(
-            fn(): ?Password => app()->isProduction()
-                ? Password::min(12)
+        Password::defaults(fn (): ?Password => app()->isProduction()
+            ? Password::min(12)
                 ->mixedCase()
                 ->letters()
                 ->numbers()
                 ->symbols()
                 ->uncompromised()
-                : null
+            : null
         );
     }
 
