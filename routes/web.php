@@ -39,6 +39,10 @@ Route::get('/debug-login', function () {
     ];
 });
 
+Route::get('/test-403', function() {
+    return 'This works!';
+});
+
 Route::get('/browserconfig.xml', function () {
     $content = file_get_contents(public_path('browserconfig.xml'));
     return response($content, 200, [

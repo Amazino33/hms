@@ -36,6 +36,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
+            ->authGuard('web') 
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
             ->globalSearch(false)
@@ -61,7 +62,7 @@ class AdminPanelProvider extends PanelProvider
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
-                AuthenticateSession::class,
+                // AuthenticateSession::class, // Disabled: causes 403 in production
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,
                 SubstituteBindings::class,
@@ -69,7 +70,7 @@ class AdminPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->plugins([
-                // FilamentShieldPlugin::make(),
+                // FilamentShieldPlugin::make(), // Temporarily disabled for production testing
             ])
             ->authMiddleware([
                 Authenticate::class,
@@ -194,13 +195,9 @@ class AdminPanelProvider extends PanelProvider
         HTML)
         );
 
-        // 1. Force the URL generator to use HTTPS
-        if ($this->app->environment('production')) {
+        // 1. Force the URL generator to use HTTPS (only if not running locally)
+        if ($this->app->environment('production') && !$this->app->runningUnitTests()) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
-
-            // 2. THE NUCLEAR FIX: Manually set the HTTPS server flag
-            // This tricks Laravel into thinking the connection is secure
-            $this->app['request']->server->set('HTTPS', 'on');
         }
 
         // 3. Your Super Admin Gate (Keep this!)
