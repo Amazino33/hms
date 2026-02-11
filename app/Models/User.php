@@ -122,6 +122,6 @@ class User extends Authenticatable
      */
     public function warehouse()
     {
-        return $this->belongsTo(\App\Models\WareHouse::class);
+        return $this->belongsTo(\App\Models\Warehouse::class);
     }
 }

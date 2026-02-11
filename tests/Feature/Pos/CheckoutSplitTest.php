@@ -32,8 +32,8 @@ it('creates separate kitchen and bar orders from a mixed cart', function () {
     ]);
 
     // Create warehouses and inventory so stock checks pass
-    \App\Models\WareHouse::create(['id' => 4, 'name' => 'Bar', 'location' => 'Back', 'is_active' => 1]);
-    \App\Models\WareHouse::create(['id' => 5, 'name' => 'Kitchen', 'location' => 'Ground', 'is_active' => 1]);
+    \App\Models\Warehouse::create(['id' => 4, 'name' => 'Bar', 'location' => 'Back', 'is_active' => 1]);
+    \App\Models\Warehouse::create(['id' => 5, 'name' => 'Kitchen', 'location' => 'Ground', 'is_active' => 1]);
 
     \App\Models\InventoryItem::create(['product_id' => $beer->id, 'warehouse_id' => 4, 'quantity' => 10]);
     \App\Models\InventoryItem::create(['product_id' => $rice->id, 'warehouse_id' => 5, 'quantity' => 10]);
