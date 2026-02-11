@@ -5,7 +5,7 @@ namespace App\Filament\Resources\Warehouses;
 use App\Filament\Resources\Warehouses\Pages\CreateWarehouse;
 use App\Filament\Resources\Warehouses\Pages\EditWarehouse;
 use App\Filament\Resources\Warehouses\Pages\ListWarehouses;
-use App\Models\Warehouse;
+use App\Models\WareHouse;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;

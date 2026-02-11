@@ -6,7 +6,7 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\InventoryItem;
 use App\Models\InventoryList;
-use App\Models\Warehouse;
+use App\Models\WareHouse;
 use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Row;

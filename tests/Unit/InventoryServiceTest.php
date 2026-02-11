@@ -4,7 +4,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\InventoryItem;
-use App\Models\Warehouse;
+use App\Models\WareHouse;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 

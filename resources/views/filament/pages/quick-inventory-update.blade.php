@@ -16,7 +16,7 @@
             <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Select Warehouse</label>
             <select wire:model.live="selectedWarehouseId" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500">
                 <option value="">-- Choose Warehouse --</option>
-                @foreach(\App\Models\Warehouse::all() as $warehouse)
+                @foreach(\App\Models\WareHouse::all() as $warehouse)
                     <option value="{{ $warehouse->id }}">{{ $warehouse->name }} ({{ $warehouse->type }})</option>
                 @endforeach
             </select>

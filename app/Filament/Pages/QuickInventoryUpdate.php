@@ -12,7 +12,7 @@ use Filament\Forms\Components\Select;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Actions\Action;
 use App\Models\Product;
-use App\Models\Warehouse;
+use App\Models\WareHouse;
 use BackedEnum;
 use UnitEnum;
 use Filament\Notifications\Notification;

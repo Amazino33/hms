@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use Illuminate\Foundation\Auth\User as AuthUser;
-use App\Models\Warehouse;
+use App\Models\WareHouse;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class WarehousePolicy
