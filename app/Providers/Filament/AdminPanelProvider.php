@@ -26,6 +26,7 @@ use Spatie\Permission\Models\Permission;
 use App\Policies\RolePolicy;
 use App\Policies\PermissionPolicy;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 
 class AdminPanelProvider extends PanelProvider
@@ -193,6 +194,11 @@ class AdminPanelProvider extends PanelProvider
             </li>
         HTML)
         );
+
+        // 1. Force HTTPS in Production (Fixes 403/419 issues on live servers)
+        if($this->app->environment('production')) {
+            URL::forceScheme('https');
+        }
 
         // Explicitly tell Laravel which policy governs which model
         Gate::policy(Role::class, RolePolicy::class);
