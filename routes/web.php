@@ -17,7 +17,7 @@ Route::get('/sw.js', function () {
 })->name('pwa.service-worker');
 
 Route::get('/cron-test', function () {
-    dispatch(function () { \Log::info('CRON QUEUE TEST', ['ts' => now()->toDateTimeString()]); });
+    \App\Jobs\CronQueueTestJob::dispatch();
     return 'queued';
 });
 
