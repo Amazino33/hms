@@ -3,6 +3,9 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Resources\Ingredients\IngredientResource;
+use App\Models\Permission;
+use App\Policies\PermissionPolicy;
+use App\Policies\RolePolicy;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -21,6 +24,7 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -199,8 +203,12 @@ class AdminPanelProvider extends PanelProvider
         }
 
         // 3. Your Super Admin Gate (Keep this!)
-        \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
+        Gate::before(function ($user, $ability) {
             return $user->hasRole('super_admin') ? true : null;
         });
+
+        // Register the policies
+        Gate::policy(PermissionPolicy::class, PermissionPolicy::class);
+        Gate::policy(RolePolicy::class, RolePolicy::class);
     }
 }
