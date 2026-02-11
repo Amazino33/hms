@@ -128,8 +128,15 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        // Production-safe: Always allow authenticated users to access the panel
-        // Role/permission checks are handled by FilamentShield and Gates
-        return true;
+        // Allow super admins unconditionally; otherwise require explicit panel access permission
+        if ($this->hasRole('super_admin')) {
+            return true;
+        }
+
+        try {
+            return $this->hasPermissionTo('access admin');
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }

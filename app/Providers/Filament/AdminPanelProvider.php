@@ -70,7 +70,7 @@ class AdminPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->plugins([
-                // FilamentShieldPlugin::make(), // Temporarily disabled for production testing
+                    FilamentShieldPlugin::make(),
             ])
             ->authMiddleware([
                 Authenticate::class,
