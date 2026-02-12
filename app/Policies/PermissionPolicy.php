@@ -15,7 +15,7 @@ class PermissionPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole('super_admin');
+        return $user->can('ViewAny:Permission');
     }
 
     /**
@@ -23,7 +23,7 @@ class PermissionPolicy
      */
     public function view(User $user, Permission $permission): bool
     {
-        return $user->hasRole('super_admin');
+        return $user->can('View:Permission');
     }
 
     /**
@@ -31,7 +31,7 @@ class PermissionPolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasRole('super_admin');
+        return $user->can('Create:Permission');
     }
 
     /**
@@ -39,7 +39,7 @@ class PermissionPolicy
      */
     public function update(User $user, Permission $permission): bool
     {
-        return $user->hasRole('super_admin');
+        return $user->can('Update:Permission');
     }
 
     /**
@@ -47,6 +47,6 @@ class PermissionPolicy
      */
     public function delete(User $user, Permission $permission): bool
     {
-        return $user->hasRole('super_admin');
+        return $user->can('Delete:Permission');
     }
 }
