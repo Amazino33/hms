@@ -83,7 +83,7 @@
                         @foreach($orderItems as $item)
                             <div class="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                                 <div class="flex-1">
-                                    <div class="font-medium text-gray-900 dark:text-white">{{ $item->product->name }}</div>
+                                    <div class="font-medium text-gray-900 dark:text-white">{{ $item->product_name }}</div>
                                     <div class="text-sm text-gray-500 dark:text-gray-400">₦{{ number_format($item->unit_price) }} each</div>
                                 </div>
                                 <div class="text-right">

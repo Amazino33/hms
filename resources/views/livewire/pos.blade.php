@@ -66,15 +66,15 @@ new class extends Component {
 
             foreach ($orders as $order) {
                 foreach ($order->items as $item) {
-                    if (isset($this->existingItems[$item->product_id])) {
-                        $this->existingItems[$item->product_id]['quantity'] += $item->quantity;
+                    if (isset($this->existingItems[$item->product_id ?: $item->id])) {
+                        $this->existingItems[$item->product_id ?: $item->id]['quantity'] += $item->quantity;
                     } else {
-                        $this->existingItems[$item->product_id] = [
-                            'id' => $item->product_id,
+                        $this->existingItems[$item->product_id ?: $item->id] = [
+                            'id' => $item->product_id ?: $item->menu_item_id,
                             'name' => $item->product_name,
                             'price' => $item->unit_price,
                             'quantity' => $item->quantity,
-                            'image' => $item->product->image ?? null,
+                            'image' => $item->product ? $item->product->image : null,
                         ];
                     }
                 }
