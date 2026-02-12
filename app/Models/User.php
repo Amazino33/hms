@@ -130,6 +130,6 @@ class User extends Authenticatable implements FilamentUser
     {
         // Allow access if the user has any role (for role-based access control)
         // or has the explicit panel access permission
-        return $this->hasRole('super_admin') || $this->hasAnyRole() || $this->hasPermissionTo('access admin');
+        return $this->hasRole('super_admin') || $this->hasAnyRole();
     }
 }
