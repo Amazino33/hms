@@ -61,6 +61,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/stock-transfers', [StockTransferController::class, 'store']);
     Route::post('/stock-transfers/{stockTransfer}/send', [StockTransferController::class, 'send']);
     Route::post('/stock-transfers/{stockTransfer}/receive', [StockTransferController::class, 'receive']);
+    Route::post('/stock-transfers/bulk-receive', [StockTransferController::class, 'bulkReceive']);
     Route::get('/warehouses/{warehouse}/product/{product}/quantity', [StockTransferController::class, 'productQuantity']);
 
     // Floor plan AJAX routes

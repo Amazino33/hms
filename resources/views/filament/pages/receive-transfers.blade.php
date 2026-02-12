@@ -1,3 +1,4 @@
+
 <div class="min-h-screen p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
     <!-- Toast notifications -->
     <div id="toast" class="fixed top-6 right-6 z-50 hidden">
@@ -134,10 +135,13 @@
                     @foreach($transfers as $t)
                         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-2xl transition-all duration-300">
                             <!-- Card Header -->
-                            <div class="p-4 md:p-6 bg-gradient-to-r from-slate-50 to-gray-100 dark:from-slate-800 dark:to-slate-900 border-b border-gray-100 dark:border-gray-700">
+                            <div class="p-4 md:p-6 bg-gradient-to-r from-slate-50 to-gray-100 dark:from-slate-800 dark:to-slate-900 border-b border-gray-100 dark:border-gray-700 relative">
+                                <!-- Single Checkbox for both layouts -->
+                                <input type="checkbox" class="transfer-checkbox w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 absolute top-4 left-4 z-10" value="{{ $t->id }}" data-transfer-number="{{ $t->transfer_number }}">
+                                
                                 <!-- Desktop Layout -->
                                 <div class="hidden md:flex items-center justify-between">
-                                    <div class="flex items-center gap-4">
+                                    <div class="flex items-center gap-4 ml-8">
                                         <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
                                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
@@ -168,25 +172,26 @@
 
                                 <!-- Mobile Layout -->
                                 <div class="md:hidden flex flex-col gap-4">
-                                    <div class="flex items-center gap-4">
+                                    <div class="flex items-center gap-4 ml-8">
                                         <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
                                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
                                             </svg>
                                         </div>
                                         <div class="flex-1">
-                                            <h3 class="font-bold text-gray-900 dark:text-white">{{ $t->transfer_number }}</h3>
+                                            <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ $t->transfer_number }}</h3>
                                             <div class="flex items-center gap-2 mt-1">
                                                 <span class="text-sm text-gray-500 dark:text-gray-400">From:</span>
                                                 <span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300">{{ $t->fromWarehouse->name ?? $t->from_warehouse_id }}</span>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div class="flex items-center justify-between">
-                                        <div class="text-left">
-                                            <p class="text-xs text-gray-500 dark:text-gray-400">Total Items</p>
+                                        <div class="text-right">
+                                            <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">{{ $t->items->sum('quantity') }}</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Items</p>
                                         </div>
-                                        <button onclick="openReceiveModal({{ $t->id }}, '{{ $t->transfer_number }}')" 
+                                    </div>
+                                    <div class="flex items-center justify-end">
+                                        <button onclick="openReceiveModal({{ $t->id }}, '{{ $t->transfer_number }}')"
                                             class="px-5 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
@@ -267,7 +272,7 @@
             @endif
         @endif
     </div>
-
+    
     <!-- Confirm receive modal -->
     <div id="receive-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 transform transition-all duration-300 scale-100">
@@ -298,8 +303,10 @@
         </div>
     </div>
 
+    @push('script')
     <script>
         let currentReceiveId = null;
+        let selectedTransfers = [];
 
         function showToast(msg, type = 'success') {
             const toast = document.getElementById('toast');
@@ -359,13 +366,329 @@
             });
         }
 
+        // Bulk selection functionality
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.transfer-checkbox:checked');
+            selectedTransfers = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            const count = selectedTransfers.length;
+            document.getElementById('selected-count').textContent = `${count} selected`;
+            document.getElementById('bulk-receive-btn').disabled = count === 0;
+        }
+
+        function submitBulkReceive() {
+            if (selectedTransfers.length === 0) return;
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ||
+                document.querySelector('input[name="_token"]')?.value || '';
+
+            showToast('Processing bulk receive...', 'success');
+
+            fetch('/stock-transfers/bulk-receive', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    transfer_ids: selectedTransfers
+                })
+            }).then(r => r.json()).then(data => {
+                const successful = data.successful || 0;
+                const failed = data.failed || 0;
+
+                if (failed === 0) {
+                    showToast(`Successfully received ${successful} transfers!`);
+                } else if (successful === 0) {
+                    showToast(`Failed to receive ${failed} transfers. Check console for details.`, 'error');
+                    console.error('Bulk receive errors:', data.errors);
+                } else {
+                    showToast(`Received ${successful} transfers, ${failed} failed. Check console for details.`, 'error');
+                    console.error('Bulk receive errors:', data.errors);
+                }
+
+                setTimeout(() => location.reload(), 2000);
+            }).catch(e => {
+                console.error(e);
+                showToast('Error processing bulk receive', 'error');
+            });
+        }
+
+        // Initialize event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing event listeners...');
+            
+            // Select all checkbox
+            const selectAllCheckbox = document.getElementById('select-all');
+            if (selectAllCheckbox) {
+                console.log('Found select-all checkbox');
+                selectAllCheckbox.addEventListener('change', function() {
+                    console.log('Select all changed:', this.checked);
+                    const checkboxes = document.querySelectorAll('.transfer-checkbox');
+                    console.log('Found', checkboxes.length, 'transfer checkboxes');
+                    
+                    // Try a different approach - use setAttribute
+                    checkboxes.forEach((cb, index) => {
+                        console.log(`Setting checkbox ${index} to ${this.checked}`);
+                        cb.checked = this.checked;
+                        // Also try setting the attribute
+                        if (this.checked) {
+                            cb.setAttribute('checked', 'checked');
+                        } else {
+                            cb.removeAttribute('checked');
+                        }
+                    });
+                    
+                    // Update the selected count display immediately
+                    updateSelectedCount();
+                    
+                    // Visual feedback
+                    const label = selectAllCheckbox.nextElementSibling;
+                    if (label) {
+                        label.textContent = this.checked ? 'Deselect All' : 'Select All';
+                    }
+                });
+            } else {
+                console.error('Select-all checkbox not found!');
+            }
+
+            // Individual checkboxes
+            document.addEventListener('change', function(e) {
+                if (e.target.classList.contains('transfer-checkbox')) {
+                    console.log('Individual checkbox changed:', e.target.value);
+                    updateSelectedCount();
+                    
+                    // Update select all checkbox state
+                    const allCheckboxes = document.querySelectorAll('.transfer-checkbox');
+                    const checkedCheckboxes = document.querySelectorAll('.transfer-checkbox:checked');
+                    const selectAll = document.getElementById('select-all');
+                    if (selectAll) {
+                        selectAll.checked = allCheckboxes.length === checkedCheckboxes.length && allCheckboxes.length > 0;
+                        selectAll.indeterminate = checkedCheckboxes.length > 0 && checkedCheckboxes.length < allCheckboxes.length;
+                    }
+                }
+            });
+
+            // Bulk receive button
+            const bulkBtn = document.getElementById('bulk-receive-btn');
+            if (bulkBtn) {
+                console.log('Found bulk receive button');
+                bulkBtn.addEventListener('click', submitBulkReceive);
+            } else {
+                console.error('Bulk receive button not found!');
+            }
+
+            // Initialize count
+            updateSelectedCount();
+            console.log('Event listeners initialized');
+        });
+
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
                 closeReceiveModal();
             }
         });
     </script>
+    @endpush
 
+    <script>
+        console.log('Script loaded directly in template');
+        let currentReceiveId = null;
+        let selectedTransfers = [];
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            if (!toast) {
+                console.error('Toast element not found');
+                return;
+            }
+            const content = document.getElementById('toast-content');
+            const bgClass = type === 'success' 
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+                : 'bg-gradient-to-r from-red-500 to-red-600';
+            content.className = `${bgClass} text-white px-6 py-4 rounded-xl shadow-2xl font-medium`;
+            content.textContent = msg;
+            toast.classList.remove('hidden');
+            toast.classList.add('animate-slideIn');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('animate-slideIn');
+            }, 4000);
+        }
+
+        function openReceiveModal(id, number) {
+            const modal = document.getElementById('receive-modal');
+            if (!modal) {
+                console.error('Receive modal not found');
+                return;
+            }
+            const p = document.getElementById('modal-transfer-number');
+            currentReceiveId = id;
+            p.textContent = `Mark transfer ${number} as received? This will update your inventory.`;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeReceiveModal() {
+            const modal = document.getElementById('receive-modal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            currentReceiveId = null;
+        }
+
+        function submitReceive() {
+            if (!currentReceiveId) return;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ||
+                document.querySelector('input[name="_token"]')?.value || '';
+            fetch(`/stock-transfers/${currentReceiveId}/receive`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': csrfToken,
+                    'Content-Type': 'application/json'
+                }
+            }).then(r => r.json()).then(data => {
+                if (data.message && data.message.includes('Forbidden')) {
+                    showToast('Permission denied', 'error');
+                } else if (data.status === 'received') {
+                    showToast('Transfer received successfully!');
+                    closeReceiveModal();
+                    setTimeout(() => location.reload(), 2000);
+                } else if (data.message) {
+                    showToast(data.message, 'error');
+                }
+            }).catch(e => {
+                console.error(e);
+                showToast('Error receiving transfer', 'error');
+            });
+        }
+
+        // Bulk selection functionality
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.transfer-checkbox:checked');
+            selectedTransfers = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            const count = selectedTransfers.length;
+            const countElement = document.getElementById('selected-count');
+            if (countElement) {
+                countElement.textContent = `${count} selected`;
+            }
+            const bulkBtn = document.getElementById('bulk-receive-btn');
+            if (bulkBtn) {
+                bulkBtn.disabled = count === 0;
+            }
+        }
+
+        function submitBulkReceive() {
+            if (selectedTransfers.length === 0) return;
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ||
+                document.querySelector('input[name="_token"]')?.value || '';
+
+            showToast('Processing bulk receive...', 'success');
+
+            fetch('/stock-transfers/bulk-receive', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    transfer_ids: selectedTransfers
+                })
+            }).then(r => r.json()).then(data => {
+                const successful = data.successful || 0;
+                const failed = data.failed || 0;
+
+                if (failed === 0) {
+                    showToast(`Successfully received ${successful} transfers!`);
+                } else if (successful === 0) {
+                    showToast(`Failed to receive ${failed} transfers. Check console for details.`, 'error');
+                    console.error('Bulk receive errors:', data.errors);
+                } else {
+                    showToast(`Received ${successful} transfers, ${failed} failed. Check console for details.`, 'error');
+                    console.error('Bulk receive errors:', data.errors);
+                }
+
+                setTimeout(() => location.reload(), 2000);
+            }).catch(e => {
+                console.error(e);
+                showToast('Error processing bulk receive', 'error');
+            });
+        }
+
+        // Initialize event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing event listeners...');
+            
+            // Select all checkbox
+            const selectAllCheckbox = document.getElementById('select-all');
+            if (selectAllCheckbox) {
+                console.log('Found select-all checkbox');
+                selectAllCheckbox.addEventListener('change', function() {
+                    console.log('Select all changed:', this.checked);
+                    const checkboxes = document.querySelectorAll('.transfer-checkbox');
+                    console.log('Found', checkboxes.length, 'transfer checkboxes');
+                    
+                    checkboxes.forEach((cb, index) => {
+                        console.log(`Setting checkbox ${index} to ${this.checked}`);
+                        cb.checked = this.checked;
+                        if (this.checked) {
+                            cb.setAttribute('checked', 'checked');
+                        } else {
+                            cb.removeAttribute('checked');
+                        }
+                    });
+                    
+                    updateSelectedCount();
+                    
+                    // Visual feedback
+                    const label = selectAllCheckbox.nextElementSibling;
+                    if (label) {
+                        label.textContent = this.checked ? 'Deselect All' : 'Select All';
+                    }
+                });
+            } else {
+                console.error('Select-all checkbox not found!');
+            }
+
+            // Individual checkboxes
+            document.addEventListener('change', function(e) {
+                if (e.target.classList.contains('transfer-checkbox')) {
+                    console.log('Individual checkbox changed:', e.target.value);
+                    updateSelectedCount();
+                    
+                    // Update select all checkbox state
+                    const allCheckboxes = document.querySelectorAll('.transfer-checkbox');
+                    const checkedCheckboxes = document.querySelectorAll('.transfer-checkbox:checked');
+                    const selectAll = document.getElementById('select-all');
+                    if (selectAll) {
+                        selectAll.checked = allCheckboxes.length === checkedCheckboxes.length && allCheckboxes.length > 0;
+                        selectAll.indeterminate = checkedCheckboxes.length > 0 && checkedCheckboxes.length < allCheckboxes.length;
+                    }
+                }
+            });
+
+            // Bulk receive button
+            const bulkBtn = document.getElementById('bulk-receive-btn');
+            if (bulkBtn) {
+                console.log('Found bulk receive button');
+                bulkBtn.addEventListener('click', submitBulkReceive);
+            } else {
+                console.error('Bulk receive button not found!');
+            }
+
+            // Initialize count
+            updateSelectedCount();
+            console.log('Event listeners initialized');
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeReceiveModal();
+            }
+        });
+    </script> 
+    
+    @push('style')
     <style>
         @keyframes slideIn {
             from {
@@ -381,4 +704,5 @@
             animation: slideIn 0.3s ease-out;
         }
     </style>
+    @endpush
 </div>

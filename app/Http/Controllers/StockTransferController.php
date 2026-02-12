@@ -73,6 +73,48 @@ class StockTransferController extends Controller
         return response()->json($transfer->fresh()->load('items'));
     }
 
+    public function bulkReceive(Request $request)
+    {
+        $user = $request->user();
+        // allow kitchen/bar staff to receive; also storekeeper can receive
+        if (! ($user->hasAnyRole(['storekeeper','chef','bartender']))) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $data = $request->validate([
+            'transfer_ids' => 'required|array|min:1',
+            'transfer_ids.*' => 'required|integer|exists:stock_transfers,id',
+        ]);
+
+        $results = [];
+        $errors = [];
+
+        foreach ($data['transfer_ids'] as $transferId) {
+            try {
+                $transfer = StockTransfer::findOrFail($transferId);
+                $receivedTransfer = $this->service->receiveTransfer($transfer, $user->id);
+                $results[] = [
+                    'id' => $transferId,
+                    'status' => 'received',
+                    'transfer_number' => $receivedTransfer->transfer_number,
+                ];
+            } catch (\Exception $e) {
+                $errors[] = [
+                    'id' => $transferId,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return response()->json([
+            'results' => $results,
+            'errors' => $errors,
+            'total_processed' => count($results) + count($errors),
+            'successful' => count($results),
+            'failed' => count($errors),
+        ]);
+    }
+
     public function productQuantity($warehouseId, $productId)
     {
         $qty = \DB::table('inventory_items')
