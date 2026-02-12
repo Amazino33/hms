@@ -56,7 +56,7 @@ class InventoryService
      */
     private static function returnMenuItemIngredients($orderItem): void
     {
-        $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($orderItem->product_id);
+        $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($orderItem->menu_item_id);
 
         if (!$menuItem) {
             return;
@@ -123,7 +123,7 @@ class InventoryService
      */
     private static function deductMenuItemIngredients($item): void
     {
-        $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($item->product_id);
+        $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($item->menu_item_id);
 
         if (!$menuItem) {
             throw new \Exception("Menu item not found: {$item->product_name}");

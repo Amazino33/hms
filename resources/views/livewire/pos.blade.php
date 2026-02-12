@@ -136,15 +136,22 @@ new class extends Component {
         if ($itemType === 'product') {
             $product = Product::with('category')->find($itemId);
 
-            // Check stock availability in consumer warehouses
+            // Determine warehouse based on product category (same logic as OrderSplitter)
+            $warehouseId = match(true) {
+                $product && $product->category && $product->category->type === 'drink' => 4,
+                $product && $product->category && $product->category->type === 'food' => 5,
+                default => 3,
+            };
+
+            // Check stock availability in the specific warehouse that will be used for deduction
             $available = (int) DB::table('inventory_items')
                 ->where('product_id', $itemId)
-                ->where('warehouse_id', '!=', 3)
-                ->sum('quantity');
+                ->where('warehouse_id', $warehouseId)
+                ->value('quantity') ?? 0;
 
             $currentQty = isset($this->cart[$itemId]) ? $this->cart[$itemId]['quantity'] : 0;
             if ($available <= $currentQty) {
-                Notification::make()->title('Out of Stock')->danger()->send();
+                Notification::make()->title('Out of Stock')->body("Only {$available} available in stock.")->danger()->send();
                 return;
             }
 
@@ -170,8 +177,10 @@ new class extends Component {
                 return;
             }
 
-            // Check ingredient availability
-            $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($itemId, 1);
+            // Check ingredient availability for current quantity + 1
+            $cartKey = 'menu_' . $itemId;
+            $currentQty = isset($this->cart[$cartKey]) ? $this->cart[$cartKey]['quantity'] : 0;
+            $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($itemId, $currentQty + 1);
             if (!empty($insufficientIngredients)) {
                 $messages = [];
                 foreach ($insufficientIngredients as $insufficient) {
@@ -308,13 +317,27 @@ new class extends Component {
         }
 
         // Use OrderSplitter service to create separate orders per destination
-        $splitter = new OrderSplitter();
-        $orders = $splitter->handle($allItems, $tableId, auth()->id(), [
-            'amount_paid' => $this->paidAmount,
-            'payment_method' => $this->paymentMethod,
-            'status' => $orderStatus,
-            'guest_id' => $this->selectedGuestId,
-        ]);
+        try {
+            $splitter = new OrderSplitter();
+            $orders = $splitter->handle($allItems, $tableId, auth()->id(), [
+                'amount_paid' => $this->paidAmount,
+                'payment_method' => $this->paymentMethod,
+                'status' => $orderStatus,
+                'guest_id' => $this->selectedGuestId,
+            ]);
+        } catch (\Exception $e) {
+            // Handle inventory/stock errors
+            if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
+                Notification::make()
+                    ->title('Stock Error')
+                    ->body($e->getMessage())
+                    ->danger()
+                    ->send();
+                return;
+            }
+            // Re-throw other exceptions
+            throw $e;
+        }
 
         // Create payment record for shift tracking (only one for the total payment)
         if ($this->paidAmount > 0 && !empty($orders)) {
@@ -370,11 +393,25 @@ new class extends Component {
         $tableName = \App\Models\Table::find($tableId)?->name ?? 'Unknown';
 
         // Use OrderSplitter to create separate orders for 'update' checkout
-        $splitter = new OrderSplitter();
-        $orders = $splitter->handle($this->cart, $tableId, auth()->id(), [
-            'status' => 'pending',
-            'payment_method' => 'cash',
-        ]);
+        try {
+            $splitter = new OrderSplitter();
+            $orders = $splitter->handle($this->cart, $tableId, auth()->id(), [
+                'status' => 'pending',
+                'payment_method' => 'cash',
+            ]);
+        } catch (\Exception $e) {
+            // Handle inventory/stock errors
+            if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
+                Notification::make()
+                    ->title('Stock Error')
+                    ->body($e->getMessage())
+                    ->danger()
+                    ->send();
+                return;
+            }
+            // Re-throw other exceptions
+            throw $e;
+        }
 
         // Update table status to occupied when order is sent to kitchen
         \App\Models\Table::find($tableId)->update(['status' => 'occupied']);
@@ -454,15 +491,27 @@ new class extends Component {
 
         $products = Cache::remember($cacheKey, 1800, function () {
             $query = Product::where('is_active', true)
-                ->with(['inventory.warehouse', 'category'])
-                ->withSum(['inventory as available_stock' => fn($q) => $q->where('warehouse_id', '!=', 3)], 'quantity');
+                ->with(['inventory.warehouse', 'category']);
             
             if (!empty($this->search))
                 $query->where(fn($q) => $q->where('name', 'like', "%{$this->search}%")->orWhere('sku', 'like', "%{$this->search}%"));
             elseif ($this->activeCategoryId)
                 $query->where('category_id', $this->activeCategoryId);
 
-            return $query->limit(100)->get();
+            $products = $query->limit(100)->get();
+
+            // Add available stock based on warehouse logic
+            foreach ($products as $product) {
+                $warehouseId = match(true) {
+                    $product->category && $product->category->type === 'drink' => 4,
+                    $product->category && $product->category->type === 'food' => 5,
+                    default => 3,
+                };
+                
+                $product->available_stock = $product->inventory->where('warehouse_id', $warehouseId)->sum('quantity');
+            }
+
+            return $products;
         });
 
         // Get menu items
