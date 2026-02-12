@@ -160,6 +160,15 @@ new class extends Component {
             }
         } elseif ($itemType === 'menu_item') {
             $menuItem = \App\Models\MenuItem::find($itemId);
+            if (!$menuItem) {
+                $allMenuItems = \App\Models\MenuItem::all()->pluck('name', 'id');
+                Notification::make()
+                    ->title('Menu Item Not Found')
+                    ->body('The selected menu item (ID: ' . $itemId . ') could not be found. Available menu items: ' . $allMenuItems->toJson())
+                    ->danger()
+                    ->send();
+                return;
+            }
 
             // Check ingredient availability
             $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($itemId, 1);

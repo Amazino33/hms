@@ -18,7 +18,7 @@ class ProductionOrderService
     public static function createProductionOrdersForOrder($order): void
     {
         foreach ($order->items as $orderItem) {
-            if ($orderItem->item_type === 'menu_item' && $orderItem->product_id) {
+            if ($orderItem->item_type === 'menu_item' && $orderItem->menu_item_id) {
                 self::createProductionOrder($orderItem);
             }
         }
@@ -34,7 +34,7 @@ class ProductionOrderService
     {
         return ProductionOrder::create([
             'order_item_id' => $orderItem->id,
-            'menu_item_id' => $orderItem->product_id, // Use product_id for menu items
+            'menu_item_id' => $orderItem->menu_item_id, // Use menu_item_id for menu items
             'menu_item_name' => $orderItem->product_name, // Use product_name for menu items
             'quantity' => $orderItem->quantity,
             'status' => 'pending',

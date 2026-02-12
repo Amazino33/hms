@@ -12,7 +12,9 @@
         <div class="lg:col-span-3 w-full">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Pending Orders</h3>
             <div wire:poll.5s="true" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full">
-        
+        SQLSTATE[23000]: Integrity constraint violation: 1452 Cannot add or update a child row: a foreign key constraint fails (`hms`.`order_items`, CONSTRAINT `order_items_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`)) (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: hms, SQL: insert into `order_items` (`order_id`, `product_id`, `product_name`, `item_type`, `quantity`, `unit_price`, `subtotal`, `updated_at`, `created_at`) values (74, 1, Egusi Soup, menu_item, 1, 8000.00, 8000, 2026-02-12 12:03:56, 2026-02-12 12:03:56))
+
+
         @forelse($orders as $order)
             @php
                 // Filter items safely. change 'food' to 'drink' for the Bar Display

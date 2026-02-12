@@ -92,9 +92,13 @@ class OrderSplitter
                 foreach ($items as $item) {
                     if ($item['type'] === 'menu_item') {
                         $menuItem = MenuItem::find($item['menu_item_id']);
+                        if (!$menuItem) {
+                            throw new \Exception("Menu item not found: {$item['name']}");
+                        }
                         OrderItem::create([
                             'order_id' => $order->id,
-                            'product_id' => $item['menu_item_id'], // Use product_id for menu items too
+                            'menu_item_id' => $item['menu_item_id'], // Use menu_item_id for menu items
+                            'product_id' => null, // No product_id for menu items
                             'product_name' => $item['name'], // Use product_name for menu items
                             'item_type' => 'menu_item',
                             'quantity' => $item['quantity'],
@@ -112,6 +116,7 @@ class OrderSplitter
                         OrderItem::create([
                             'order_id' => $order->id,
                             'product_id' => $item['product_id'],
+                            'menu_item_id' => null, // No menu_item_id for products
                             'product_name' => $item['name'],
                             'item_type' => 'product',
                             'quantity' => $item['quantity'],
