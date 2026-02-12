@@ -9,7 +9,7 @@
             </span>
         </div>
 
-        @if($this->getLowStockAlerts()->isEmpty())
+        @if(empty($this->getLowStockAlerts()))
             <div class="text-center py-8">
                 <div class="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg class="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -30,7 +30,7 @@
                                 <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                     Current stock: <span class="font-medium text-orange-600">{{ $alert['ingredient']->quantity }}</span> {{ $alert['ingredient']->unit_name }}
                                 </p>
-                                @if($alert['affected_menu_items']->isNotEmpty())
+                                @if(!empty($alert['affected_menu_items']))
                                     <div class="mt-2">
                                         <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Used in menu items:</p>
                                         <div class="flex flex-wrap gap-1">

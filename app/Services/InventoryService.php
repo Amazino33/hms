@@ -186,13 +186,15 @@ class InventoryService
             }])
             ->get()
             ->filter(function($ingredient) {
-                return $ingredient->recipes->isNotEmpty();
+                $recipes = $ingredient->recipes ?? collect();
+                return $recipes->isNotEmpty();
             });
 
         $alerts = [];
 
         foreach ($lowStockIngredients as $ingredient) {
-            $menuItems = $ingredient->recipes->pluck('menuItem')->filter()->unique('id');
+            $recipes = $ingredient->recipes ?? collect();
+            $menuItems = $recipes->pluck('menuItem')->filter()->unique('id');
 
             $alerts[] = [
                 'ingredient' => $ingredient,
