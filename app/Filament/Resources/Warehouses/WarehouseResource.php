@@ -7,6 +7,7 @@ use App\Filament\Resources\Warehouses\Pages\EditWarehouse;
 use App\Filament\Resources\Warehouses\Pages\ListWarehouses;
 use App\Models\WareHouse;
 use BackedEnum;
+use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -24,6 +25,8 @@ class WarehouseResource extends Resource
     protected static ?string $model = Warehouse::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-storefront';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Inventory Management';
 
     protected static ?string $recordTitleAttribute = 'name';
 

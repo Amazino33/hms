@@ -9,6 +9,7 @@ use App\Filament\Resources\Guests\Schemas\GuestForm;
 use App\Filament\Resources\Guests\Tables\GuestsTable;
 use App\Models\Guest;
 use BackedEnum;
+use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -27,6 +28,8 @@ class GuestResource extends Resource
     protected static ?string $model = Guest::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-user-circle';
+
+    protected static string|UnitEnum|null $navigationGroup = 'User Management';
 
     protected static ?string $recordTitleAttribute = 'name';
 

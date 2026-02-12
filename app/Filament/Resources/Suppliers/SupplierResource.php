@@ -9,6 +9,7 @@ use App\Filament\Resources\Suppliers\Schemas\SupplierForm;
 use App\Filament\Resources\Suppliers\Tables\SuppliersTable;
 use App\Models\Supplier;
 use BackedEnum;
+use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -19,6 +20,8 @@ class SupplierResource extends Resource
     protected static ?string $model = Supplier::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-truck';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Inventory Management';
 
     protected static ?string $recordTitleAttribute = 'name';
 

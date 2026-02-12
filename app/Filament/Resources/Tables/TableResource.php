@@ -9,6 +9,7 @@ use App\Filament\Resources\Tables\Schemas\TableForm;
 use App\Filament\Resources\Tables\Tables\TablesTable;
 use App\Models\Table as Table1;
 use BackedEnum;
+use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -19,6 +20,8 @@ class TableResource extends Resource
     protected static ?string $model = Table1::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-table-cells';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
 
     protected static ?string $recordTitleAttribute = 'name';
 

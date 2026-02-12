@@ -10,6 +10,7 @@ use App\Filament\Resources\Orders\Schemas\OrderForm;
 use App\Filament\Resources\Orders\Tables\OrdersTable;
 use App\Models\Order;
 use BackedEnum;
+use UnitEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Resources\Resource;
@@ -33,6 +34,8 @@ class OrderResource extends Resource
     protected static ?string $model = Order::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-shopping-cart';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
 
     protected static ?string $recordTitleAttribute = 'name';
 

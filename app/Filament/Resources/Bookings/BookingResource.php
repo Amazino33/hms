@@ -9,6 +9,7 @@ use App\Filament\Resources\Bookings\Schemas\BookingForm;
 use App\Filament\Resources\Bookings\Tables\BookingsTable;
 use App\Models\Booking;
 use BackedEnum;
+use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -31,6 +32,8 @@ class BookingResource extends Resource
     protected static ?string $model = Booking::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-calendar-days';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
 
     protected static ?string $recordTitleAttribute = 'name';
 

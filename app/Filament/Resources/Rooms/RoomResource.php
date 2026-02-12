@@ -9,6 +9,7 @@ use App\Filament\Resources\Rooms\Schemas\RoomForm;
 use App\Filament\Resources\Rooms\Tables\RoomsTable;
 use App\Models\Room;
 use BackedEnum;
+use UnitEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Resources\Resource;
@@ -24,6 +25,8 @@ class RoomResource extends Resource
     protected static ?string $model = Room::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-home';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
 
     protected static ?string $recordTitleAttribute = 'name';
 

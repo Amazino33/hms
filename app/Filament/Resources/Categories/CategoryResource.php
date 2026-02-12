@@ -9,6 +9,7 @@ use App\Filament\Resources\Categories\Schemas\CategoryForm;
 use App\Filament\Resources\Categories\Tables\CategoriesTable;
 use App\Models\Category;
 use BackedEnum;
+use UnitEnum;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 // use Filament\Forms\Form; // Removed, not needed
@@ -26,6 +27,8 @@ class CategoryResource extends Resource
     protected static ?string $model = Category::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-tag';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Menu Management';
 
     protected static ?string $recordTitleAttribute = 'name';
 
