@@ -125,7 +125,7 @@ new class extends Component {
         }
     }
 
-    public function addToCart($productId)
+    public function addToCart($itemId, $itemType = 'product')
     {
         // Check if user has an active shift
         if (!auth()->user()->currentShift()) {
@@ -133,28 +133,61 @@ new class extends Component {
             return;
         }
 
-        $product = Product::with('category')->find($productId);
+        if ($itemType === 'product') {
+            $product = Product::with('category')->find($itemId);
 
-        // Check stock availability in consumer warehouses
-        $available = (int) DB::table('inventory_items')
-            ->where('product_id', $productId)
-            ->where('warehouse_id', '!=', 3)
-            ->sum('quantity');
+            // Check stock availability in consumer warehouses
+            $available = (int) DB::table('inventory_items')
+                ->where('product_id', $itemId)
+                ->where('warehouse_id', '!=', 3)
+                ->sum('quantity');
 
-        $currentQty = isset($this->cart[$productId]) ? $this->cart[$productId]['quantity'] : 0;
-        if ($available <= $currentQty) {
-            Notification::make()->title('Out of Stock')->danger()->send();
-            return;
-        }
+            $currentQty = isset($this->cart[$itemId]) ? $this->cart[$itemId]['quantity'] : 0;
+            if ($available <= $currentQty) {
+                Notification::make()->title('Out of Stock')->danger()->send();
+                return;
+            }
 
-        if (isset($this->cart[$productId])) {
-            $this->cart[$productId]['quantity']++;
-        } else {
-            $this->cart[$productId] = [
-                'name' => $product->name,
-                'price' => $product->price,
-                'quantity' => 1,
-            ];
+            if (isset($this->cart[$itemId])) {
+                $this->cart[$itemId]['quantity']++;
+            } else {
+                $this->cart[$itemId] = [
+                    'name' => $product->name,
+                    'price' => $product->price,
+                    'quantity' => 1,
+                    'type' => 'product',
+                ];
+            }
+        } elseif ($itemType === 'menu_item') {
+            $menuItem = \App\Models\MenuItem::find($itemId);
+
+            // Check ingredient availability
+            $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($itemId, 1);
+            if (!empty($insufficientIngredients)) {
+                $messages = [];
+                foreach ($insufficientIngredients as $insufficient) {
+                    $messages[] = "{$insufficient['ingredient']}: {$insufficient['available']} {$insufficient['unit']} available, need {$insufficient['required']}";
+                }
+                Notification::make()
+                    ->title('Insufficient Ingredients')
+                    ->body('Cannot add menu item: ' . implode('; ', $messages))
+                    ->danger()
+                    ->send();
+                return;
+            }
+
+            $cartKey = 'menu_' . $itemId;
+            if (isset($this->cart[$cartKey])) {
+                $this->cart[$cartKey]['quantity']++;
+            } else {
+                $this->cart[$cartKey] = [
+                    'name' => $menuItem->name,
+                    'price' => $menuItem->sale_price,
+                    'quantity' => 1,
+                    'type' => 'menu_item',
+                    'menu_item_id' => $itemId,
+                ];
+            }
         }
 
         $this->calculateTotal();
@@ -410,7 +443,7 @@ new class extends Component {
     {
         $cacheKey = 'products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search;
 
-        return Cache::remember($cacheKey, 1800, function () {
+        $products = Cache::remember($cacheKey, 1800, function () {
             $query = Product::where('is_active', true)
                 ->with(['inventory.warehouse', 'category'])
                 ->withSum(['inventory as available_stock' => fn($q) => $q->where('warehouse_id', '!=', 3)], 'quantity');
@@ -420,8 +453,25 @@ new class extends Component {
             elseif ($this->activeCategoryId)
                 $query->where('category_id', $this->activeCategoryId);
 
-            return ['products' => $query->limit(100)->get()];
+            return $query->limit(100)->get();
         });
+
+        // Get menu items
+        $menuItemsCacheKey = 'menu_items_' . $this->search;
+        $menuItems = Cache::remember($menuItemsCacheKey, 1800, function () {
+            $query = \App\Models\MenuItem::where('available_for_sale', true)
+                ->with(['recipes.ingredient']);
+            
+            if (!empty($this->search))
+                $query->where(fn($q) => $q->where('name', 'like', "%{$this->search}%")->orWhere('sku', 'like', "%{$this->search}%"));
+
+            return $query->limit(100)->get();
+        });
+
+        return [
+            'products' => $products,
+            'menuItems' => $menuItems
+        ];
     }
 
     private function loadTables()
@@ -507,12 +557,22 @@ new class extends Component {
                         </div>
                     @endif
                     @foreach($products as $product)
-                        <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }})" @endif
+                        <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }}, 'product')" @endif
                             class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
                             <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $product->name }}</div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($product->price) }}</div>
                             <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 {{ $product->inventory->map(fn($inv) => $inv->warehouse->name . ': ' . $inv->quantity)->join(', ') }}
+                            </div>
+                        </div>
+                    @endforeach
+                    @foreach($menuItems as $menuItem)
+                        <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $menuItem->id }}, 'menu_item')" @endif
+                            class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
+                            <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $menuItem->name }}</div>
+                            <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($menuItem->sale_price) }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Menu Item
                             </div>
                         </div>
                     @endforeach
@@ -648,13 +708,21 @@ new class extends Component {
             @endif
             <div class="grid grid-cols-2 gap-3">
                 @foreach($products as $product)
-                    <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }})" @endif
+                    <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }}, 'product')" @endif
                         class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $product->name }}</div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($product->price) }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             {{ $product->inventory->map(fn($inv) => $inv->warehouse->name . ': ' . $inv->quantity)->join(', ') }}
                         </div>
+                    </div>
+                @endforeach
+                @foreach($menuItems as $menuItem)
+                    <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $menuItem->id }}, 'menu_item')" @endif
+                        class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
+                        <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $menuItem->name }}</div>
+                        <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($menuItem->sale_price) }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Menu Item</div>
                     </div>
                 @endforeach
             </div>

@@ -5,9 +5,11 @@ namespace App\Services;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\MenuItem;
 use Illuminate\Support\Facades\DB;
 use App\Events\OrderCreated;
 use App\Services\InventoryService;
+use App\Services\ProductionOrderService;
 use Filament\Actions\Action;
 
 class OrderSplitter
@@ -15,7 +17,7 @@ class OrderSplitter
     /**
      * Create separate orders per destination based on cart.
      *
-     * @param array|\Illuminate\Support\Collection $cart  keyed by productId => [name,price,quantity]
+     * @param array|\Illuminate\Support\Collection $cart  keyed by productId => [name,price,quantity] or menuItemId prefixed with 'menu_' => [name,price,quantity]
      * @param int $tableId
      * @param int $userId
      * @param array $options optional keys: payment_method, amount_paid, guest_id
@@ -26,20 +28,32 @@ class OrderSplitter
         $created = [];
 
         DB::transaction(function () use ($cart, $tableId, $userId, $options, &$created) {
-            // Normalize cart so each item includes its product_id (groupBy resets keys)
-            $prepared = collect($cart)->map(function ($item, $productId) {
-                $item['product_id'] = $productId;
+            // Normalize cart so each item includes its id and type
+            $prepared = collect($cart)->map(function ($item, $key) {
+                $item['key'] = $key;
+                if (str_starts_with($key, 'menu_')) {
+                    $item['type'] = 'menu_item';
+                    $item['menu_item_id'] = (int) str_replace('menu_', '', $key);
+                } else {
+                    $item['type'] = 'product';
+                    $item['product_id'] = (int) $key;
+                }
                 return $item;
             });
 
             $groups = $prepared->groupBy(function ($item) {
-                $product = Product::with('category')->find($item['product_id']);
-                $warehouseId = match(true) {
-                    $product && $product->category && $product->category->type === 'drink' => 4,
-                    $product && $product->category && $product->category->type === 'food' => 5,
-                    default => 3,
-                };
-                return $warehouseId === 4 ? 'bar' : ($warehouseId === 5 ? 'kitchen' : 'main');
+                if ($item['type'] === 'menu_item') {
+                    // Menu items always go to kitchen
+                    return 'kitchen';
+                } else {
+                    $product = Product::with('category')->find($item['product_id']);
+                    $warehouseId = match(true) {
+                        $product && $product->category && $product->category->type === 'drink' => 4,
+                        $product && $product->category && $product->category->type === 'food' => 5,
+                        default => 3,
+                    };
+                    return $warehouseId === 4 ? 'bar' : ($warehouseId === 5 ? 'kitchen' : 'main');
+                }
             });
 
             // Calculate total cart amount for proportional payment distribution
@@ -76,34 +90,50 @@ class OrderSplitter
                 ]);
 
                 foreach ($items as $item) {
-                    $productId = $item['product_id'];
-                    $product = Product::with('category')->find($productId);
-                    $warehouseId = match(true) {
-                        $product && $product->category && $product->category->type === 'drink' => 4,
-                        $product && $product->category && $product->category->type === 'food' => 5,
-                        default => 3,
-                    };
+                    if ($item['type'] === 'menu_item') {
+                        $menuItem = MenuItem::find($item['menu_item_id']);
+                        OrderItem::create([
+                            'order_id' => $order->id,
+                            'product_id' => $item['menu_item_id'], // Use product_id for menu items too
+                            'product_name' => $item['name'], // Use product_name for menu items
+                            'item_type' => 'menu_item',
+                            'quantity' => $item['quantity'],
+                            'unit_price' => $item['price'],
+                            'subtotal' => $item['price'] * $item['quantity'],
+                        ]);
+                    } else {
+                        $product = Product::with('category')->find($item['product_id']);
+                        $warehouseId = match(true) {
+                            $product && $product->category && $product->category->type === 'drink' => 4,
+                            $product && $product->category && $product->category->type === 'food' => 5,
+                            default => 3,
+                        };
 
-                    OrderItem::create([
-                        'order_id' => $order->id,
-                        'product_id' => $productId,
-                        'product_name' => $item['name'],
-                        'quantity' => $item['quantity'],
-                        'unit_price' => $item['price'],
-                        'subtotal' => $item['price'] * $item['quantity'],
-                    ]);
+                        OrderItem::create([
+                            'order_id' => $order->id,
+                            'product_id' => $item['product_id'],
+                            'product_name' => $item['name'],
+                            'item_type' => 'product',
+                            'quantity' => $item['quantity'],
+                            'unit_price' => $item['price'],
+                            'subtotal' => $item['price'] * $item['quantity'],
+                        ]);
+                    }
                 }
 
                 // Deduct inventory for all items in this order
                 InventoryService::deductInventoryForOrderItems($order);
 
+                // Create production orders for menu items
+                ProductionOrderService::createProductionOrdersForOrder($order);
+
                 event(new OrderCreated($order));
-                
+
                 // Send database notification to all staff users
                 $staffUsers = \App\Models\User::whereHas('roles', function($q) {
                     $q->whereIn('name', ['super_admin', 'chef', 'waiter']);
                 })->get();
-                
+
                 foreach ($staffUsers as $staffUser) {
                     \Filament\Notifications\Notification::make()
                         ->title("New Order: {$order->order_number}")
@@ -116,7 +146,7 @@ class OrderSplitter
                         ])
                         ->sendToDatabase($staffUser);
                 }
-                
+
                 $created[] = $order;
             }
         });
