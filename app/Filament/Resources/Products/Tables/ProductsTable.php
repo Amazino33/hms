@@ -80,7 +80,7 @@ class ProductsTable
                         try {
                             // Use Storage to get the file content and import directly
                             $fileContent = Storage::disk('public')->get($filePath);
-                            $tempFile = tempnam(sys_get_temp_dir(), 'import');
+                            $tempFile = tempnam(sys_get_temp_dir(), 'import') . '.xlsx';
                             file_put_contents($tempFile, $fileContent);
                             
                             Excel::import(new ProductImport(), $tempFile);
