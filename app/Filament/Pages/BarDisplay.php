@@ -74,7 +74,7 @@ class BarDisplay extends Page
         
         // 1. Get the list of items (e.g., "2x Rice, 1x Coke")
         $itemList = $order->items->map(function ($item) {
-            return "{$item->quantity}x {$item->product->name}";
+            return "{$item->quantity}x {$item->product_name}";
         })->join(', ');
         
         // Send database notification to all staff users

@@ -27,6 +27,19 @@ class OrderItem extends Model
     }
 
     /**
+     * Get the actual product or menu item model
+     */
+    public function getItemAttribute()
+    {
+        if ($this->item_type === 'menu_item' && $this->menu_item_id) {
+            return $this->menuItem;
+        } elseif ($this->item_type === 'product' && $this->product_id) {
+            return $this->product;
+        }
+        return null;
+    }
+
+    /**
      * Get the item price
      */
     public function getItemPriceAttribute()

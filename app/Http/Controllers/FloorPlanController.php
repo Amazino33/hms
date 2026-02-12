@@ -24,7 +24,7 @@ class FloorPlanController extends Controller
             'order' => $order,
             'items' => $items->map(function ($item) {
                 return [
-                    'product_name' => $item->product->name ?? 'Unknown Product',
+                    'product_name' => $item->product_name,
                     'unit_price' => $item->unit_price,
                     'quantity' => $item->quantity,
                 ];
