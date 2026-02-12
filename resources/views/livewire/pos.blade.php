@@ -136,12 +136,41 @@ new class extends Component {
         if ($itemType === 'product') {
             $product = Product::with('category')->find($itemId);
 
-            // Determine warehouse based on product category (same logic as OrderSplitter)
-            $warehouseId = match(true) {
-                $product && $product->category && $product->category->type === 'drink' => 4,
-                $product && $product->category && $product->category->type === 'food' => 5,
-                default => 3,
-            };
+            // Determine warehouse based on user role (same logic as ReceiveTransfers page)
+            $user = auth()->user();
+            $warehouseId = null;
+
+            if ($user->hasRole('bartender')) {
+                // Find the bar warehouse (consumer type, typically the first consumer warehouse)
+                $barWarehouse = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first();
+                if ($barWarehouse) {
+                    $warehouseId = $barWarehouse->id;
+                }
+            } elseif ($user->hasRole('chef')) {
+                // Find the kitchen warehouse (consumer type, typically the second consumer warehouse)
+                $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
+                if ($consumerWarehouses->count() > 1) {
+                    $kitchenWarehouse = $consumerWarehouses[1]; // Second consumer warehouse
+                    $warehouseId = $kitchenWarehouse->id;
+                } elseif ($consumerWarehouses->count() == 1) {
+                    // If only one consumer warehouse, use it for chef
+                    $warehouseId = $consumerWarehouses[0]->id;
+                }
+            } else {
+                // For other roles, use the appropriate warehouse based on product category
+                $warehouseId = match(true) {
+                    $product && $product->category && $product->category->type === 'drink' => 
+                        \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first()?->id ?? 3,
+                    $product && $product->category && $product->category->type === 'food' => 
+                        \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->skip(1)->first()?->id ?? 5,
+                    default => 3,
+                };
+            }
+
+            // If no warehouse found, default to storage warehouse
+            if (!$warehouseId) {
+                $warehouseId = 3;
+            }
 
             // Check stock availability in the specific warehouse that will be used for deduction
             $available = (int) DB::table('inventory_items')

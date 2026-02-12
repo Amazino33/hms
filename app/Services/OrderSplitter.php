@@ -47,12 +47,12 @@ class OrderSplitter
                     return 'kitchen';
                 } else {
                     $product = Product::with('category')->find($item['product_id']);
-                    $warehouseId = match(true) {
-                        $product && $product->category && $product->category->type === 'drink' => 4,
-                        $product && $product->category && $product->category->type === 'food' => 5,
-                        default => 3,
-                    };
-                    return $warehouseId === 4 ? 'bar' : ($warehouseId === 5 ? 'kitchen' : 'main');
+                    
+                    // Determine warehouse dynamically based on product category
+                    $warehouseId = self::getWarehouseForProduct($product);
+                    
+                    return $warehouseId === self::getBarWarehouseId() ? 'bar' : 
+                           ($warehouseId === self::getKitchenWarehouseId() ? 'kitchen' : 'main');
                 }
             });
 
@@ -157,5 +157,37 @@ class OrderSplitter
         });
 
         return $created;
+    }
+
+    /**
+     * Get the appropriate warehouse ID for a product based on its category
+     */
+    private static function getWarehouseForProduct($product): int
+    {
+        return match(true) {
+            $product && $product->category && $product->category->type === 'drink' => self::getBarWarehouseId(),
+            $product && $product->category && $product->category->type === 'food' => self::getKitchenWarehouseId(),
+            default => 3, // Default storage warehouse
+        };
+    }
+
+    /**
+     * Get the bar warehouse ID (first consumer warehouse)
+     */
+    private static function getBarWarehouseId(): int
+    {
+        return \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first()?->id ?? 4;
+    }
+
+    /**
+     * Get the kitchen warehouse ID (second consumer warehouse)
+     */
+    private static function getKitchenWarehouseId(): int
+    {
+        $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
+        if ($consumerWarehouses->count() > 1) {
+            return $consumerWarehouses[1]->id; // Second consumer warehouse
+        }
+        return $consumerWarehouses->first()?->id ?? 5;
     }
 }
