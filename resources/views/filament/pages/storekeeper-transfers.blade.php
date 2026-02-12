@@ -296,17 +296,21 @@
             const rows = document.querySelectorAll('#items-list > div');
             const body = document.getElementById('preview-body');
             const mobileBody = document.getElementById('mobile-preview-body');
-            const fromWarehouseSelect = document.querySelector('select[name="from_warehouse_id"]');
-            const fromWarehouseId = fromWarehouseSelect ? fromWarehouseSelect.value : null;
+            const fromWarehouseId = document.querySelector('select[name="from_warehouse_id"]')?.value;
             
+            // Clear both preview areas
             body.innerHTML = '';
             mobileBody.innerHTML = '';
             let total = 0;
             
+            // Check which preview is currently visible
+            const isDesktopVisible = window.getComputedStyle(document.querySelector('.overflow-x-auto.lg\\:overflow-x-visible')).display !== 'none';
+            const isMobileVisible = window.getComputedStyle(mobileBody.parentElement).display !== 'none';
+            
             for (const r of rows) {
                 const sel = r.querySelector('select.product-select');
                 const qty = r.querySelector('input[type="number"]');
-                const name = sel.options[sel.selectedIndex].text;
+                const name = sel.options[sel.selectedIndex]?.text || '';
                 const productId = sel.value;
                 const q = parseInt(qty.value) || 0;
                 total += q;
@@ -317,7 +321,6 @@
                         const response = await fetch(`/warehouses/${fromWarehouseId}/product/${productId}/quantity`);
                         const data = await response.json();
                         availability = data.quantity || 0;
-                        // Store availability for validation
                         productAvailability[productId] = availability;
                     } catch (e) {
                         console.error('Error fetching availability:', e);
@@ -326,31 +329,36 @@
                     }
                 }
                 
-                // Update table row
-                const tr = document.createElement('tr');
-                tr.className = 'border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors';
-                tr.innerHTML = `
-                    <td class="py-3 px-2 font-medium text-gray-900 dark:text-gray-100">${name}</td>
-                    <td class="py-3 px-2 text-center font-semibold text-blue-600 dark:text-blue-400">${q}</td>
-                    <td class="py-3 px-2 text-center text-gray-600 dark:text-gray-400">${availability}</td>
-                `;
-                body.appendChild(tr);
+                // Only update the visible preview section
+                if (isDesktopVisible) {
+                    // Update table row
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors';
+                    tr.innerHTML = `
+                        <td class="py-3 px-2 font-medium text-gray-900 dark:text-gray-100">${name}</td>
+                        <td class="py-3 px-2 text-center font-semibold text-blue-600 dark:text-blue-400">${q}</td>
+                        <td class="py-3 px-2 text-center text-gray-600 dark:text-gray-400">${availability}</td>
+                    `;
+                    body.appendChild(tr);
+                }
                 
-                // Update mobile card
-                const card = document.createElement('div');
-                card.className = 'bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700';
-                card.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <h4 class="font-medium text-gray-900 dark:text-white text-sm">${name}</h4>
-                            <div class="flex items-center gap-2 mt-1">
-                                <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold">Qty: ${q}</span>
-                                <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs font-semibold">Avail: ${availability}</span>
+                if (isMobileVisible) {
+                    // Update mobile card
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700';
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <h4 class="font-medium text-gray-900 dark:text-white text-sm">${name}</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold">Qty: ${q}</span>
+                                    <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs font-semibold">Avail: ${availability}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
-                mobileBody.appendChild(card);
+                    `;
+                    mobileBody.appendChild(card);
+                }
             }
             
             document.getElementById('preview-count').textContent = `${total} item${total !== 1 ? 's' : ''}`;
