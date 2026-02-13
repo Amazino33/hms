@@ -11,7 +11,7 @@
         <!-- Pending Orders -->
         <div class="lg:col-span-3 w-full">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Pending Orders</h3>
-            <div wire:poll.5s="true" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full">
+            <div wire:poll.5s="true" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4 w-full">
 
 
         @forelse($orders as $order)
@@ -71,13 +71,17 @@
                             {{-- Show ingredients for menu items --}}
                             @if($item->item_type === 'menu_item' && $item->menuItem && $item->menuItem->recipes)
                                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 pl-6">
-                                    <div class="font-medium mb-1">Ingredients needed:</div>
-                                    @foreach($item->menuItem->recipes as $recipe)
-                                        <div class="flex justify-between">
-                                            <span>{{ $recipe->ingredient->name }}</span>
-                                            <span>{{ $recipe->quantity_required * $item->quantity }} {{ $recipe->ingredient->unit }}</span>
-                                        </div>
-                                    @endforeach
+                                    <div class="font-medium mb-2">Ingredients needed:</div>
+                                    <table class="w-full text-xs">
+                                        <tbody>
+                                            @foreach($item->menuItem->recipes as $recipe)
+                                                <tr class="border-b border-gray-100 dark:border-gray-600 last:border-b-0">
+                                                    <td class="py-1 text-gray-700 dark:text-gray-300">{{ $recipe->ingredient->name }}</td>
+                                                    <td class="py-1 font-mono font-medium text-left text-gray-800 dark:text-gray-200">{{ number_format($recipe->quantity_needed * $item->quantity, 2) }} {{ $recipe->ingredient->unit_name }}</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
                                 </div>
                             @endif
                         </div>

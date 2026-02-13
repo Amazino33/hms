@@ -10,6 +10,10 @@ class Recipe extends Model
 
     protected $fillable = ['menu_item_id', 'ingredient_id', 'quantity_needed'];
 
+    protected $casts = [
+        'quantity_needed' => 'decimal:2',
+    ];
+
     public function menuItem()
     {
         return $this->belongsTo(MenuItem::class);

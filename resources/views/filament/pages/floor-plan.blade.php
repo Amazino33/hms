@@ -121,11 +121,16 @@
                             class="text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 md:py-3 px-3 md:px-4 rounded-lg text-sm font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm">
                                 ➕ New Order
                             </a>
-                        @elseif($isOccupied && $activeOrder)
+                        @elseif($isOccupied && $activeOrder && $activeOrder->user_id === auth()->id())
                             <a href="/admin/table-detail?table_id={{ $table->id }}"
                             class="text-center bg-indigo-600 hover:bg-indigo-700 text-white py-2 md:py-3 px-3 md:px-4 rounded-lg text-sm font-bold transition shadow-sm">
                                 ⚡ Manage
                             </a>
+                        @elseif($isOccupied && $activeOrder)
+                            <button disabled
+                            class="text-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 py-2 md:py-3 px-3 md:px-4 rounded-lg text-sm font-bold cursor-not-allowed">
+                                🔒 Managed by {{ $activeOrder->user->name ?? 'Another Waiter' }}
+                            </button>
                         @else
                             <button disabled
                             class="text-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 py-2 md:py-3 px-3 md:px-4 rounded-lg text-sm font-bold cursor-not-allowed">
