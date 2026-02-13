@@ -78,6 +78,14 @@ class OrderResource extends Resource
                                     ->dehydrated()
                                     ->extraInputAttributes(['class' => 'font-bold']),
 
+                                // C. Cancellation Reason - only show for cancelled orders
+                                \Filament\Forms\Components\Textarea::make('cancellation_reason')
+                                    ->label('Cancellation Reason')
+                                    ->rows(3)
+                                    ->columnSpanFull()
+                                    ->visible(fn($get) => $get('status') === 'cancelled')
+                                    ->required(fn($get) => $get('status') === 'cancelled'),
+
                                 // C. Server Name - CHANGED to Select
                                 Select::make('user_id')
                                     ->label('Server')
@@ -213,9 +221,23 @@ class OrderResource extends Resource
                         'ready' => 'info',
                         'served' => 'success',
                         'paid' => 'success',
+                        'cancelled' => 'danger',
                         'partial' => 'danger',
                         default => 'gray',
                     }),
+
+                TextColumn::make('cancellation_reason')
+                    ->label('Cancellation Reason')
+                    ->state(function (Order $record) {
+                        return $record->status === 'cancelled' ? $record->cancellation_reason : null;
+                    })
+                    ->placeholder('—')
+                    ->wrap()
+                    ->limit(50)
+                    ->tooltip(function (Order $record) {
+                        return $record->status === 'cancelled' ? $record->cancellation_reason : null;
+                    })
+                    ->toggleable(),
 
                 TextColumn::make('balance_due')
                     ->label('Debt')

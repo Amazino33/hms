@@ -38,6 +38,10 @@ new class extends Component {
     public $newGuestName = '';
     public $newGuestPhone = '';
 
+    // 👇 NEW: Cancellation Reason Properties
+    public $showCancelModal = false;
+    public $cancellationReason = '';
+
     public function clearSearch()
     {
         $this->search = '';
@@ -481,7 +485,7 @@ new class extends Component {
 
         $tableId = $this->selectedTableId;
 
-        // Find all unpaid orders for this table and cancel them
+        // Find all unpaid orders for this table
         $orders = Order::where('table_id', $tableId)
             ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
             ->get();
@@ -491,9 +495,42 @@ new class extends Component {
             return;
         }
 
-        // Update order statuses to cancelled
+        // Show cancellation reason modal instead of directly cancelling
+        $this->showCancelModal = true;
+    }
+
+    public function confirmCancelOrder()
+    {
+        if (!$this->selectedTableId) {
+            Notification::make()->title('Please select a table first')->warning()->send();
+            return;
+        }
+
+        if (empty($this->cancellationReason)) {
+            Notification::make()->title('Cancellation reason is required')->warning()->send();
+            return;
+        }
+
+        $tableId = $this->selectedTableId;
+
+        // Find all unpaid orders for this table
+        $orders = Order::where('table_id', $tableId)
+            ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            Notification::make()->title('No active orders to cancel')->warning()->send();
+            $this->showCancelModal = false;
+            $this->cancellationReason = '';
+            return;
+        }
+
+        // Update order statuses to cancelled with reason
         foreach ($orders as $order) {
-            $order->update(['status' => 'cancelled']);
+            $order->update([
+                'status' => 'cancelled',
+                'cancellation_reason' => $this->cancellationReason
+            ]);
         }
 
         // Set table status to available
@@ -507,11 +544,21 @@ new class extends Component {
 
         // Reload tables to reflect status change
         $this->loadTables();
-        
+
         // Clear product cache to refresh inventory display
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
 
-        Notification::make()->title('Order Cancelled')->success()->send();
+        // Close modal and reset
+        $this->showCancelModal = false;
+        $this->cancellationReason = '';
+
+        Notification::make()->title('Order Cancelled')->body('Reason: ' . $this->cancellationReason)->success()->send();
+    }
+
+    public function cancelCancelModal()
+    {
+        $this->showCancelModal = false;
+        $this->cancellationReason = '';
     }
 
     public function with()
@@ -1075,6 +1122,45 @@ new class extends Component {
                         class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg touch-manipulation">Cancel</button>
                     <button wire:click="saveNewGuest"
                         class="px-4 py-3 font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 touch-manipulation">Save Guest</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if($showCancelModal)
+        <div class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div
+                class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div
+                    class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">❌ Cancel Order</h3>
+                    <button wire:click="cancelCancelModal" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
+                            class="text-2xl">&times;</span></button>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <div class="text-center mb-4">
+                        <div class="text-red-600 dark:text-red-400 font-bold text-lg">⚠️ This action cannot be undone</div>
+                        <div class="text-gray-600 dark:text-gray-400 text-sm">All active orders for this table will be cancelled</div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Cancellation Reason *</label>
+                        <textarea wire:model="cancellationReason"
+                            class="w-full p-3 text-base border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 touch-manipulation resize-none"
+                            rows="3"
+                            placeholder="Please provide a reason for cancelling this order..."></textarea>
+                        @error('cancellationReason') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3">
+                    <button wire:click="cancelCancelModal"
+                        class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg touch-manipulation">Keep Order</button>
+                    <button wire:click="confirmCancelOrder"
+                        class="px-4 py-3 font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 touch-manipulation flex items-center justify-center gap-2">
+                        <span>Cancel Order</span>
+                    </button>
                 </div>
             </div>
         </div>
