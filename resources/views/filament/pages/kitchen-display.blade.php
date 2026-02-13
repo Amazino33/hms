@@ -12,13 +12,15 @@
         <div class="lg:col-span-3 w-full">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Pending Orders</h3>
             <div wire:poll.5s="true" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full">
-        SQLSTATE[23000]: Integrity constraint violation: 1452 Cannot add or update a child row: a foreign key constraint fails (`hms`.`order_items`, CONSTRAINT `order_items_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`)) (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: hms, SQL: insert into `order_items` (`order_id`, `product_id`, `product_name`, `item_type`, `quantity`, `unit_price`, `subtotal`, `updated_at`, `created_at`) values (74, 1, Egusi Soup, menu_item, 1, 8000.00, 8000, 2026-02-12 12:03:56, 2026-02-12 12:03:56))
 
 
         @forelse($orders as $order)
             @php
-                // Filter items safely. change 'food' to 'drink' for the Bar Display
-                $relevantItems = $order->items->filter(fn($item) => $item->product?->category?->type === 'food');
+                // Filter items: show food products AND all menu items (since kitchen handles food)
+                $relevantItems = $order->items->filter(function($item) {
+                    return ($item->product && $item->product->category && $item->product->category->type === 'food') || 
+                           $item->item_type === 'menu_item';
+                });
             @endphp
             {{-- 👇 Only show the Card if there are actual items to show --}}
             @if($relevantItems->isNotEmpty())
@@ -46,14 +48,38 @@
                     </div>
                     
                     @foreach($order->items as $item)
-                        @if ($relevantItems->isNotEmpty() && $item->product?->category?->type === 'food')
-                        <div class="flex items-center justify-between">
-                            <span class="font-bold text-lg text-gray-700 dark:text-gray-300">
-                                {{ $item->quantity }}x
-                            </span>
-                            <span class="text-gray-600 dark:text-gray-400 flex-1 ml-2">
-                                {{ $item->product_name }}
-                            </span>
+                        @if ($relevantItems->contains($item))
+                        <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-3 mb-2">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-lg text-gray-700 dark:text-gray-300">
+                                    {{ $item->quantity }}x
+                                </span>
+                                <span class="text-gray-600 dark:text-gray-400 flex-1 ml-2 font-medium">
+                                    {{ $item->product_name }}
+                                </span>
+                                @if($item->item_type === 'menu_item')
+                                    <span class="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded">
+                                        Menu Item
+                                    </span>
+                                @else
+                                    <span class="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+                                        Product
+                                    </span>
+                                @endif
+                            </div>
+                            
+                            {{-- Show ingredients for menu items --}}
+                            @if($item->item_type === 'menu_item' && $item->menuItem && $item->menuItem->recipes)
+                                <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 pl-6">
+                                    <div class="font-medium mb-1">Ingredients needed:</div>
+                                    @foreach($item->menuItem->recipes as $recipe)
+                                        <div class="flex justify-between">
+                                            <span>{{ $recipe->ingredient->name }}</span>
+                                            <span>{{ $recipe->quantity_required * $item->quantity }} {{ $recipe->ingredient->unit }}</span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
                         @endif
                     @endforeach

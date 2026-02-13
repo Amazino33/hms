@@ -26,7 +26,7 @@ class KitchenDisplay extends Page
 
         // Short caches keep UI fresh while easing DB load
         $recentHistory = Cache::remember('kitchen_display:recent_history', 10, function () use ($now) {
-            return Order::with('items.product')
+            return Order::with(['items.product', 'items.menuItem.recipes.ingredient'])
                 ->where('destination', 'kitchen')
                 ->whereIn('status', ['ready', 'served', 'paid'])
                 ->where('created_at', '>=', $now->copy()->subDays(7)->startOfDay())
@@ -52,7 +52,7 @@ class KitchenDisplay extends Page
 
         return [
             'orders' => Cache::remember('kitchen_display:active_orders', 5, function () {
-                return Order::with(['items.product', 'table'])
+                return Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table'])
                     ->where('status', 'pending')
                     ->where('destination', 'kitchen')
                     ->oldest()
@@ -66,7 +66,7 @@ class KitchenDisplay extends Page
     public function markAsReady($orderId)
     {
         // Use findOrFail so the editor knows it found a real record
-        $order = Order::with(['items.product', 'table'])->findOrFail($orderId);
+        $order = Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table'])->findOrFail($orderId);
         
         $order->update([
             'status' => 'ready',

@@ -60,7 +60,8 @@ class FloorPlanController extends Controller
     {
         $request->validate([
             'order_id' => 'required|exists:orders,id',
-            'product_id' => 'required|exists:products,id',
+            'item_type' => 'required|in:product,menu_item',
+            'item_id' => 'required|integer|min:1',
             'quantity' => 'required|integer|min:1'
         ]);
 
@@ -71,24 +72,70 @@ class FloorPlanController extends Controller
             return response()->json(['error' => 'Access denied. You can only modify orders you created.'], 403);
         }
 
-        $product = Product::find($request->product_id);
+        if ($request->item_type === 'menu_item') {
+            // Handle menu item
+            $menuItem = \App\Models\MenuItem::find($request->item_id);
+            if (!$menuItem) {
+                return response()->json(['error' => 'Menu item not found'], 404);
+            }
 
-        // Check if item already exists in order
-        $existingItem = $order->items()->where('product_id', $product->id)->first();
+            // Check ingredient availability for menu item
+            $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($request->item_id, $request->quantity);
+            if (!empty($insufficientIngredients)) {
+                $messages = [];
+                foreach ($insufficientIngredients as $insufficient) {
+                    $messages[] = "{$insufficient['ingredient']}: {$insufficient['available']} {$insufficient['unit']} available, need {$insufficient['required']}";
+                }
+                return response()->json(['error' => 'Insufficient ingredients: ' . implode('; ', $messages)], 400);
+            }
 
-        if ($existingItem) {
-            // Update quantity
-            $existingItem->update([
-                'quantity' => $existingItem->quantity + $request->quantity
-            ]);
+            // Check if menu item already exists in order
+            $existingItem = $order->items()->where('menu_item_id', $menuItem->id)->first();
+
+            if ($existingItem) {
+                // Update quantity
+                $existingItem->update([
+                    'quantity' => $existingItem->quantity + $request->quantity
+                ]);
+            } else {
+                // Add new menu item
+                $order->items()->create([
+                    'menu_item_id' => $menuItem->id,
+                    'product_id' => null,
+                    'product_name' => $menuItem->name,
+                    'item_type' => 'menu_item',
+                    'unit_price' => $menuItem->sale_price,
+                    'quantity' => $request->quantity,
+                    'subtotal' => $menuItem->sale_price * $request->quantity,
+                ]);
+            }
         } else {
-            // Add new item
-            $order->items()->create([
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'unit_price' => $product->price,
-                'quantity' => $request->quantity,
-            ]);
+            // Handle product
+            $product = Product::find($request->item_id);
+            if (!$product) {
+                return response()->json(['error' => 'Product not found'], 404);
+            }
+
+            // Check if product already exists in order
+            $existingItem = $order->items()->where('product_id', $product->id)->first();
+
+            if ($existingItem) {
+                // Update quantity
+                $existingItem->update([
+                    'quantity' => $existingItem->quantity + $request->quantity
+                ]);
+            } else {
+                // Add new product
+                $order->items()->create([
+                    'product_id' => $product->id,
+                    'menu_item_id' => null,
+                    'product_name' => $product->name,
+                    'item_type' => 'product',
+                    'unit_price' => $product->price,
+                    'quantity' => $request->quantity,
+                    'subtotal' => $product->price * $request->quantity,
+                ]);
+            }
         }
 
         // Recalculate total
