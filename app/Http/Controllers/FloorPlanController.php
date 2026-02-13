@@ -17,6 +17,11 @@ class FloorPlanController extends Controller
             return response()->json(['error' => 'Order not found'], 404);
         }
 
+        // Check if the current user created this order
+        if ($order->user_id !== auth()->id()) {
+            return response()->json(['error' => 'Access denied. You can only view orders you created.'], 403);
+        }
+
         // Ensure all items are loaded with their products
         $items = $order->items()->with('product')->get();
 
@@ -60,6 +65,12 @@ class FloorPlanController extends Controller
         ]);
 
         $order = Order::find($request->order_id);
+
+        // Check if the current user created this order
+        if ($order->user_id !== auth()->id()) {
+            return response()->json(['error' => 'Access denied. You can only modify orders you created.'], 403);
+        }
+
         $product = Product::find($request->product_id);
 
         // Check if item already exists in order

@@ -121,7 +121,7 @@
                     Back to Floor Plan
                 </a>
 
-                @if($order)
+                @if($order && $order->user_id === auth()->id())
                     <a href="/admin/pos-page?table_id={{ $table->id }}"
                        class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -138,6 +138,8 @@
                         </svg>
                         Cancel Order
                     </button>
+                @elseif($order)
+                    {{-- Show order details but no management buttons --}}
                 @else
                     <a href="/admin/pos-page?table_id={{ $table->id }}"
                        class="inline-flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition">

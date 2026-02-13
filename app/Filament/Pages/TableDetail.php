@@ -38,9 +38,10 @@ class TableDetail extends Page
             return redirect('/admin/floor-plan');
         }
 
-        // Get all active orders for the table
+        // Get all active orders for the table created by the current user
         $this->orderItems = collect();
         $orders = Order::where('table_id', $tableId)
+            ->where('user_id', auth()->id()) // Only orders created by current user
             ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
             ->with('items.product')
             ->get();
@@ -55,8 +56,9 @@ class TableDetail extends Page
 
     public function cancelOrder()
     {
-        // Find all pending orders for this table and cancel them
+        // Find all pending orders for this table created by the current user and cancel them
         $orders = Order::where('table_id', $this->table->id)
+            ->where('user_id', auth()->id()) // Only orders created by current user
             ->where('status', 'pending')
             ->get();
 

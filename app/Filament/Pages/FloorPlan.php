@@ -22,7 +22,7 @@ class FloorPlan extends Page
         return [
             'tables' => Table::with(['orders' => function ($q) {
                 $q->whereIn('status', ['pending', 'preparing', 'ready', 'served']) // Include active orders
-                    ->with('items.product') // Include order items and products
+                    ->with(['items.product', 'user']) // Include order items, products, and user
                     ->latest();
             }])->get(),
         ];
