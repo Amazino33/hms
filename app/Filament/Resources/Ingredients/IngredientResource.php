@@ -80,9 +80,4 @@ class IngredientResource extends Resource
             'edit' => EditIngredient::route('/{record}/edit'),
         ];
     }
-    
-    public static function canAccess(): bool
-    {
-        return auth()->user()->hasRole(['super_admin', 'chef']);
-    }
 }
