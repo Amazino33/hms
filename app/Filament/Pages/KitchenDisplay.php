@@ -7,7 +7,6 @@ use BackedEnum;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Filament\Pages\Page;
 use App\Models\Order;
 use Filament\Actions\Action as ActionsAction;
 use Filament\Notifications\Notification;
@@ -100,7 +99,6 @@ class KitchenDisplay extends Page
 
     public static function canAccess(): bool
     {
-        // Only Super Admins and Chefs can see this
-        return auth()->user()->hasRole(['super_admin', 'chef']);
+        return auth()->user()->hasPermissionTo('access_kitchen_display');
     }
 }

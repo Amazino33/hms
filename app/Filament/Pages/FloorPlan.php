@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use Filament\Pages\Page;
 use App\Models\Table;
 use Filament\Actions\Action;
 use BackedEnum;
@@ -40,10 +39,8 @@ class FloorPlan extends Page
         $this->dispatch('notify', 'Table Cleared'); // Simple notification
     }
 
-    
     public static function canAccess(): bool
     {
-        // Only Super Admins and waiter can see this
-        return auth()->user()->hasRole(['super_admin', 'manager', 'waiter']);
+        return auth()->user()->hasPermissionTo('access_floor_plan');
     }
 }

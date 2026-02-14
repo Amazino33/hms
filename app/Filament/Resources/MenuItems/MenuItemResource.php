@@ -108,10 +108,5 @@ class MenuItemResource extends Resource
             'edit' => EditMenuItem::route('/{record}/edit'),
         ];
     }
-
-    
-    public static function canAccess(): bool
-    {
-        return auth()->user()->hasRole(['super_admin', 'chef']);
-    }
+}
 }

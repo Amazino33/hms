@@ -122,9 +122,9 @@ class PermissionService
     }
 
     /**
-     * Generic role checker
+     * Check if user can access POS page
      */
-    public static function hasRole(array $roles): bool
+    public static function canAccessPos(): bool
     {
         $user = Auth::user();
 
@@ -132,6 +132,48 @@ class PermissionService
             return false;
         }
 
-        return $user->hasRole($roles);
+        return $user->hasRole(['super_admin', 'waiter']);
+    }
+
+    /**
+     * Check if user can access floor plan
+     */
+    public static function canAccessFloorPlan(): bool
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return false;
+        }
+
+        return $user->hasRole(['super_admin', 'manager', 'waiter']);
+    }
+
+    /**
+     * Check if user can access kitchen display
+     */
+    public static function canAccessKitchenDisplay(): bool
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return false;
+        }
+
+        return $user->hasRole(['super_admin', 'chef']);
+    }
+
+    /**
+     * Check if user can access bar display
+     */
+    public static function canAccessBarDisplay(): bool
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return false;
+        }
+
+        return $user->hasRole(['super_admin', 'bartender']);
     }
 }

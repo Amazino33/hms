@@ -4,7 +4,6 @@ namespace App\Filament\Pages;
 
 use App\Models\Category;
 use App\Models\Product;
-use Filament\Pages\Page;
 use BackedEnum;
 
 class PosPage extends Page
@@ -16,8 +15,7 @@ class PosPage extends Page
 
     public static function canAccess(): bool
     {
-        // Only Super Admins and Waiters can see this
-        return auth()->user()->hasRole(['super_admin', 'waiter']);
+        return auth()->user()->hasPermissionTo('access_pos');
     }
 
     public function mount()
