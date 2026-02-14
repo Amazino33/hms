@@ -20,11 +20,12 @@ class StatOverview extends StatsOverviewWidget
     {
         $user = auth()->user();
 
+        // Define common date variables used across different user roles
+        $todayKey = Carbon::today()->toDateString();
+        $monthKey = Carbon::now()->format('Y-m');
+
         // 👑 SCENARIO 1: ADMIN & MANAGER (See Money)
         if ($user->hasRole(['super_admin', 'manager'])) {
-            // 1. Calculate Restaurant Revenue (Today)
-            $todayKey = Carbon::today()->toDateString();
-            $monthKey = Carbon::now()->format('Y-m');
 
             $restaurantRevenue = Cache::remember("stat:restaurant_revenue:{$todayKey}", 30, fn () =>
                 Order::whereDate('created_at', $todayKey)

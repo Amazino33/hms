@@ -21,21 +21,21 @@
         @else
             <div class="space-y-4">
                 @foreach($this->getLowStockAlerts() as $alert)
-                    <div class="border border-orange-200 dark:border-orange-700 rounded-lg p-4 bg-orange-50 dark:bg-orange-900/10">
+                    <div class="border border-orange-200 dark:border-orange-600 rounded-lg p-4 bg-orange-50 dark:bg-orange-950/50">
                         <div class="flex items-start justify-between">
                             <div class="flex-1">
-                                <h4 class="font-medium text-gray-900 dark:text-white">
+                                <h4 class="font-medium text-gray-900 dark:text-gray-100">
                                     {{ $alert['ingredient']->name }}
                                 </h4>
-                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                    Current stock: <span class="font-medium text-orange-600">{{ $alert['ingredient']->quantity }}</span> {{ $alert['ingredient']->unit_name }}
+                                <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                    Current stock: <span class="font-medium text-orange-600 dark:text-orange-400">{{ $alert['ingredient']->quantity }}</span> {{ $alert['ingredient']->unit_name }}
                                 </p>
                                 @if(!empty($alert['affected_menu_items']))
                                     <div class="mt-2">
                                         <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Used in menu items:</p>
                                         <div class="flex flex-wrap gap-1">
                                             @foreach($alert['affected_menu_items'] as $menuItem)
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200">
                                                     {{ $menuItem->name }}
                                                 </span>
                                             @endforeach
@@ -44,7 +44,7 @@
                                 @endif
                             </div>
                             <div class="ml-4">
-                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200">
                                     Low Stock
                                 </span>
                             </div>
