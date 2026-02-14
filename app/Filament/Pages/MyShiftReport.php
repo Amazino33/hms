@@ -7,7 +7,7 @@ use App\Models\OrderPayment;
 use App\Models\Order;
 use App\Models\Shift;
 use Illuminate\Support\Facades\Auth;
-use Carbon\Carbon;
+use App\Services\PermissionService;
 use BackedEnum;
 
 class MyShiftReport extends Page
@@ -17,10 +17,9 @@ class MyShiftReport extends Page
     protected static ?int $navigationSort = 10;
     protected string $view = 'filament.pages.my-shift-report';
 
-    // Only Waiters/Staff should see this (Hide from Admin if you want)
     public static function canAccess(): bool
     {
-        return !Auth::user()->hasRole('admin'); 
+        return PermissionService::canAccessPage(self::class);
     }
 
     protected function getViewData(): array

@@ -6,7 +6,7 @@ use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use App\Models\StockTransfer;
+use App\Services\PermissionService;
 
 class ReceiveTransfers extends Page
 {
@@ -95,9 +95,6 @@ class ReceiveTransfers extends Page
 
     public static function canAccess(): bool
     {
-        $user = Auth::user();
-        if (!$user) return false;
-
-        return $user->hasAnyRole(['chef','bartender','storekeeper','super_admin']);
+        return PermissionService::canAccessPage(self::class);
     }
 }

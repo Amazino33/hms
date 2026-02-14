@@ -7,10 +7,11 @@ use BackedEnum;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Filament\Pages\Page;
+use App\Services\PermissionService;
 use App\Models\Order;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Filament\Pages\Page;
 
 class BarDisplay extends Page
 {
@@ -99,7 +100,6 @@ class BarDisplay extends Page
 
     public static function canAccess(): bool
     {
-        // Only Super Admins and Chefs can see this
-        return auth()->user()->hasRole(['super_admin', 'manager', 'bartender']);
+        return PermissionService::canAccessPage(self::class);
     }
 }

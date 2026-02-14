@@ -6,8 +6,7 @@ use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use App\Models\Product;
-use App\Models\WareHouse;
+use App\Services\PermissionService;
 use App\Models\StockTransfer;
 
 class StorekeeperTransfers extends Page
@@ -34,9 +33,6 @@ class StorekeeperTransfers extends Page
 
     public static function canAccess(): bool
     {
-        $user = Auth::user();
-        if (!$user) return false;
-
-        return $user->hasRole('storekeeper') || $user->hasRole('super_admin');
+        return PermissionService::canAccessPage(self::class);
     }
 }

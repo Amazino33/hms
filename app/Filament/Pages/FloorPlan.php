@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\PermissionService;
 use App\Models\Table;
 use Filament\Actions\Action;
 use BackedEnum;
+use Filament\Pages\Page;
 use UnitEnum;
 
 class FloorPlan extends Page
@@ -41,6 +43,6 @@ class FloorPlan extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->user()->hasPermissionTo('access_floor_plan');
+        return PermissionService::canAccessPage(self::class);
     }
 }

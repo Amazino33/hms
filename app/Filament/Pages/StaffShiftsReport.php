@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use Filament\Pages\Page;
 use App\Models\Shift;
 use App\Models\User;
+use App\Services\PermissionService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -24,7 +25,7 @@ class StaffShiftsReport extends Page implements HasForms
     // Only admins can access this
     public static function canAccess(): bool
     {
-        return auth()->user()->hasRole('admin') || auth()->user()->hasRole('super_admin');
+        return PermissionService::canAccessPage(self::class);
     }
 
     public ?array $data = [];

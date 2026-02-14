@@ -7,9 +7,11 @@ use BackedEnum;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use App\Services\PermissionService;
 use App\Models\Order;
 use Filament\Actions\Action as ActionsAction;
 use Filament\Notifications\Notification;
+use Filament\Pages\Page;
 use Illuminate\Notifications\Action;
 
 class KitchenDisplay extends Page
@@ -99,6 +101,6 @@ class KitchenDisplay extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->user()->hasPermissionTo('access_kitchen_display');
+        return PermissionService::canAccessPage(self::class);
     }
 }

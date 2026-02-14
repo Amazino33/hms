@@ -5,7 +5,7 @@ namespace App\Filament\Pages;
 use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
-use App\Services\StaffReportService;
+use App\Services\PermissionService;
 
 class MyHistory extends Page
 {
@@ -29,9 +29,6 @@ class MyHistory extends Page
 
     public static function canAccess(): bool
     {
-        $user = Auth::user();
-        if (!$user) return false;
-
-        return $user->hasAnyRole(['super_admin', 'manager', 'waiter', 'chef', 'bartender']);
+        return PermissionService::canAccessPage(self::class);
     }
 }

@@ -11,8 +11,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Actions\Action;
-use App\Models\Product;
-use App\Models\WareHouse;
+use App\Services\PermissionService;
 use BackedEnum;
 use UnitEnum;
 use Filament\Notifications\Notification;
@@ -173,7 +172,6 @@ class QuickInventoryUpdate extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        // Only Super Admins and Storekeepers can access
-        return auth()->user()->hasRole(['super_admin', 'storekeeper']);
+        return PermissionService::canAccessPage(self::class);
     }
 }

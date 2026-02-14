@@ -2,11 +2,6 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Resources\Ingredients\IngredientResource;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
-use App\Policies\PermissionPolicy;
-use App\Policies\RolePolicy;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -25,7 +20,6 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Blade;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -36,12 +30,11 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->authGuard('web') 
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
             ->globalSearch(false)
             ->databaseNotifications()
-            ->databaseNotificationsPolling('15s')
+            ->databaseNotificationsPolling('5s')
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -51,7 +44,6 @@ class AdminPanelProvider extends PanelProvider
                 Dashboard::class,
                 \App\Filament\Pages\StorekeeperTransfers::class,
                 \App\Filament\Pages\ReceiveTransfers::class,
-                \App\Filament\Pages\QuickInventoryUpdate::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
@@ -62,7 +54,7 @@ class AdminPanelProvider extends PanelProvider
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
-                // AuthenticateSession::class, // Disabled: causes 403 in production
+                AuthenticateSession::class,
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,
                 SubstituteBindings::class,
@@ -70,44 +62,19 @@ class AdminPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->plugins([
-                    FilamentShieldPlugin::make(),
+                FilamentShieldPlugin::make(),
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ])
-            ->resources([
-                IngredientResource::class,
             ]);
     }
 
     public function boot()
     {
-        // Register PWA meta tags and service worker
-        FilamentView::registerRenderHook(
-            PanelsRenderHook::HEAD_END,
-            fn() => Blade::render(<<<'HTML'
-            <!-- PWA Meta Tags -->
-            <link rel="icon" href="/favicon.ico" sizes="any">
-            <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-            <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-            <link rel="manifest" href="/site.webmanifest">
-            <meta name="theme-color" content="#1f2937">
-            <meta name="apple-mobile-web-app-capable" content="yes">
-            <meta name="apple-mobile-web-app-status-bar-style" content="default">
-            <meta name="apple-mobile-web-app-title" content="HMS">
-            <meta name="mobile-web-app-capable" content="yes">
-            <meta name="msapplication-TileColor" content="#1f2937">
-            <meta name="msapplication-config" content="/browserconfig.xml">
-            
-            <!-- Load PWA Service Worker -->
-            @vite(['resources/js/app.js'])
-            HTML)
-        );
-
         // Register mobile sidebar close button
         FilamentView::registerRenderHook(
             PanelsRenderHook::SIDEBAR_NAV_START,
-            fn() => Blade::render(<<<'HTML'
+            fn () => Blade::render(<<<'HTML'
             <div class="lg:hidden absolute z-50" style="top: 1rem; right: 1rem;">
                 <button
                     x-data="{}"
@@ -125,7 +92,7 @@ class AdminPanelProvider extends PanelProvider
 
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
-            fn() => Blade::render(<<<'HTML'
+            fn () => Blade::render(<<<'HTML'
             <audio id="notification-sound" src="/sounds/notification.wav" preload="auto"></audio>
 
             <script>
@@ -147,9 +114,7 @@ class AdminPanelProvider extends PanelProvider
 
                 // Monitor notification badge for changes
                 setInterval(() => {
-                    // Look specifically for the notification icon button's badge
-                    const notificationButton = document.querySelector('[data-action="open-notifications"]');
-                    const badge = notificationButton ? notificationButton.querySelector('.fi-icon-btn-badge') : null;
+                    const badge = document.querySelector('.fi-icon-btn-badge, [class*="badge"]');
                     
                     if (badge) {
                         const currentCount = parseInt(badge.textContent) || 0;
@@ -168,45 +133,37 @@ class AdminPanelProvider extends PanelProvider
 
             <!-- Shift Manager Component -->
             @livewire('shift-manager')
-
-            <!-- PWA Install Component -->
-            @livewire('pwa-install')
         HTML)
         );
 
         // Add shift management menu item
         FilamentView::registerRenderHook(
             PanelsRenderHook::USER_MENU_BEFORE,
-            fn() => Blade::render(<<<'HTML'
-            <li wire:poll.10s>
+            fn () => Blade::render(<<<'HTML'
+            <li>
                 <a href="#"
                    wire:click.prevent="$dispatch('open-shift-modal')"
-                   class="relative flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer touch-manipulation"
+                   class="flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer touch-manipulation"
                    title="Shift Management"
                 >
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    @if(auth()->user() && auth()->user()->currentShift())
-                        <div class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse border border-white dark:border-gray-800"></div>
-                    @endif
                 </a>
             </li>
         HTML)
         );
 
-        // 1. Force the URL generator to use HTTPS (only if not running locally)
-        if ($this->app->environment('production') && !$this->app->runningUnitTests()) {
-            \Illuminate\Support\Facades\URL::forceScheme('https');
-        }
-
-        // 3. Your Super Admin Gate (Keep this!)
-        Gate::before(function ($user, $ability) {
-            return $user->hasRole('super_admin') ? true : null;
-        });
-
-        // Register the policies
-        Gate::policy(Permission::class, PermissionPolicy::class);
-        Gate::policy(Role::class, RolePolicy::class);
+        // Hide notification bell badge
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn () => Blade::render(<<<'HTML'
+            <style>
+                .fi-topbar-database-notifications-btn .fi-icon-btn-badge {
+                    display: none !important;
+                }
+            </style>
+        HTML)
+        );
     }
 }
