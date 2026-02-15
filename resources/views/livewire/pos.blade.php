@@ -23,6 +23,7 @@ new class extends Component {
     public $existingItems = [];
     public $total = 0;
     public $search = '';
+    public $deferProducts = true; // defer loading heavy product data until after initial render
 
     // Mobile-specific properties
     public $showCart = false;
@@ -127,6 +128,12 @@ new class extends Component {
         if ($this->selectedTableId) {
             $this->updatedSelectedTableId($this->selectedTableId);
         }
+    }
+
+    public function loadProducts()
+    {
+        // Called by `wire:init` to trigger the deferred load in `with()`
+        $this->deferProducts = false;
     }
 
     public function addToCart($itemId, $itemType = 'product')
@@ -563,6 +570,14 @@ new class extends Component {
 
     public function with()
     {
+        // Deferred load: return empty collections on first render to keep initial HTML small.
+        if ($this->deferProducts) {
+            return [
+                'products' => collect(),
+                'menuItems' => collect(),
+            ];
+        }
+
         $cacheKey = 'products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search;
 
         $products = Cache::remember($cacheKey, 1800, function () {
@@ -677,7 +692,7 @@ new class extends Component {
                             {{ auth()->user()->currentShift() ? '' : 'disabled' }}>{{ $category->name }}</button>
                     @endforeach
                 </div>
-                <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 content-start relative">
+                <div wire:init="loadProducts" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 content-start relative">
                     @if(!auth()->user()->currentShift())
                         <div class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
                             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
@@ -690,6 +705,13 @@ new class extends Component {
                             </div>
                         </div>
                     @endif
+
+                    @if($products->isEmpty())
+                        @for($i = 0; $i < 8; $i++)
+                            <div class="animate-pulse bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center h-28 lg:h-32"></div>
+                        @endfor
+                    @endif
+
                     @foreach($products as $product)
                         <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }}, 'product')" @endif
                             class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
@@ -840,7 +862,13 @@ new class extends Component {
                     </div>
                 </div>
             @endif
-            <div class="grid grid-cols-2 gap-3">
+            <div wire:init="loadProducts" class="grid grid-cols-2 gap-3">
+                @if($products->isEmpty())
+                    @for($i = 0; $i < 8; $i++)
+                        <div class="animate-pulse bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center h-28"></div>
+                    @endfor
+                @endif
+
                 @foreach($products as $product)
                     <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }}, 'product')" @endif
                         class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
