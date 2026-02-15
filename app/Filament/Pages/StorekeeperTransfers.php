@@ -17,11 +17,27 @@ class StorekeeperTransfers extends Page
     protected static ?string $navigationLabel = 'Stock Transfers';
     protected string $view = 'filament.pages.storekeeper-transfers';
 
+    // Defer loading of paginated recent transfers (which can be expensive)
+    public bool $ready = false;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
     public function getViewData(): array
     {
-        // Short cache for lookup lists
+        // Short cache for lookup lists (these are cheap and useful immediately)
         $products = Cache::remember('storekeeper:products', 60, fn () => Product::with('category')->orderBy('name')->get());
         $warehouses = Cache::remember('storekeeper:warehouses', 60, fn () => Warehouse::orderBy('name')->get());
+
+        if (! $this->ready) {
+            return [
+                'products' => $products,
+                'warehouses' => $warehouses,
+                'recentTransfers' => collect(),
+            ];
+        }
 
         $page = request()->get('page', 1);
         $recent = StockTransfer::with(['items','fromWarehouse','toWarehouse'])->latest()->paginate(10, ['*'], 'page', $page);

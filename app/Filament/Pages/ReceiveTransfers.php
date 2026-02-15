@@ -15,6 +15,14 @@ class ReceiveTransfers extends Page
     protected static ?string $navigationLabel = 'Receive Transfers';
     protected string $view = 'filament.pages.receive-transfers';
 
+    // Defer loading of transfers list (keeps initial admin pages fast)
+    public bool $ready = false;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
     public function getViewData(): array
     {
         $user = Auth::user();
@@ -42,6 +50,15 @@ class ReceiveTransfers extends Page
                 $warehouseId = $consumerWarehouses[0]->id;
                 $warehouseName = $consumerWarehouses[0]->name;
             }
+        }
+
+        if (! $this->ready) {
+            // Return lightweight default data while client-side load triggers the full retrieval
+            return [
+                'transfers' => collect(),
+                'warehouseId' => $warehouseId,
+                'warehouseName' => $warehouseName,
+            ];
         }
 
         if ($user->hasRole('storekeeper') || $user->hasRole('super_admin')) {

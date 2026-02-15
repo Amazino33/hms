@@ -22,6 +22,14 @@ class StockValuation extends Page implements HasTable
     protected static ?string $title = 'Stock Level & Valuation';
     protected string $view = 'filament.pages.stock-valuation';
 
+    // Deferred rendering: avoid running heavy table queries during initial page render
+    public bool $ready = false;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
     // 👇 THIS IS THE CRITICAL FIX
     protected function getHeaderWidgets(): array
     {

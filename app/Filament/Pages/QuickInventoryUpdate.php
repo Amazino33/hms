@@ -28,7 +28,15 @@ class QuickInventoryUpdate extends Page implements HasTable
     protected static ?int $navigationSort = 15;
     protected string $view = 'filament.pages.quick-inventory-update';
 
+    // Defer heavy table population until client requests it
+    public bool $ready = false;
+
     public ?int $selectedWarehouseId = null;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
 
     public function mount(): void
     {

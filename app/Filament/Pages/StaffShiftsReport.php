@@ -28,7 +28,15 @@ class StaffShiftsReport extends Page implements HasForms
         return PermissionService::canAccessPage(self::class);
     }
 
+    // Defer heavy report generation until client-side init
+    public bool $ready = false;
+
     public ?array $data = [];
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
 
     public function mount(): void
     {
@@ -57,6 +65,22 @@ class StaffShiftsReport extends Page implements HasForms
 
     protected function getViewData(): array
     {
+        // If the component is not ready, return lightweight placeholders so
+        // the expensive Shift query doesn't run during initial page render.
+        if (! $this->ready) {
+            $date = $this->data['date'] ?? now()->format('Y-m-d');
+
+            return [
+                'reportDate' => Carbon::parse($date)->format('l, d M Y'),
+                'staffShifts' => collect(),
+                'totalStaff' => 0,
+                'totalShifts' => 0,
+                'activeShifts' => 0,
+                'completedShifts' => 0,
+                'totalPayments' => 0,
+            ];
+        }
+
         $date = $this->data['date'] ?? now()->format('Y-m-d');
         $targetDate = Carbon::parse($date);
 

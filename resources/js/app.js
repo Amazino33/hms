@@ -1,3 +1,5 @@
+import 'instant.page';
+
 // Enhanced PWA Service Worker Registration with Install Prompt
 let deferredPrompt;
 
@@ -114,3 +116,49 @@ document.addEventListener('DOMContentLoaded', () => {
         window.checkPWASupport();
     }, 1000);
 });
+
+// Lightweight link prefetcher: preloads same-origin links marked with `data-prefetch`
+(function () {
+    const prefetchCache = new Set();
+    let timer = null;
+
+    function schedulePrefetch(href) {
+        if (!href || prefetchCache.has(href)) return;
+        timer = setTimeout(() => {
+            // Warm server + network by fetching the URL (credentials included for session)
+            fetch(href, { credentials: 'include' }).then(() => prefetchCache.add(href)).catch(() => {});
+        }, 65); // short delay to avoid accidental hovers
+    }
+
+    function cancelPrefetch() {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    }
+
+    document.addEventListener('mouseover', (e) => {
+        const a = e.target.closest && e.target.closest('a[data-prefetch]');
+        if (!a) return;
+        const href = a.href;
+        try {
+            if (new URL(href).origin !== location.origin) return;
+        } catch (err) {
+            return;
+        }
+        schedulePrefetch(href);
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        if (e.target.closest && e.target.closest('a[data-prefetch]')) cancelPrefetch();
+    });
+
+    document.addEventListener('focusin', (e) => {
+        const a = e.target.closest && e.target.closest('a[data-prefetch]');
+        if (a) schedulePrefetch(a.href);
+    });
+
+    document.addEventListener('focusout', (e) => {
+        if (e.target.closest && e.target.closest('a[data-prefetch]')) cancelPrefetch();
+    });
+})();

@@ -138,8 +138,8 @@
         </div>
     </div>
 
-    <!-- Recent Transfers -->
-    <div class="max-w-7xl mx-auto mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <!-- Recent Transfers (deferred) -->
+    <div wire:init="load" class="max-w-7xl mx-auto mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div class="p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 border-b border-gray-200 dark:border-gray-700">
             <div class="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <svg class="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,68 +149,72 @@
             </div>
         </div>
         <div class="p-6">
-            @if($recentTransfers->count() > 0)
-                <div class="space-y-4">
-                    @foreach($recentTransfers as $transfer)
-                        <div class="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700">
-                            <!-- Mobile: Stack vertically, Desktop: Side by side -->
-                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                <!-- Left side: Icon and main info -->
-                                <div class="flex flex-col gap-3 flex-1">
-                                    <!-- Row 1: Icon and Transfer Number -->
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
-                                            </svg>
+            @if (! $ready)
+                @include('filament.widgets._deferred-placeholder')
+            @else
+                @if($recentTransfers->count() > 0)
+                    <div class="space-y-4">
+                        @foreach($recentTransfers as $transfer)
+                            <div class="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700">
+                                <!-- Mobile: Stack vertically, Desktop: Side by side -->
+                                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                    <!-- Left side: Icon and main info -->
+                                    <div class="flex flex-col gap-3 flex-1">
+                                        <!-- Row 1: Icon and Transfer Number -->
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p class="font-semibold text-gray-900 dark:text-white text-lg">{{ $transfer->transfer_number }}</p>
+                                            </div>
                                         </div>
+                                        
+                                        <!-- Row 2: From → To Warehouses -->
                                         <div>
-                                            <p class="font-semibold text-gray-900 dark:text-white text-lg">{{ $transfer->transfer_number }}</p>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                                <span class="font-medium">From:</span> {{ $transfer->fromWarehouse->name ?? 'Unknown' }}
+                                            </p>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                                <span class="font-medium">To:</span> {{ $transfer->toWarehouse->name ?? 'Unknown' }}
+                                            </p>
+                                        </div>
+                                        
+                                        <!-- Row 3: Item Count -->
+                                        <div>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                                <span class="font-medium">Items:</span> {{ $transfer->items->sum('quantity') }}
+                                            </p>
                                         </div>
                                     </div>
                                     
-                                    <!-- Row 2: From → To Warehouses -->
-                                    <div>
-                                        <p class="text-sm text-gray-600 dark:text-gray-400">
-                                            <span class="font-medium">From:</span> {{ $transfer->fromWarehouse->name ?? 'Unknown' }}
-                                        </p>
-                                        <p class="text-sm text-gray-600 dark:text-gray-400">
-                                            <span class="font-medium">To:</span> {{ $transfer->toWarehouse->name ?? 'Unknown' }}
-                                        </p>
+                                    <!-- Right side: Status and timestamp -->
+                                    <div class="flex flex-col items-start md:items-end gap-2">
+                                        <span class="px-3 py-1 text-xs font-semibold rounded-full 
+                                            @if($transfer->status === 'pending') bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
+                                            @elseif($transfer->status === 'sent') bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300
+                                            @elseif($transfer->status === 'received') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                            @else bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300
+                                            @endif">
+                                            {{ ucfirst($transfer->status ?? 'unknown') }}
+                                        </span>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">{{ $transfer->created_at->diffForHumans() }}</p>
                                     </div>
-                                    
-                                    <!-- Row 3: Item Count -->
-                                    <div>
-                                        <p class="text-sm text-gray-600 dark:text-gray-400">
-                                            <span class="font-medium">Items:</span> {{ $transfer->items->sum('quantity') }}
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                <!-- Right side: Status and timestamp -->
-                                <div class="flex flex-col items-start md:items-end gap-2">
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full 
-                                        @if($transfer->status === 'pending') bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
-                                        @elseif($transfer->status === 'sent') bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300
-                                        @elseif($transfer->status === 'received') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
-                                        @else bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300
-                                        @endif">
-                                        {{ ucfirst($transfer->status ?? 'unknown') }}
-                                    </span>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ $transfer->created_at->diffForHumans() }}</p>
                                 </div>
                             </div>
-                        </div>
-                    @endforeach
-                </div>
-                
-                @if($recentTransfers->hasPages())
-                    <div class="mt-6 flex justify-center">
-                        {{ $recentTransfers->links() }}
+                        @endforeach
                     </div>
+                    
+                    @if($recentTransfers->hasPages())
+                        <div class="mt-6 flex justify-center">
+                            {{ $recentTransfers->links() }}
+                        </div>
+                    @endif
+                @else
+                    <div class="text-sm text-gray-600 dark:text-gray-400 text-center py-8">No transfers yet. Create your first transfer above.</div>
                 @endif
-            @else
-                <div class="text-sm text-gray-600 dark:text-gray-400 text-center py-8">No transfers yet. Create your first transfer above.</div>
             @endif
         </div>
     </div>

@@ -22,8 +22,14 @@
             </select>
         </div>
 
-        <!-- Products Table -->
-        {{ $this->table }}
+        <!-- Products Table (deferred) -->
+        <div wire:init="load">
+            @if (!$ready)
+                @include('filament.widgets._deferred-placeholder')
+            @else
+                {{ $this->table }}
+            @endif
+        </div>
 
         <!-- Quick Tips -->
         <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-800">
