@@ -13,8 +13,25 @@ use Illuminate\Support\Facades\Cache;
 
 class StatOverview extends StatsOverviewWidget
 {
+    // Defer heavy calculations until client init
+    public bool $ready = false;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
     // Poll a bit slower to reduce DB churn while still feeling live
     protected ?string $pollingInterval = '20s';
+
+    public function render(): \Illuminate\Contracts\View\View
+    {
+        if (! $this->ready) {
+            return view('filament.widgets._deferred-placeholder');
+        }
+
+        return parent::render();
+    }
 
     protected function getStats(): array
     {

@@ -10,6 +10,23 @@ use Illuminate\Support\Facades\Cache;
 
 class WaiterShiftStats extends BaseWidget
 {
+    // Defer loading until user sees the dashboard
+    public bool $ready = false;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
+    public function render(): \Illuminate\Contracts\View\View
+    {
+        if (! $this->ready) {
+            return view('filament.widgets._deferred-placeholder');
+        }
+
+        return parent::render();
+    }
+
     // Set polling to keep numbers fresh (every 30 seconds)
     protected ?string $pollingInterval = '30s';
 

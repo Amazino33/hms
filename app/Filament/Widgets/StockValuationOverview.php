@@ -9,10 +9,26 @@ use Illuminate\Support\Facades\Cache;
 
 class StockValuationOverview extends BaseWidget
 {
+    public bool $ready = false;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
     public static function canView(): bool
     {
         // Only allow Admins to see this widget
         return auth()->user()->hasRole(['super_admin', 'manager']);
+    }
+
+    public function render(): \Illuminate\Contracts\View\View
+    {
+        if (! $this->ready) {
+            return view('filament.widgets._deferred-placeholder');
+        }
+
+        return parent::render();
     }
 
     protected function getStats(): array

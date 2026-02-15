@@ -11,7 +11,23 @@ use Carbon\Carbon;
 
 class StaffCashSummary extends StatsOverviewWidget
 {
+    public bool $ready = false;
+
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
     protected ?string $pollingInterval = '30s';
+
+    public function render(): \Illuminate\Contracts\View\View
+    {
+        if (! $this->ready) {
+            return view('filament.widgets._deferred-placeholder');
+        }
+
+        return parent::render();
+    }
 
     protected function getStats(): array
     {
