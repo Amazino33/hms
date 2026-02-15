@@ -10,6 +10,7 @@ use App\Services\PermissionService;
 use App\Models\Product;
 use App\Filament\Widgets\StockValuationOverview; 
 use BackedEnum;
+use Filament\Tables\Columns\TextColumn;
 use UnitEnum;
 
 class StockValuation extends Page implements HasTable

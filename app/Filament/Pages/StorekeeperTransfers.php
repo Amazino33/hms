@@ -2,12 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Product;
 use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use App\Services\PermissionService;
 use App\Models\StockTransfer;
+use App\Models\Warehouse;
 
 class StorekeeperTransfers extends Page
 {
@@ -19,7 +21,7 @@ class StorekeeperTransfers extends Page
     {
         // Short cache for lookup lists
         $products = Cache::remember('storekeeper:products', 60, fn () => Product::with('category')->orderBy('name')->get());
-        $warehouses = Cache::remember('storekeeper:warehouses', 60, fn () => WareHouse::orderBy('name')->get());
+        $warehouses = Cache::remember('storekeeper:warehouses', 60, fn () => Warehouse::orderBy('name')->get());
 
         $page = request()->get('page', 1);
         $recent = StockTransfer::with(['items','fromWarehouse','toWarehouse'])->latest()->paginate(10, ['*'], 'page', $page);

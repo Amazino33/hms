@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\StockTransfer;
 use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;

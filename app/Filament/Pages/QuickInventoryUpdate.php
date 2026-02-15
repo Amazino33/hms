@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Product;
+use App\Models\Warehouse;
 use Filament\Pages\Page;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
