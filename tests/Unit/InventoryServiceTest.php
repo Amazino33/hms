@@ -8,16 +8,26 @@ use App\Models\WareHouse;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
-uses(RefreshDatabase::class);
+uses(Tests\TestCase::class, RefreshDatabase::class);
 
 it('returns inventory when order is cancelled', function () {
-    // Create a warehouse
-    $warehouse = Warehouse::factory()->create();
+    // Create a warehouse with the ID that InventoryService expects for storage (id=3)
+    $warehouse = \App\Models\Warehouse::create([
+        'id' => 3,
+        'name' => 'Main Warehouse',
+        'type' => 'storage',
+    ]);
 
-    // Create a product
-    $product = Product::factory()->create();
+    // Create a category mapped to storage so the service picks the storage warehouse
+    $category = \App\Models\Category::create([
+        'name' => 'Misc',
+        'type' => 'service',
+    ]);
 
-    // Create inventory for the product in the warehouse
+    // Create a product tied to that category
+    $product = Product::factory()->create(['category_id' => $category->id]);
+
+    // Create inventory for the product in the warehouse (id=3)
     InventoryItem::create([
         'product_id' => $product->id,
         'warehouse_id' => $warehouse->id,
@@ -52,13 +62,23 @@ it('returns inventory when order is cancelled', function () {
 });
 
 it('does not return inventory for non-cancelled status changes', function () {
-    // Create a warehouse
-    $warehouse = Warehouse::factory()->create();
+    // Create a warehouse with the ID that InventoryService expects for storage (id=3)
+    $warehouse = \App\Models\Warehouse::create([
+        'id' => 3,
+        'name' => 'Main Warehouse',
+        'type' => 'storage',
+    ]);
 
-    // Create a product
-    $product = Product::factory()->create();
+    // Create a category mapped to storage so the service picks the storage warehouse
+    $category = \App\Models\Category::create([
+        'name' => 'Misc',
+        'type' => 'service',
+    ]);
 
-    // Create inventory for the product in the warehouse
+    // Create a product tied to that category
+    $product = Product::factory()->create(['category_id' => $category->id]);
+
+    // Create inventory for the product in the warehouse (id=3)
     InventoryItem::create([
         'product_id' => $product->id,
         'warehouse_id' => $warehouse->id,

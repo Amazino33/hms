@@ -3,5 +3,6 @@
 test('returns a successful response', function () {
     $response = $this->get(route('home'));
 
-    $response->assertOk();
+    // Homepage redirects to the admin panel in this app
+    $response->assertRedirect('/admin');
 });

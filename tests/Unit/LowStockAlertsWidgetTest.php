@@ -6,7 +6,7 @@ use App\Models\MenuItem;
 use App\Models\Recipe;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
-uses(RefreshDatabase::class);
+uses(Tests\TestCase::class, RefreshDatabase::class);
 
 it('limits visible low-stock alerts and toggles to show all', function () {
     // Create 8 ingredients each used by a visible-for-sale menu item
@@ -26,7 +26,7 @@ it('limits visible low-stock alerts and toggles to show all', function () {
             'unit_name' => 'pcs',
             'quantity' => 5, // under the default threshold (10)
             'cost_per_unit' => 10,
-            'category' => null,
+            'category' => 'general',
         ]);
 
         Recipe::create([

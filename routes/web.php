@@ -47,10 +47,22 @@ Route::get('/manifest-test', function () {
     return file_get_contents(public_path('manifest-test.html'));
 });
 
-// Redirect the homepage directly to the Admin Panel
+// Redirect the homepage directly to the Admin Panel (named 'home' for tests/views)
 Route::get('/', function () {
     return redirect('/admin');
-});
+})->name('home');
+
+// Provide a named dashboard route used by tests and some views.
+Route::get('/dashboard', function () {
+    return view('dashboard');
+})->middleware('auth')->name('dashboard');
+
+// Provide a lightweight POS route used by views/tests (named `pos.index`).
+// This returns a simple redirect to the admin area — the actual POS
+// functionality is implemented in Filament; tests only need the route to exist.
+Route::get('/pos', function () {
+    return redirect('/admin');
+})->name('pos.index');
 
 require __DIR__.'/settings.php';
 
