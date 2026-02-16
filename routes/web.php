@@ -47,6 +47,11 @@ Route::get('/manifest-test', function () {
     return file_get_contents(public_path('manifest-test.html'));
 });
 
+// PWA diagnostic page (local only) — shows Service Worker / manifest / install status
+Route::get('/pwa-test', function () {
+    return view('pwa-test');
+})->name('pwa.test');
+
 // Redirect the homepage directly to the Admin Panel (named 'home' for tests/views)
 Route::get('/', function () {
     return redirect('/admin');

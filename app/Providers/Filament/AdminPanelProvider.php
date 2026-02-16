@@ -165,5 +165,33 @@ class AdminPanelProvider extends PanelProvider
             </style>
         HTML)
         );
+
+        // Register Service Worker for PWA functionality
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn () => Blade::render(<<<'HTML'
+            <script>
+                (function() {
+                    if ('serviceWorker' in navigator) {
+                        window.addEventListener('load', function() {
+                            navigator.serviceWorker.register('/sw.js')
+                                .then(function(registration) {
+                                    console.log('✅ ServiceWorker registered:', registration.scope);
+                                    // Check for updates every hour
+                                    setInterval(function() {
+                                        registration.update();
+                                    }, 60 * 60 * 1000);
+                                })
+                                .catch(function(err) {
+                                    console.error('❌ ServiceWorker registration failed:', err);
+                                });
+                        });
+                    } else {
+                        console.warn('⚠️ ServiceWorker not supported in this browser');
+                    }
+                })();
+            </script>
+        HTML)
+        );
     }
 }

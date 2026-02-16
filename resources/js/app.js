@@ -25,37 +25,74 @@ window.addEventListener('appinstalled', (evt) => {
 // Register Service Worker for PWA functionality
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-                console.log('Service Worker registered successfully:', registration.scope);
-
+        // Check if already registered (from inline script) to avoid duplicate logs
+        navigator.serviceWorker.getRegistration().then(existingRegistration => {
+            if (existingRegistration) {
+                // Already registered by inline script, just attach event handlers
+                console.log('🔗 ServiceWorker already registered, attaching event handlers');
+                
                 // Check if already installed
                 if (window.matchMedia('(display-mode: standalone)').matches) {
-                    console.log('App is already installed');
+                    console.log('✅ App is already installed');
                     window.dispatchEvent(new CustomEvent('pwa-already-installed'));
                 }
 
                 // Handle service worker updates
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
+                existingRegistration.addEventListener('updatefound', () => {
+                    const newWorker = existingRegistration.installing;
                     if (newWorker) {
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                                 // New content is available, show update prompt
+                                console.log('🔄 ServiceWorker update available');
                                 window.dispatchEvent(new CustomEvent('pwa-update-available', {
-                                    detail: { registration }
+                                    detail: { registration: existingRegistration }
                                 }));
                             }
                         });
                     }
                 });
-            })
-            .catch(error => {
-                console.log('Service Worker registration failed:', error);
-                window.dispatchEvent(new CustomEvent('pwa-sw-error', {
-                    detail: { error }
-                }));
-            });
+            } else {
+                // Not yet registered, register it now
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('✅ ServiceWorker registered from app.js:', registration.scope);
+
+                        // Check for updates every hour
+                        setInterval(() => {
+                            registration.update();
+                        }, 60 * 60 * 1000);
+
+                        // Check if already installed
+                        if (window.matchMedia('(display-mode: standalone)').matches) {
+                            console.log('✅ App is already installed');
+                            window.dispatchEvent(new CustomEvent('pwa-already-installed'));
+                        }
+
+                        // Handle service worker updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            if (newWorker) {
+                                newWorker.addEventListener('statechange', () => {
+                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        // New content is available, show update prompt
+                                        console.log('🔄 ServiceWorker update available');
+                                        window.dispatchEvent(new CustomEvent('pwa-update-available', {
+                                            detail: { registration }
+                                        }));
+                                    }
+                                });
+                            }
+                        });
+                    })
+                    .catch(error => {
+                        console.error('❌ ServiceWorker registration failed:', error);
+                        window.dispatchEvent(new CustomEvent('pwa-sw-error', {
+                            detail: { error }
+                        }));
+                    });
+            }
+        });
     });
 }
 

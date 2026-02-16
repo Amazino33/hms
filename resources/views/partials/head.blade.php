@@ -90,4 +90,28 @@
 <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 
 @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+{{-- Inline Service Worker Registration - runs immediately on all pages --}}
+<script>
+(function() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js')
+                .then(function(registration) {
+                    console.log('✅ ServiceWorker registered:', registration.scope);
+                    // Check for updates every hour
+                    setInterval(function() {
+                        registration.update();
+                    }, 60 * 60 * 1000);
+                })
+                .catch(function(err) {
+                    console.error('❌ ServiceWorker registration failed:', err);
+                });
+        });
+    } else {
+        console.warn('⚠️ ServiceWorker not supported in this browser');
+    }
+})();
+</script>
+
 @fluxAppearance

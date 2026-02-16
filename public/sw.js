@@ -1,13 +1,8 @@
-// Enhanced Service Worker for HMS PWA
-const CACHE_NAME = 'hms-v2.0';
-const STATIC_CACHE = 'hms-static-v2.0';
-const DYNAMIC_CACHE = 'hms-dynamic-v2.0';
+const CACHE_NAME = 'hms-v2.2';
+const STATIC_CACHE = 'hms-static-v2.2';
+const DYNAMIC_CACHE = 'hms-dynamic-v2.2';
 
-// Resources to cache immediately
 const STATIC_ASSETS = [
-    '/',
-    '/admin',
-    '/offline',
     '/offline.html',
     '/favicon.ico',
     '/apple-touch-icon.png',
@@ -15,170 +10,79 @@ const STATIC_ASSETS = [
     '/favicon.svg'
 ];
 
-// Cache duration settings (in seconds)
-const CACHE_DURATION = {
-    STATIC: 7 * 24 * 60 * 60, // 7 days
-    DYNAMIC: 24 * 60 * 60, // 1 day
-    API: 5 * 60, // 5 minutes
-};
-
-// API endpoints to cache
-const API_ENDPOINTS = [
-    '/api/user',
-    '/api/dashboard-data'
-];
-
-// Install event - cache essential resources
 self.addEventListener('install', event => {
-    console.log('Service Worker: Installing...');
-    event.waitUntil(
-        Promise.all([
-            caches.open(STATIC_CACHE).then(cache => {
-                console.log('Service Worker: Caching static assets');
-                return cache.addAll(STATIC_ASSETS);
-            }),
-            caches.open(DYNAMIC_CACHE)
-        ]).then(() => {
-            return self.skipWaiting();
-        })
-    );
+    event.waitUntil((async () => {
+        const staticCache = await caches.open(STATIC_CACHE);
+        for (const url of STATIC_ASSETS) {
+            try {
+                const response = await fetch(url);
+                if (response && response.ok) {
+                    await staticCache.put(url, response.clone());
+                }
+            } catch (err) {
+                console.warn('Failed to cache:', url);
+            }
+        }
+        await self.skipWaiting();
+    })());
 });
 
-// Activate event - clean up old caches and take control
 self.addEventListener('activate', event => {
-    console.log('Service Worker: Activating...');
     event.waitUntil(
-        Promise.all([
-            // Clean up old caches
-            caches.keys().then(cacheNames => {
-                return Promise.all(
-                    cacheNames.map(cacheName => {
-                        if (cacheName !== STATIC_CACHE && cacheName !== DYNAMIC_CACHE) {
-                            console.log('Service Worker: Deleting old cache:', cacheName);
-                            return caches.delete(cacheName);
-                        }
-                    })
-                );
-            }),
-            // Take control of all clients
-            self.clients.claim()
-        ])
+        caches.keys().then(names => 
+            Promise.all(
+                names.map(name => 
+                    (name !== STATIC_CACHE && name !== DYNAMIC_CACHE) 
+                        ? caches.delete(name) 
+                        : null
+                )
+            )
+        ).then(() => self.clients.claim())
     );
 });
 
-// Fetch event - serve from cache or network
 self.addEventListener('fetch', event => {
     const { request } = event;
-    const url = new URL(request.url);
-
-    // Skip non-GET requests
     if (request.method !== 'GET') return;
 
-    // Handle API requests
-    if (url.pathname.startsWith('/api/')) {
-        event.respondWith(
-            caches.open(DYNAMIC_CACHE).then(cache => {
-                return fetch(request)
-                    .then(response => {
-                        // Cache successful responses
-                        if (response.status === 200) {
-                            cache.put(request, response.clone());
-                        }
-                        return response;
-                    })
-                    .catch(() => {
-                        // Return cached version if available
-                        return cache.match(request);
-                    });
-            })
-        );
-        return;
-    }
+    const url = new URL(request.url);
 
-    // Handle static assets
-    if (STATIC_ASSETS.includes(url.pathname) || url.pathname.match(/\.(css|js|png|jpg|jpeg|svg|ico|woff|woff2)$/)) {
+    // Static assets: cache-first
+    if (url.pathname.match(/\.(css|js|png|jpg|jpeg|svg|ico|gif|webp|woff|woff2)$/)) {
         event.respondWith(
-            caches.match(request).then(cachedResponse => {
-                return cachedResponse || fetch(request).then(response => {
-                    // Cache the response
-                    const responseClone = response.clone();
-                    caches.open(STATIC_CACHE).then(cache => {
-                        cache.put(request, responseClone);
-                    });
+            caches.match(request).then(cached => 
+                cached || fetch(request).then(response => {
+                    if (response.status === 200) {
+                        caches.open(STATIC_CACHE).then(cache => 
+                            cache.put(request, response.clone())
+                        );
+                    }
                     return response;
-                });
-            })
+                })
+            )
         );
         return;
     }
 
-    // Default strategy: Network first, fallback to cache
-    event.respondWith(
-        fetch(request)
-            .then(response => {
-                // Cache successful HTML responses
-                if (response.status === 200 && request.headers.get('accept').includes('text/html')) {
-                    const responseClone = response.clone();
-                    caches.open(DYNAMIC_CACHE).then(cache => {
-                        cache.put(request, responseClone);
-                    });
-                }
-                return response;
-            })
-            .catch(() => {
-                // Return cached version or offline page
-                return caches.match(request).then(cachedResponse => {
-                    if (cachedResponse) {
-                        return cachedResponse;
+    // HTML/Navigation: NETWORK-FIRST (critical for Laravel)
+    if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
+        event.respondWith(
+            fetch(request)
+                .then(response => {
+                    if (response.status === 200) {
+                        caches.open(DYNAMIC_CACHE).then(cache => 
+                            cache.put(request, response.clone())
+                        );
                     }
-                    // Return offline page for HTML requests
-                    if (request.headers.get('accept').includes('text/html')) {
-                        return caches.match('/offline.html');
-                    }
-                    return new Response('', { status: 404 });
-                });
-            })
-    );
-});
-
-// Background sync for offline actions (if needed in future)
-self.addEventListener('sync', event => {
-    console.log('Service Worker: Background sync triggered');
-    if (event.tag === 'background-sync') {
-        event.waitUntil(doBackgroundSync());
-    }
-});
-
-async function doBackgroundSync() {
-    // Implement background sync logic here if needed
-    console.log('Performing background sync...');
-}
-
-// Push notifications (if needed in future)
-self.addEventListener('push', event => {
-    console.log('Service Worker: Push received');
-    if (event.data) {
-        const data = event.data.json();
-        const options = {
-            body: data.body,
-            icon: '/apple-touch-icon.png',
-            badge: '/favicon.ico',
-            vibrate: [100, 50, 100],
-            data: data.data
-        };
-
-        event.waitUntil(
-            self.registration.showNotification(data.title, options)
+                    return response;
+                })
+                .catch(() => 
+                    caches.match(request)
+                        .then(cached => cached || caches.match('/offline.html'))
+                )
         );
+        return;
     }
-});
 
-// Notification click handler
-self.addEventListener('notificationclick', event => {
-    console.log('Service Worker: Notification clicked');
-    event.notification.close();
-
-    event.waitUntil(
-        clients.openWindow(event.notification.data.url || '/')
-    );
+    event.respondWith(fetch(request));
 });

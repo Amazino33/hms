@@ -25,10 +25,11 @@ class AddPerformanceHeaders
         // Add compression hint
         $response->header('Vary', 'Accept-Encoding');
 
-        // Add preload hints for critical resources
-        if ($request->is('/') || $request->is('admin*')) {
-            $response->header('Link', '</build/assets/app.css>; rel=preload; as=style', false);
-        }
+        // NOTE: removed hard-coded preload for `/build/assets/app.css` because
+        // the build pipeline emits hashed filenames (Vite). Use `@vite()` in
+        // Blade to inject correct asset links instead. Adding a stale/static
+        // preload path caused the browser to request a missing file which
+        // returned HTML and triggered MIME errors.
 
         // Add security and performance headers
         $response->headers->set('X-Content-Type-Options', 'nosniff');
