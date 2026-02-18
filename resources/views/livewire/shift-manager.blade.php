@@ -1,5 +1,8 @@
-<div wire:poll.30s="loadCurrentShift">
-@if($showModal)
+<div wire:init="load" wire:poll.30s="loadCurrentShift">
+@if(! $ready)
+    {{-- Skeleton shown until load() fires and $ready becomes true --}}
+    <div></div>
+@elseif($showModal)
 <div class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
     <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-gray-700 relative max-h-[90vh] overflow-y-auto">
         <!-- Loading Overlay -->

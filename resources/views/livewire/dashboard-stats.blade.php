@@ -7,16 +7,16 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
 new class extends Component {
-    public $defer = true;
+    public bool $ready = false;
 
-    public function loadStats()
+    public function load(): void
     {
-        $this->defer = false;
+        $this->ready = true;
     }
 
     public function with()
     {
-        if ($this->defer) {
+        if (! $this->ready) {
             return [
                 'todaySales' => null,
                 'ordersToday' => null,
@@ -55,13 +55,21 @@ new class extends Component {
 };
 ?>
 
-<div wire:init="loadStats">
+<div wire:init="load">
     <!-- Stats Cards -->
     <div class="p-4 space-y-4">
         <div class="grid grid-cols-2 gap-3">
             @if(is_null($todaySales))
                 @for($i=0;$i<2;$i++)
-                    <div class="animate-pulse bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 h-20"></div>
+                    <div class="animate-pulse bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                            <div class="space-y-2 flex-1">
+                                <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded-full w-2/3"></div>
+                                <div class="h-5 bg-gray-300 dark:bg-gray-600 rounded-full w-1/2"></div>
+                            </div>
+                        </div>
+                    </div>
                 @endfor
             @else
                 <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
@@ -93,7 +101,15 @@ new class extends Component {
         <div class="grid grid-cols-2 gap-3">
             @if(is_null($todaySales))
                 @for($i=0;$i<2;$i++)
-                    <div class="animate-pulse bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 h-20"></div>
+                    <div class="animate-pulse bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                            <div class="space-y-2 flex-1">
+                                <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded-full w-2/3"></div>
+                                <div class="h-5 bg-gray-300 dark:bg-gray-600 rounded-full w-1/2"></div>
+                            </div>
+                        </div>
+                    </div>
                 @endfor
             @else
                 <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
@@ -156,7 +172,20 @@ new class extends Component {
         <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
             <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-3">Recent Activity</h3>
 
-            @if($recentActivity->isEmpty())
+            @if(! $ready && $recentActivity->isEmpty())
+                <div class="space-y-2 animate-pulse">
+                    @for ($i = 0; $i < 4; $i++)
+                    <div class="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <div class="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full"></div>
+                        <div class="flex-1 space-y-1">
+                            <div class="h-3 bg-gray-200 dark:bg-gray-600 rounded-full w-3/4"></div>
+                            <div class="h-2 bg-gray-200 dark:bg-gray-600 rounded-full w-1/2"></div>
+                        </div>
+                        <div class="h-2 bg-gray-200 dark:bg-gray-600 rounded-full w-10"></div>
+                    </div>
+                    @endfor
+                </div>
+            @elseif($recentActivity->isEmpty())
                 <div class="space-y-3">
                     <div class="text-center py-4">
                         <div class="text-xs text-gray-500 dark:text-gray-400">No recent orders yet</div>

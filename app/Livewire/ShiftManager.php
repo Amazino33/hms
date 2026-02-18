@@ -12,6 +12,7 @@ class ShiftManager extends Component
     public $shiftDuration;
     public $showModal = false;
     public $isProcessing = false;
+    public bool $ready = false;
 
     protected $listeners = [
         'open-shift-modal' => 'openModal',
@@ -20,6 +21,13 @@ class ShiftManager extends Component
 
     public function mount()
     {
+        // Do NOT load shift data here — wait for wire:init to call load()
+        // This makes the component render instantly without hitting the DB
+    }
+
+    public function load(): void
+    {
+        $this->ready = true;
         $this->loadCurrentShift();
     }
 
