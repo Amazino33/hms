@@ -52,10 +52,11 @@ self.addEventListener('fetch', event => {
         event.respondWith(
             caches.match(request).then(cached => 
                 cached || fetch(request).then(response => {
-                    if (response.status === 200) {
-                        caches.open(STATIC_CACHE).then(cache => 
-                            cache.put(request, response.clone())
-                        );
+                    if (response && response.status === 200 && !response.bodyUsed) {
+                        const copy = response.clone();
+                        caches.open(STATIC_CACHE).then(cache => {
+                            try { cache.put(request, copy); } catch (e) {}
+                        });
                     }
                     return response;
                 })
@@ -65,14 +66,19 @@ self.addEventListener('fetch', event => {
     }
 
     // HTML/Navigation: NETWORK-FIRST (critical for Laravel)
+    // Never cache login/auth pages — stale CSRF tokens cause 419 errors
+    const noCachePaths = ['/login', '/logout', '/register', '/forgot-password', '/reset-password', '/admin/login'];
+    const isAuthPage = noCachePaths.some(p => url.pathname.startsWith(p));
+
     if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
         event.respondWith(
             fetch(request)
                 .then(response => {
-                    if (response.status === 200) {
-                        caches.open(DYNAMIC_CACHE).then(cache => 
-                            cache.put(request, response.clone())
-                        );
+                    if (response.status === 200 && !isAuthPage && !response.bodyUsed) {
+                        const copy = response.clone();
+                        caches.open(DYNAMIC_CACHE).then(cache => {
+                            try { cache.put(request, copy); } catch (e) {}
+                        });
                     }
                     return response;
                 })
