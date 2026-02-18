@@ -170,24 +170,69 @@ class AdminPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::HEAD_END,
             fn () => Blade::render(<<<'HTML'
+            <style>
+                #fi-nprogress {
+                    position: fixed;
+                    top: 0; left: 0;
+                    width: 0%;
+                    height: 3px;
+                    background: #f59e0b;
+                    z-index: 99999;
+                    transition: width 0.15s ease;
+                    border-radius: 0 2px 2px 0;
+                    box-shadow: 0 0 8px rgba(245,158,11,0.6);
+                    pointer-events: none;
+                    opacity: 0;
+                }
+            </style>
+            <div id="fi-nprogress"></div>
             <script>
                 (function() {
+                    const bar = () => document.getElementById('fi-nprogress');
+
+                    // Show bar on any navigation click inside Filament
+                    document.addEventListener('click', function(e) {
+                        const link = e.target.closest('a[href]');
+                        if (!link) return;
+                        const href = link.getAttribute('href');
+                        if (!href || href.startsWith('#') || href.startsWith('javascript') || link.target === '_blank') return;
+                        const b = bar();
+                        if (b) { b.style.opacity = '1'; b.style.width = '60%'; }
+                    });
+
+                    // Complete bar on page load
+                    window.addEventListener('load', function() {
+                        const b = bar();
+                        if (b && b.style.width !== '0%') {
+                            b.style.width = '100%';
+                            setTimeout(() => { b.style.opacity = '0'; b.style.width = '0%'; }, 250);
+                        }
+                    });
+
+                    // Also handle Livewire navigations inside admin
+                    document.addEventListener('livewire:navigate', () => {
+                        const b = bar();
+                        if (b) { b.style.opacity = '1'; b.style.width = '65%'; }
+                    });
+                    document.addEventListener('livewire:navigated', () => {
+                        const b = bar();
+                        if (b) {
+                            b.style.width = '100%';
+                            setTimeout(() => { b.style.opacity = '0'; b.style.width = '0%'; }, 250);
+                        }
+                    });
+
                     if ('serviceWorker' in navigator) {
                         window.addEventListener('load', function() {
                             navigator.serviceWorker.register('/sw.js')
                                 .then(function(registration) {
                                     console.log('✅ ServiceWorker registered:', registration.scope);
-                                    // Check for updates every hour
-                                    setInterval(function() {
-                                        registration.update();
-                                    }, 60 * 60 * 1000);
+                                    setInterval(function() { registration.update(); }, 60 * 60 * 1000);
                                 })
                                 .catch(function(err) {
                                     console.error('❌ ServiceWorker registration failed:', err);
                                 });
                         });
-                    } else {
-                        console.warn('⚠️ ServiceWorker not supported in this browser');
                     }
                 })();
             </script>

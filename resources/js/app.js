@@ -1,5 +1,13 @@
 import 'instant.page';
 
+// ─── Livewire wire:navigate prefetch on hover ─────────────────────────────────
+// Prefetch pages 65ms after hover so they are ready before the user clicks.
+// This is the single biggest perceived-speed win for wire:navigate apps.
+document.addEventListener('livewire:init', () => {
+    Livewire.navigate.prefetchOnHover = true;
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Enhanced PWA Service Worker Registration with Install Prompt
 let deferredPrompt;
 
