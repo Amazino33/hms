@@ -568,6 +568,30 @@ new class extends Component {
         $this->cancellationReason = '';
     }
 
+    public function printBill()
+    {
+        if (!$this->selectedTableId) {
+            Notification::make()->title('Please select a table first')->warning()->send();
+            return;
+        }
+
+        if (empty($this->existingItems) && empty($this->cart)) {
+            Notification::make()->title('No items to print')->warning()->send();
+            return;
+        }
+
+        $table = \App\Models\Table::find($this->selectedTableId);
+        $allItems = array_merge($this->existingItems, $this->cart);
+
+        $this->dispatch('print-bill', [
+            'tableName' => $table?->name ?? 'Table',
+            'items'     => array_values($allItems),
+            'total'     => $this->total,
+            'date'      => now()->format('M j, Y g:i A'),
+            'cashier'   => auth()->user()->name,
+        ]);
+    }
+
     public function with()
     {
         // Deferred load: return empty collections on first render to keep initial HTML small.
@@ -647,7 +671,9 @@ new class extends Component {
 };
 ?>
 
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900"
+     x-data="{}"
+     @print-bill.window="printPOSBill($event.detail[0] ?? $event.detail)">
     <!-- Shift Status Indicator -->
     <div wire:poll.10s="loadCurrentShift" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
         <div class="flex items-center justify-between">
@@ -802,6 +828,13 @@ new class extends Component {
                         <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Cancel</span></button>
                     </div>
+                    @if(auth()->user()->hasAnyRole(['cashier', 'super_admin', 'manager']))
+                    <button @if(auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart))) wire:click="printBill" @endif
+                        class="{{ auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart)) ? 'bg-amber-500 hover:bg-amber-600 cursor-pointer' : 'bg-gray-300 dark:bg-gray-600 cursor-not-allowed' }} w-full text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 touch-manipulation transition-colors mt-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                        <span class="text-sm">Print Unpaid Bill</span>
+                    </button>
+                    @endif
                 </div>
             </div>
         </div>
@@ -1025,6 +1058,13 @@ new class extends Component {
                                     Cancel
                                 </button>
                             </div>
+                            @if(auth()->user()->hasAnyRole(['cashier', 'super_admin', 'manager']))
+                            <button @if(auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart))) wire:click="printBill" @endif
+                                class="{{ auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart)) ? 'bg-amber-500 hover:bg-amber-600 cursor-pointer' : 'bg-gray-300 dark:bg-gray-600 cursor-not-allowed' }} w-full text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation flex items-center justify-center gap-2 mt-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                                Print Unpaid Bill
+                            </button>
+                            @endif
                         </div>
                     @endif
                 </div>
@@ -1154,6 +1194,56 @@ new class extends Component {
             </div>
         </div>
     @endif
+
+    {{-- Print Bill JS --}}
+    <script>
+    window.printPOSBill = function printPOSBill(d) {
+        const win = window.open('', '_blank', 'width=440,height=680,scrollbars=yes,resizable=yes');
+        if (!win) { alert('Please allow pop-ups to print the bill.'); return; }
+        const rows = (d.items || []).map(i =>
+            `<tr><td style="padding:3px 6px;">${i.name}</td><td style="text-align:center;padding:3px 6px;">${i.quantity}</td><td style="text-align:right;padding:3px 6px;">&#8358;${Number(i.price * i.quantity).toLocaleString()}</td></tr>`
+        ).join('');
+        win.document.write(`<!DOCTYPE html>
+<html><head><title>Unpaid Bill – ${d.tableName}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Courier New', monospace; font-size:13px; width:80mm; padding:10px; color:#000; }
+  h1 { text-align:center; font-size:16px; letter-spacing:2px; margin-bottom:2px; }
+  .sub { text-align:center; font-size:11px; margin-bottom:4px; }
+  .dashed { border-top:1px dashed #000; margin:6px 0; }
+  .meta { font-size:12px; margin-bottom:2px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:11px; border-bottom:1px solid #000; padding:2px 6px; }
+  .total-row { font-size:15px; font-weight:bold; text-align:right; margin-top:8px; }
+  .footer { text-align:center; font-size:10px; margin-top:10px; color:#555; }
+  @media print {
+    body { width:auto; }
+    button { display:none; }
+  }
+</style>
+</head>
+<body>
+  <h1>HMS RECEIPT</h1>
+  <div class="sub">*** UNPAID BILL ***</div>
+  <div class="dashed"></div>
+  <div class="meta">Table : <strong>${d.tableName}</strong></div>
+  <div class="meta">Date  : ${d.date}</div>
+  <div class="meta">Staff : ${d.cashier}</div>
+  <div class="dashed"></div>
+  <table>
+    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Amount</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="dashed"></div>
+  <div class="total-row">TOTAL: &#8358;${Number(d.total).toLocaleString()}</div>
+  <div class="dashed"></div>
+  <div class="footer">Thank you for dining with us!<br>This is NOT a payment receipt.</div>
+</body></html>`);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); }, 600);
+    }
+    </script>
 
     @if($showCancelModal)
         <div class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
