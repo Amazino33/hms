@@ -1,6 +1,6 @@
-const CACHE_NAME = 'hms-v2.2';
-const STATIC_CACHE = 'hms-static-v2.2';
-const DYNAMIC_CACHE = 'hms-dynamic-v2.2';
+const CACHE_NAME = 'hms-v2.3';
+const STATIC_CACHE = 'hms-static-v2.3';
+const DYNAMIC_CACHE = 'hms-dynamic-v2.3';
 
 const STATIC_ASSETS = [
     '/offline.html',
@@ -28,16 +28,27 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
+    const authPaths = ['/login', '/logout', '/register', '/forgot-password', '/reset-password', '/admin/login', '/admin/logout'];
+
     event.waitUntil(
-        caches.keys().then(names => 
+        caches.keys().then(names =>
             Promise.all(
-                names.map(name => 
-                    (name !== STATIC_CACHE && name !== DYNAMIC_CACHE) 
-                        ? caches.delete(name) 
+                names.map(name =>
+                    (name !== STATIC_CACHE && name !== DYNAMIC_CACHE)
+                        ? caches.delete(name)
                         : null
                 )
             )
-        ).then(() => self.clients.claim())
+        ).then(async () => {
+            // Delete any stale auth pages that may be sitting in the dynamic cache
+            const dynCache = await caches.open(DYNAMIC_CACHE);
+            const keys = await dynCache.keys();
+            await Promise.all(
+                keys
+                    .filter(req => authPaths.some(p => new URL(req.url).pathname.startsWith(p)))
+                    .map(req => dynCache.delete(req))
+            );
+        }).then(() => self.clients.claim())
     );
 });
 
@@ -66,15 +77,22 @@ self.addEventListener('fetch', event => {
     }
 
     // HTML/Navigation: NETWORK-FIRST (critical for Laravel)
-    // Never cache login/auth pages — stale CSRF tokens cause 419 errors
-    const noCachePaths = ['/login', '/logout', '/register', '/forgot-password', '/reset-password', '/admin/login'];
+    // Auth pages: ALWAYS go to network, NEVER read from or write to cache.
+    // Serving a cached login page means a stale CSRF token → 419 Page Expired.
+    const noCachePaths = ['/login', '/logout', '/register', '/forgot-password', '/reset-password', '/admin/login', '/admin/logout'];
     const isAuthPage = noCachePaths.some(p => url.pathname.startsWith(p));
 
     if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
+        if (isAuthPage) {
+            // Completely bypass the service worker for auth pages — straight to network
+            event.respondWith(fetch(request));
+            return;
+        }
+
         event.respondWith(
             fetch(request)
                 .then(response => {
-                    if (response.status === 200 && !isAuthPage && !response.bodyUsed) {
+                    if (response.status === 200 && !response.bodyUsed) {
                         const copy = response.clone();
                         caches.open(DYNAMIC_CACHE).then(cache => {
                             try { cache.put(request, copy); } catch (e) {}
@@ -82,7 +100,9 @@ self.addEventListener('fetch', event => {
                     }
                     return response;
                 })
-                .catch(() => 
+                .catch(() =>
+                    // Offline fallback: use cached page if available, else offline.html
+                    // Auth pages already returned above so this never serves a stale login
                     caches.match(request)
                         .then(cached => cached || caches.match('/offline.html'))
                 )
