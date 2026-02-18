@@ -10,7 +10,11 @@ class Category extends Model
     use HasFactory;
 
     protected $guarded = [];
-    
+
+    protected $casts = [
+        'commission_rate' => 'decimal:2',
+    ];
+
     public function products()
     {
         return $this->hasMany(Product::class);

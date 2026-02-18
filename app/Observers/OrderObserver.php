@@ -2,29 +2,33 @@
 
 namespace App\Observers;
 
+use App\Models\Commission;
 use App\Models\Order;
-use App\Services\InventoryService;
 use App\Services\DashboardCache;
+use App\Services\InventoryService;
+use Illuminate\Support\Facades\Log;
 
 class OrderObserver
 {
     /**
-     * Handle the Order "creating" event.
+     * Handle the Order "created" event.
      */
     public function created(Order $order): void
     {
         DashboardCache::clearForOrder($order);
+        // Commission for newly-created paid orders is handled by OrderSplitter
+        // AFTER all OrderItems are inserted. We cannot do it here because items
+        // do not exist yet when the 'created' event fires.
     }
 
     /**
      * Handle the Order "updating" event.
-     * This is called before the model is saved when updating.
+     * Called before the model is saved when updating.
      */
     public function updating(Order $order): void
     {
-        // Check if status is being changed to 'cancelled'
+        // Return inventory when an order is cancelled.
         if ($order->isDirty('status') && $order->status === 'cancelled' && $order->getOriginal('status') !== 'cancelled') {
-            // Return inventory items back to stock
             InventoryService::returnInventoryForCancelledOrder($order);
         }
     }
@@ -35,6 +39,20 @@ class OrderObserver
     public function updated(Order $order): void
     {
         DashboardCache::clearForOrder($order);
+
+        // ── Commission Engine ────────────────────────────────────────────────────
+        // Trigger only when status transitions to 'paid' for the first time.
+        // Skip if: no status change, already had a commission, or no waiter assigned.
+        if (
+            ! $order->wasChanged('status')           // status didn't change this save
+            || $order->status !== 'paid'              // didn't become paid
+            || $order->commission()->exists()         // commission already recorded
+            || ! $order->user_id                      // no waiter on this order
+        ) {
+            return;
+        }
+
+        $this->calculateAndSaveCommission($order);
     }
 
     /**
@@ -43,5 +61,41 @@ class OrderObserver
     public function deleted(Order $order): void
     {
         DashboardCache::clearForOrder($order);
+    }
+
+    // ── Private Helpers ──────────────────────────────────────────────────────────
+
+    private function calculateAndSaveCommission(Order $order): void
+    {
+        try {
+            // Eager-load items → product → category in a single query.
+            $order->loadMissing(['items.product.category']);
+
+            $total = 0.0;
+
+            foreach ($order->items as $item) {
+                $rate = 0.0;
+
+                if ($item->item_type === 'product' && $item->product && $item->product->category) {
+                    // commission_rate is a fixed ₦ amount per unit sold
+                    $rate = (float) $item->product->category->commission_rate;
+                }
+                // Menu items do not have a category → commission rate stays 0.
+
+                $total += $item->quantity * $rate;
+            }
+
+            // Only create a record if there is something to credit.
+            if ($total > 0) {
+                Commission::create([
+                    'user_id'  => $order->user_id,
+                    'order_id' => $order->id,
+                    'amount'   => $total,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // Never let commission logic break the payment flow.
+            Log::error('Commission calculation failed for order #' . $order->id . ': ' . $e->getMessage());
+        }
     }
 }

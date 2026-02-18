@@ -46,6 +46,14 @@ class CategoryResource extends Resource
                         'service' => 'Service',
                     ])
                     ->required(),
+                TextInput::make('commission_rate')
+                    ->label('Waiter Commission (₦ per item sold)')
+                    ->helperText('Fixed ₦ amount credited to the waiter per unit of any item in this category. Leave 0 for no commission.')
+                    ->numeric()
+                    ->minValue(0)
+                    ->default(0)
+                    ->suffix('₦ / unit')
+                    ->required(),
             ]);
     }
 
@@ -54,12 +62,16 @@ class CategoryResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->searchable(),
-                BadgeColumn::make('type') // Badges look nicer for status/types
+                BadgeColumn::make('type')
                     ->colors([
                         'primary' => 'food',
                         'warning' => 'drink',
                         'success' => 'service',
                     ]),
+                TextColumn::make('commission_rate')
+                    ->label('Commission (₦/unit)')
+                    ->money('NGN', 0)
+                    ->sortable(),
             ])
         ->recordActions([
             Action::make('edit')

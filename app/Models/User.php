@@ -126,6 +126,14 @@ class User extends Authenticatable implements FilamentUser
         return $this->belongsTo(\App\Models\Warehouse::class);
     }
 
+    /**
+     * Commissions earned by this waiter.
+     */
+    public function commissions(): HasMany
+    {
+        return $this->hasMany(\App\Models\Commission::class);
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
         // Allow super admins unconditionally

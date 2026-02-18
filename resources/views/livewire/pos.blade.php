@@ -331,6 +331,11 @@ new class extends Component {
 
         // 1. Restore old stock & delete all previous orders for the table
         $existingOrders = Order::where('table_id', $tableId)->whereIn('status', ['pending', 'preparing', 'ready', 'served'])->with('items')->get();
+
+        // Preserve the original waiter user_id from existing orders so commission
+        // is credited to the waiter, not the cashier processing payment.
+        $waiterUserId = $existingOrders->first()?->user_id ?? auth()->id();
+
         foreach ($existingOrders as $existingOrder) {
             foreach ($existingOrder->items as $item) {
                 $product = Product::with('category')->find($item->product_id);
@@ -359,11 +364,12 @@ new class extends Component {
         // Use OrderSplitter service to create separate orders per destination
         try {
             $splitter = new OrderSplitter();
-            $orders = $splitter->handle($allItems, $tableId, auth()->id(), [
+            $orders = $splitter->handle($allItems, $tableId, $waiterUserId, [
                 'amount_paid' => $this->paidAmount,
                 'payment_method' => $this->paymentMethod,
                 'status' => $orderStatus,
                 'guest_id' => $this->selectedGuestId,
+                'processed_by_user_id' => auth()->id(),
             ]);
         } catch (\Exception $e) {
             // Handle inventory/stock errors

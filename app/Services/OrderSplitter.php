@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Commission;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -11,6 +12,7 @@ use App\Events\OrderCreated;
 use App\Services\InventoryService;
 use App\Services\ProductionOrderService;
 use Filament\Actions\Action;
+use Illuminate\Support\Facades\Log;
 
 class OrderSplitter
 {
@@ -85,6 +87,7 @@ class OrderSplitter
                     'payment_method' => $options['payment_method'] ?? 'cash',
                     'table_id' => $tableId,
                     'user_id' => $userId,
+                    'processed_by_user_id' => $options['processed_by_user_id'] ?? null,
                     'guest_id' => $options['guest_id'] ?? null,
                     'destination' => $destination,
                 ]);
@@ -131,6 +134,11 @@ class OrderSplitter
 
                 // Create production orders for menu items
                 ProductionOrderService::createProductionOrdersForOrder($order);
+
+                // ── Commission: now that all OrderItems exist, calculate ────────
+                if ($orderStatus === 'paid' && $order->user_id) {
+                    self::calculateCommission($order);
+                }
 
                 event(new OrderCreated($order));
 
@@ -189,5 +197,37 @@ class OrderSplitter
             return $consumerWarehouses[1]->id; // Second consumer warehouse
         }
         return $consumerWarehouses->first()?->id ?? 5;
+    }
+
+    /**
+     * Calculate and persist commission for a paid order.
+     * Must be called AFTER all OrderItems have been inserted.
+     */
+    private static function calculateCommission(Order $order): void
+    {
+        try {
+            // Fresh load of items with product → category so rates are available.
+            $order->load(['items.product.category']);
+
+            $total = 0.0;
+
+            foreach ($order->items as $item) {
+                if ($item->item_type === 'product' && $item->product && $item->product->category) {
+                    $total += $item->quantity * (float) $item->product->category->commission_rate;
+                }
+                // Menu items have no category commission rate.
+            }
+
+            if ($total > 0) {
+                Commission::create([
+                    'user_id'  => $order->user_id,
+                    'order_id' => $order->id,
+                    'amount'   => $total,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // Never let commission logic break the payment flow.
+            Log::error('Commission calculation failed for order #' . $order->id . ': ' . $e->getMessage());
+        }
     }
 }
