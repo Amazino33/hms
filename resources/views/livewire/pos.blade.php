@@ -834,13 +834,6 @@ new class extends Component {
                         <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Cancel</span></button>
                     </div>
-                    @if(auth()->user()->hasAnyRole(['cashier', 'super_admin', 'manager']))
-                    <button @if(auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart))) wire:click="printBill" @endif
-                        class="{{ auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart)) ? 'bg-amber-500 hover:bg-amber-600 cursor-pointer' : 'bg-gray-300 dark:bg-gray-600 cursor-not-allowed' }} w-full text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 touch-manipulation transition-colors mt-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-                        <span class="text-sm">Print Unpaid Bill</span>
-                    </button>
-                    @endif
                 </div>
             </div>
         </div>
@@ -1064,13 +1057,6 @@ new class extends Component {
                                     Cancel
                                 </button>
                             </div>
-                            @if(auth()->user()->hasAnyRole(['cashier', 'super_admin', 'manager']))
-                            <button @if(auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart))) wire:click="printBill" @endif
-                                class="{{ auth()->user()->currentShift() && (!empty($existingItems) || !empty($cart)) ? 'bg-amber-500 hover:bg-amber-600 cursor-pointer' : 'bg-gray-300 dark:bg-gray-600 cursor-not-allowed' }} w-full text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation flex items-center justify-center gap-2 mt-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-                                Print Unpaid Bill
-                            </button>
-                            @endif
                         </div>
                     @endif
                 </div>
