@@ -660,7 +660,7 @@ new class extends Component {
                 </div>
                 <div class="flex overflow-x-auto overflow-y-hidden p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2 flex-nowrap">
                     @foreach($categories as $category)
-                        <button @if(auth()->user()->currentShift()) wire:click="$set('activeCategoryId', {{ $category->id }})" @endif
+                        <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
                             class="px-3 py-2 lg:px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
                             {{ auth()->user()->currentShift() ? '' : 'disabled' }}>{{ $category->name }}</button>
                     @endforeach
@@ -772,7 +772,7 @@ new class extends Component {
                             class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Order</span></button>
                         <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Pay</span></button>
-                        <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
+                        <button @if(auth()->user()->currentShift()) @click="$wire.call('cancelOrder')" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Cancel</span></button>
                     </div>
                 </div>
@@ -794,7 +794,7 @@ new class extends Component {
                     </svg>
                 </div>
                 @if($search)
-                    <button @if(auth()->user()->currentShift()) wire:click="clearSearch" @endif class="absolute right-3 top-1/2 -translate-y-1/2 {{ auth()->user()->currentShift() ? 'text-gray-400 hover:text-gray-600 cursor-pointer' : 'text-gray-300 cursor-not-allowed' }}">
+                    <button @click="if($wire.currentShift) { $wire.call('clearSearch') }" class="absolute right-3 top-1/2 -translate-y-1/2 {{ auth()->user()->currentShift() ? 'text-gray-400 hover:text-gray-600 cursor-pointer' : 'text-gray-300 cursor-not-allowed' }}">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
@@ -806,13 +806,13 @@ new class extends Component {
         <!-- Mobile Categories - Fixed -->
         <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed top-[137px] left-0 right-0 z-20">
             <div class="flex overflow-x-auto overflow-y-hidden p-3 space-x-2 flex-nowrap">
-                <button @if(auth()->user()->currentShift()) wire:click="$set('activeCategoryId', null)" @endif
+                <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', null) }"
                     class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ !$activeCategoryId ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
                     {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                     All
                 </button>
                 @foreach($categories as $category)
-                    <button @if(auth()->user()->currentShift()) wire:click="$set('activeCategoryId', {{ $category->id }})" @endif
+                    <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
                         class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
                         {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                         {{ $category->name }}
@@ -998,7 +998,7 @@ new class extends Component {
                             class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                             Pay
                         </button>
-                        <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
+                        <button @if(auth()->user()->currentShift()) @click="$wire.call('cancelOrder')" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                             Cancel
                         </button>
@@ -1079,7 +1079,7 @@ new class extends Component {
                                 <option value="{{ $guest->id }}">{{ $guest->name }}</option>
                             @endforeach
                         </select>
-                        <button wire:click="$set('showGuestModal', true)"
+                        <button @click="$wire.set('showGuestModal', true)"
                             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-xl font-bold flex items-center justify-center touch-manipulation">
                             +
                         </button>
@@ -1164,7 +1164,7 @@ new class extends Component {
                                     <option value="{{ $guest->id }}">{{ $guest->name }}</option>
                                 @endforeach
                             </select>
-                            <button wire:click="$set('showGuestModal', true)"
+                            <button @click="$wire.set('showGuestModal', true)"
                                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-xl font-bold flex items-center justify-center touch-manipulation">
                                 +
                             </button>
@@ -1191,7 +1191,7 @@ new class extends Component {
                 <div
                     class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white">👤 Add New Guest</h3>
-                    <button wire:click="$set('showGuestModal', false)" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
+                    <button @click="$wire.set('showGuestModal', false)" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
                             class="text-2xl">&times;</span></button>
                 </div>
 
@@ -1212,9 +1212,9 @@ new class extends Component {
                 </div>
 
                 <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3">
-                    <button wire:click="$set('showGuestModal', false)"
+                    <button @click="$wire.set('showGuestModal', false)"
                         class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg touch-manipulation">Cancel</button>
-                    <button wire:click="saveNewGuest"
+                    <button @click="$wire.call('saveNewGuest')"
                         class="px-4 py-3 font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 touch-manipulation">Save Guest</button>
                 </div>
             </div>
@@ -1437,7 +1437,7 @@ new class extends Component {
                 <div
                     class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white">❌ Cancel Order</h3>
-                    <button wire:click="cancelCancelModal" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
+                    <button @click="$wire.call('cancelCancelModal')" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
                             class="text-2xl">&times;</span></button>
                 </div>
 
@@ -1458,9 +1458,9 @@ new class extends Component {
                 </div>
 
                 <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3">
-                    <button wire:click="cancelCancelModal"
+                    <button @click="$wire.call('cancelCancelModal')"
                         class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg touch-manipulation">Keep Order</button>
-                    <button wire:click="confirmCancelOrder"
+                    <button @click="$wire.call('confirmCancelOrder')"
                         class="px-4 py-3 font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 touch-manipulation flex items-center justify-center gap-2">
                         <span>Cancel Order</span>
                     </button>

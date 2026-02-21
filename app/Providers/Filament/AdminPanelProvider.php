@@ -98,9 +98,14 @@ class AdminPanelProvider extends PanelProvider
 
             <script>
                 (function() {
-                    // Use IIFE to prevent duplicate variable declarations
-                    if (window.notificationSystemInitialized) return;
-                    window.notificationSystemInitialized = true;
+                    // User-specific notification monitoring to prevent conflicts across sessions
+                    // Using data from server-side rendered auth()->user()
+                    const userId = document.documentElement.getAttribute('data-user-id') || @json(auth()->id());
+                    const initKey = `notificationSystem_${userId}`;
+                    
+                    // Prevent re-initialization for the same user
+                    if (window[initKey]) return;
+                    window[initKey] = true;
                     
                     let notificationCount = 0;
                     let audioReady = false;
@@ -113,13 +118,13 @@ class AdminPanelProvider extends PanelProvider
                                 audio.pause();
                                 audio.currentTime = 0;
                                 audioReady = true;
-                                console.log('🔊 Notification sound ready');
+                                console.log('🔊 Notification sound ready for user ' + userId);
                             }).catch(e => console.log('Audio unlock failed:', e));
                         }
                     }, { once: true });
 
-                    // Monitor notification badge for changes
-                    setInterval(() => {
+                    // Monitor notification badge for changes (user-specific)
+                    const badgeCheckInterval = setInterval(() => {
                         const badge = document.querySelector('.fi-icon-btn-badge, [class*="badge"]');
                         
                         if (badge) {
@@ -130,11 +135,15 @@ class AdminPanelProvider extends PanelProvider
                                 const audio = document.getElementById('notification-sound');
                                 audio.currentTime = 0;
                                 audio.play().catch(err => console.error('Sound play failed:', err));
+                                console.log(`📢 Notification for user ${userId}: ${currentCount} items`);
                             }
                             
                             notificationCount = currentCount;
                         }
                     }, 2000);
+                    
+                    // Cleanup on page unload
+                    window.addEventListener('beforeunload', () => clearInterval(badgeCheckInterval));
                 })();
             </script>
 
@@ -149,7 +158,7 @@ class AdminPanelProvider extends PanelProvider
             fn () => Blade::render(<<<'HTML'
             <li>
                 <a href="#"
-                   wire:click.prevent="$dispatch('open-shift-modal')"
+                   @@click.prevent="$dispatch('open-shift-modal')"
                    class="flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer touch-manipulation"
                    title="Shift Management"
                 >

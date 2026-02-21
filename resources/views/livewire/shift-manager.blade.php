@@ -1,27 +1,30 @@
-<div wire:init="load" wire:poll.30s="loadCurrentShift">
+<div wire:init="load" wire:poll.30s="loadCurrentShift"
+     x-data="{
+         showModal: false,
+         showDeclarationModal: false,
+         declaredCash: 0,
+         declaredPos: 0
+     }"
+     @open-shift-modal.window="showModal = true"
+     @shift-started.window="showModal = false"
+     @shift-ended.window="showModal = false; showDeclarationModal = false; declaredCash = 0; declaredPos = 0;">
 @if(! $ready)
     {{-- Skeleton shown until load() fires and $ready becomes true --}}
     <div></div>
-@elseif($showModal)
-<div class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
+@else
+<div x-show="showModal" x-cloak class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
     <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-gray-700 relative max-h-[90vh] overflow-y-auto">
         <!-- Loading Overlay -->
-        <div wire:loading wire:target="startShift,endShift" class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10 rounded-2xl">
+        <div wire:loading wire:target="startShift" class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10 rounded-2xl">
             <div class="flex flex-col items-center space-y-3">
                 <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <p class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    <span wire:loading wire:target="startShift">Starting your shift...</span>
-                    <span wire:loading wire:target="endShift">Ending your shift...</span>
-                </p>
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Starting your shift...</p>
             </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0">
-            <h3 class="text-xl font-bold text-gray-900 dark:text-white">
-                <span wire:loading wire:target="startShift,endShift" class="opacity-50">⏰ Shift Management</span>
-                <span wire:loading.remove wire:target="startShift,endShift">⏰ Shift Management</span>
-            </h3>
-            <button wire:click="closeModal" 
-                    wire:loading.attr="disabled" wire:target="startShift,endShift"
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">⏰ Shift Management</h3>
+            <button @click="showModal = false"
+                    wire:loading.attr="disabled" wire:target="startShift"
                     class="text-gray-400 hover:text-red-500 touch-manipulation p-2">
                 <span class="text-2xl">&times;</span>
             </button>
@@ -76,15 +79,10 @@
                                 <div class="text-xs text-green-600 dark:text-green-400">{{ $shiftDuration }} active</div>
                             </div>
                         </div>
-                        <button wire:click="showEndShiftDeclaration"
-                            wire:loading.attr="disabled"
+                        <button @click="showDeclarationModal = true"
                             @if($isProcessing) disabled @endif
                             class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
-                            <svg wire:loading wire:target="showEndShiftDeclaration" class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                            </svg>
-                            <span wire:loading.remove wire:target="showEndShiftDeclaration">End Shift</span>
-                            <span wire:loading wire:target="showEndShiftDeclaration">Preparing...</span>
+                            <span>End Shift</span>
                         </button>
                     </div>
 
@@ -150,7 +148,7 @@
                     </div>
                     <h4 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">Ready to Start?</h4>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">Begin your shift to start processing orders</p>
-                    <button wire:click="startShift"
+                    <button @click="$wire.call('startShift')"
                         wire:loading.attr="disabled"
                         @if($isProcessing) disabled @endif
                         class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95 flex items-center justify-center space-x-2">
@@ -168,8 +166,7 @@
     @endif
 
     <!-- SHIFT DECLARATION MODAL -->
-    @if($showDeclarationModal)
-    <div class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
+    <div x-show="showDeclarationModal" x-cloak class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto relative">
             <!-- Loading Overlay -->
             <div wire:loading wire:target="confirmShiftEnd" class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10 rounded-2xl">
@@ -197,7 +194,7 @@
                         <input 
                             type="number" 
                             id="declaredCash"
-                            wire:model.live="declaredCash"
+                            x-model.number="declaredCash"
                             placeholder="0.00"
                             min="0"
                             step="0.01"
@@ -218,7 +215,7 @@
                         <input 
                             type="number" 
                             id="declaredPos"
-                            wire:model.live="declaredPos"
+                            x-model.number="declaredPos"
                             placeholder="0.00"
                             min="0"
                             step="0.01"
@@ -233,14 +230,14 @@
                 <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                     <div class="flex justify-between items-center">
                         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Total Declared:</span>
-                        <span class="text-xl font-bold text-gray-900 dark:text-white">₦{{ number_format($declaredCash + $declaredPos, 2) }}</span>
+                        <span class="text-xl font-bold text-gray-900 dark:text-white">₦<span x-text="(parseFloat(declaredCash || 0) + parseFloat(declaredPos || 0)).toLocaleString('en', {minimumFractionDigits: 2})"></span></span>
                     </div>
                 </div>
 
                 <!-- Action Buttons -->
                 <div class="flex gap-3">
                     <button 
-                        wire:click="cancelDeclaration"
+                        @click="showDeclarationModal = false; declaredCash = 0; declaredPos = 0;"
                         wire:loading.attr="disabled"
                         wire:target="confirmShiftEnd"
                         class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50"
@@ -248,7 +245,7 @@
                         Cancel
                     </button>
                     <button 
-                        wire:click="confirmShiftEnd"
+                        @click="$wire.call('confirmShiftEnd', declaredCash, declaredPos)"
                         wire:loading.attr="disabled"
                         @if($isProcessing) disabled @endif
                         class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
@@ -263,45 +260,5 @@
             </div>
         </div>
     </div>
-    @endif
 
-    <!-- Toast Notification Container -->
-    <div x-data="{
-        show: false,
-        message: '',
-        type: 'success',
-        showToast(event) {
-            this.message = event.detail[0].message;
-            this.type = event.detail[0].type;
-            this.show = true;
-            setTimeout(() => { this.show = false; }, 3000);
-        }
-    }"
-    @notify.window="showToast($event)"
-    x-show="show"
-    x-transition:enter="transition ease-out duration-300"
-    x-transition:enter-start="transform translate-x-full"
-    x-transition:enter-end="transform translate-x-0"
-    x-transition:leave="transition ease-in duration-200"
-    x-transition:leave-start="transform translate-x-0"
-    x-transition:leave-end="transform translate-x-full"
-    class="fixed top-20 right-6 z-[60] max-w-sm w-full"
-    style="display: none;">
-        <div :class="{
-            'bg-green-500': type === 'success',
-            'bg-red-500': type === 'error',
-            'bg-yellow-500': type === 'warning',
-            'bg-blue-500': type === 'info'
-        }" class="px-6 py-4 rounded-xl shadow-2xl text-white font-medium">
-            <div class="flex items-center space-x-3">
-                <svg x-show="type === 'success'" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <svg x-show="type === 'error'" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span x-text="message"></span>
-            </div>
-        </div>
-    </div>
 </div>

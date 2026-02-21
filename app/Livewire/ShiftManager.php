@@ -81,21 +81,15 @@ class ShiftManager extends Component
             $shift = auth()->user()->startShift();
             $this->loadCurrentShift();
             
-            // Send notification immediately
-            $this->dispatch('notify', [
-                'type' => 'success',
-                'message' => 'Shift Started Successfully!'
-            ]);
             Notification::make()->title('Shift Started')->success()->send();
+
+            // Signal Alpine to close the modal instantly
+            $this->dispatch('shift-started');
 
             // Close modal after successful shift start
             $this->showModal = false;
 
         } catch (\Exception $e) {
-            $this->dispatch('notify', [
-                'type' => 'error',
-                'message' => 'Error starting shift: ' . $e->getMessage()
-            ]);
             Notification::make()->title('Error starting shift: ' . $e->getMessage())->danger()->send();
         } finally {
             $this->isProcessing = false;
@@ -118,18 +112,15 @@ class ShiftManager extends Component
         $this->declaredPos = 0;
     }
 
-    public function confirmShiftEnd()
+    public function confirmShiftEnd($declaredCash = 0, $declaredPos = 0)
     {
         if ($this->isProcessing || !auth()->check()) {
             return;
         }
 
         // Validate amounts
-        if ($this->declaredCash < 0 || $this->declaredPos < 0) {
-            $this->dispatch('notify', [
-                'type' => 'error',
-                'message' => 'Cash and POS amounts cannot be negative'
-            ]);
+        if ($declaredCash < 0 || $declaredPos < 0) {
+            Notification::make()->title('Cash and POS amounts cannot be negative')->danger()->send();
             return;
         }
 
@@ -141,31 +132,25 @@ class ShiftManager extends Component
             // Update shift with declared amounts
             if ($shift) {
                 $shift->update([
-                    'declared_cash' => $this->declaredCash,
-                    'declared_pos' => $this->declaredPos,
+                    'declared_cash' => $declaredCash,
+                    'declared_pos' => $declaredPos,
                 ]);
             }
             
             $this->loadCurrentShift();
             
-            // Send notification immediately
-            $this->dispatch('notify', [
-                'type' => 'success',
-                'message' => 'Shift Ended Successfully!'
-            ]);
             Notification::make()->title('Shift Ended Successfully')->success()->send();
 
-            // Close modals after successful shift end
+            // Signal Alpine to close both modals instantly
+            $this->dispatch('shift-ended');
+
+            // Keep PHP state in sync
             $this->showModal = false;
             $this->showDeclarationModal = false;
             $this->declaredCash = 0;
             $this->declaredPos = 0;
 
         } catch (\Exception $e) {
-            $this->dispatch('notify', [
-                'type' => 'error',
-                'message' => 'Error ending shift: ' . $e->getMessage()
-            ]);
             Notification::make()->title('Error ending shift: ' . $e->getMessage())->danger()->send();
         } finally {
             $this->isProcessing = false;
