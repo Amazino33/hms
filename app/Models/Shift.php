@@ -12,11 +12,20 @@ class Shift extends Model
         'user_id',
         'started_at',
         'ended_at',
+        'status',
+        'declared_cash',
+        'declared_pos',
+        'supervisor_confirmed_cash',
+        'supervisor_confirmed_pos',
     ];
 
     protected $casts = [
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
+        'declared_cash' => 'decimal:2',
+        'declared_pos' => 'decimal:2',
+        'supervisor_confirmed_cash' => 'decimal:2',
+        'supervisor_confirmed_pos' => 'decimal:2',
     ];
 
     public function user(): BelongsTo

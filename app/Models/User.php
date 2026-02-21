@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
+use App\Models\Order;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -98,11 +99,15 @@ class User extends Authenticatable implements FilamentUser
     {
         // End any existing active shift first
         if ($currentShift = $this->currentShift()) {
-            $currentShift->update(['ended_at' => now()]);
+            $currentShift->update([
+                'ended_at' => now(),
+                'status' => 'closed',
+            ]);
         }
 
         return $this->shifts()->create([
             'started_at' => now(),
+            'status' => 'active',
         ]);
     }
 
@@ -113,7 +118,22 @@ class User extends Authenticatable implements FilamentUser
     {
         $shift = $this->currentShift();
         if ($shift) {
-            $shift->update(['ended_at' => now()]);
+            $endedAt = now();
+
+            $orders = Order::query()
+                ->where('user_id', $this->id)
+                ->whereBetween('created_at', [$shift->started_at, $endedAt])
+                ->whereIn('status', ['paid', 'partial'])
+                ->selectRaw('COALESCE(SUM(paid_cash), 0) as paid_cash')
+                ->selectRaw('COALESCE(SUM(paid_pos), 0) as paid_pos')
+                ->first();
+
+            $shift->update([
+                'ended_at' => $endedAt,
+                'status' => 'pending_supervisor',
+                'declared_cash' => (float) ($orders->paid_cash ?? 0),
+                'declared_pos' => (float) ($orders->paid_pos ?? 0),
+            ]);
         }
         return $shift;
     }

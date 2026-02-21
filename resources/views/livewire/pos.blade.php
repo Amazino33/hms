@@ -206,7 +206,7 @@ new class extends Component {
         Notification::make()->title('Guest Added')->success()->send();
     }
 
-    public function processPayment(array $cartItems, float $paidAmount, string $paymentMethod, ?int $guestId = null)
+    public function processPayment(array $cartItems, float $paidAmount, string $paymentMethod, ?int $guestId = null, array $splitPayments = [])
     {
         // Check if user has an active shift
         if (!auth()->user()->currentShift()) {
@@ -225,6 +225,20 @@ new class extends Component {
         if ($total <= 0) {
             Notification::make()->title('Cart is empty')->warning()->send();
             return;
+        }
+
+        // Validate split payment if applicable
+        if (!empty($splitPayments)) {
+            $splitTotal = ($splitPayments['cash'] ?? 0) + ($splitPayments['pos'] ?? 0);
+            if ($splitTotal - $total > 0.01) {
+                Notification::make()
+                    ->title('Split Payment Error')
+                    ->body("Cash (₦" . number_format($splitPayments['cash'] ?? 0) . ") + POS (₦" . number_format($splitPayments['pos'] ?? 0) . ") cannot exceed Total (₦" . number_format($total) . ")")
+                    ->danger()
+                    ->send();
+                return;
+            }
+            $paidAmount = $splitTotal;
         }
 
         if ($paidAmount < $total && empty($guestId)) {
@@ -291,6 +305,8 @@ new class extends Component {
                 'status'                => $orderStatus,
                 'guest_id'              => $guestId,
                 'processed_by_user_id'  => auth()->id(),
+                'paid_cash'             => $splitPayments['cash'] ?? ($paymentMethod === 'cash' ? $paidAmount : 0),
+                'paid_pos'              => $splitPayments['pos'] ?? ($paymentMethod !== 'cash' ? $paidAmount : 0),
             ]);
         } catch (\Exception $e) {
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
@@ -304,7 +320,7 @@ new class extends Component {
             \App\Models\OrderPayment::create([
                 'order_id' => $orders[0]->id,
                 'amount'   => $paidAmount,
-                'method'   => $paymentMethod,
+                'method'   => !empty($splitPayments) ? 'split' : $paymentMethod,
                 'user_id'  => auth()->id(),
                 'shift_id' => auth()->user()?->currentShift()?->id,
                 'paid_at'  => now(),
@@ -997,7 +1013,7 @@ new class extends Component {
             class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 relative max-h-[90vh] overflow-y-auto">
 
             <div
-                class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0">
+                class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0 z-50">
                 <h3 class="text-xl font-bold text-gray-900 dark:text-white">💰 Checkout</h3>
                 <button @click="showPaymentModal = false" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
                         class="text-2xl">&times;</span></button>
@@ -1009,8 +1025,27 @@ new class extends Component {
                     <div class="text-3xl lg:text-4xl font-black text-gray-900 dark:text-white">₦<span x-text="total.toLocaleString()"></span></div>
                 </div>
 
+                <!-- Payment Type Selector -->
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Amount Received</label>
+                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Payment Type</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button @click="paymentType = 'single'; paidAmount = total; splitCashAmount = 0; splitPosAmount = 0;"
+                            :class="paymentType === 'single' ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600'"
+                            class="p-3 border rounded-lg font-bold text-sm transition-colors touch-manipulation">
+                            Single Payment
+                        </button>
+                        <button @click="paymentType = 'split'; splitCashAmount = 0; splitPosAmount = 0;"
+                            :class="paymentType === 'split' ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600'"
+                            class="p-3 border rounded-lg font-bold text-sm transition-colors touch-manipulation">
+                            Split Payment
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Single Payment (Original) -->
+                <div x-show="paymentType === 'single'">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Amount Received</label>
                     <div class="relative">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
                         <input type="number" x-model="paidAmount" inputmode="decimal"
@@ -1061,14 +1096,90 @@ new class extends Component {
                         @endforeach
                     </div>
                 </div>
+                </div>
+
+                <!-- Split Payment (New) -->
+                <div x-show="paymentType === 'split'" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">💵 Cash Amount</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
+                            <input type="number" x-model.number="splitCashAmount" inputmode="decimal"
+                                class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
+                                placeholder="0.00">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">💳 POS Amount</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
+                            <input type="number" x-model.number="splitPosAmount" inputmode="decimal"
+                                class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
+                                placeholder="0.00">
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-600 dark:text-gray-400">Total Due:</span>
+                            <span class="font-bold">₦<span x-text="total.toLocaleString()"></span></span>
+                        </div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-600 dark:text-gray-400">Split Total:</span>
+                            <span class="font-bold" :class="(splitCashAmount + splitPosAmount) <= total ? 'text-green-600' : 'text-red-600'">
+                                ₦<span x-text="(splitCashAmount + splitPosAmount).toLocaleString()"></span>
+                            </span>
+                        </div>
+                        <div class="border-t border-gray-300 dark:border-gray-600 pt-2 mt-2">
+                            <div class="flex justify-between font-bold">
+                                <span class="text-gray-700 dark:text-gray-300">Remaining:</span>
+                                <span :class="(total - (splitCashAmount + splitPosAmount)) >= -0.01 ? 'text-green-600' : 'text-red-600'">
+                                    ₦<span x-text="Math.max(total - (splitCashAmount + splitPosAmount), 0).toLocaleString()"></span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div x-show="(splitCashAmount + splitPosAmount) - total > 0.01"
+                        class="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                        <p class="text-sm text-yellow-800 dark:text-yellow-300 font-medium">
+                            ⚠️ Cash + POS cannot exceed the total amount
+                        </p>
+                    </div>
+
+                    <div x-show="total - (splitCashAmount + splitPosAmount) > 0.01"
+                        class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800 text-center animate-pulse">
+                        <span class="text-red-700 dark:text-red-400 font-bold text-sm">⚠️ Remaining Debt:</span>
+                        <div class="text-2xl font-black text-red-600 dark:text-red-400">₦<span x-text="(total - (splitCashAmount + splitPosAmount)).toLocaleString()"></span></div>
+                    </div>
+
+                    <div x-show="total - (splitCashAmount + splitPosAmount) > 0.01">
+                        <label class="block text-sm font-bold text-red-600 mb-1">Select Guest for Debt *</label>
+                        <div class="flex gap-2">
+                            <select wire:model="selectedGuestId"
+                                class="w-full p-3 text-base border border-red-300 rounded-lg dark:bg-gray-800 dark:border-red-900 touch-manipulation">
+                                <option value="">-- Select Guest --</option>
+                                @foreach(\App\Models\Guest::all() as $guest)
+                                    <option value="{{ $guest->id }}">{{ $guest->name }}</option>
+                                @endforeach
+                            </select>
+                            <button wire:click="$set('showGuestModal', true)"
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-xl font-bold flex items-center justify-center touch-manipulation">
+                                +
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3 sticky bottom-0 bg-white dark:bg-gray-900">
                 <button @click="showPaymentModal = false"
                     class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 touch-manipulation">Cancel</button>
                 <button @click="confirmPayment()"
-                    :disabled="isLoading"
-                    class="px-4 py-3 font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 touch-manipulation disabled:opacity-50"><span x-text="isLoading ? 'Processing…' : 'Confirm'"></span></button>
+                    :disabled="isLoading || (paymentType === 'split' && ((splitCashAmount + splitPosAmount) - total > 0.01 || ((total - (splitCashAmount + splitPosAmount)) > 0.01 && !$wire.selectedGuestId)))"
+                    :class="isLoading || (paymentType === 'split' && ((splitCashAmount + splitPosAmount) - total > 0.01 || ((total - (splitCashAmount + splitPosAmount)) > 0.01 && !$wire.selectedGuestId))) ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'"
+                    class="px-4 py-3 font-bold text-white rounded-lg shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 touch-manipulation"><span x-text="isLoading ? 'Processing…' : 'Confirm'"></span></button>
             </div>
         </div>
     </div>
@@ -1121,6 +1232,9 @@ new class extends Component {
             showPaymentModal: false,
             paidAmount: 0,
             paymentMethod: 'cash',
+            paymentType: 'single',
+            splitCashAmount: 0,
+            splitPosAmount: 0,
             isLoading: false,
 
             get cartCount() {
@@ -1199,6 +1313,9 @@ new class extends Component {
                 if (this.total <= 0) return;
                 this.paidAmount = this.total;
                 this.paymentMethod = 'cash';
+                this.paymentType = 'single';
+                this.splitCashAmount = 0;
+                this.splitPosAmount = 0;
                 this.$wire.$set('selectedGuestId', null);
                 this.showPaymentModal = true;
                 this.showCart = false;
@@ -1208,17 +1325,30 @@ new class extends Component {
                 if (this.isLoading) return;
                 this.isLoading = true;
                 try {
-                    await this.$wire.processPayment(
-                        this.cart,
-                        parseFloat(this.paidAmount || 0),
-                        this.paymentMethod,
-                        this.$wire.selectedGuestId || null
-                    );
+                    if (this.paymentType === 'split') {
+                        await this.$wire.processPayment(
+                            this.cart,
+                            this.splitCashAmount + this.splitPosAmount,
+                            'split',
+                            this.$wire.selectedGuestId || null,
+                            { cash: this.splitCashAmount, pos: this.splitPosAmount }
+                        );
+                    } else {
+                        await this.$wire.processPayment(
+                            this.cart,
+                            parseFloat(this.paidAmount || 0),
+                            this.paymentMethod,
+                            this.$wire.selectedGuestId || null,
+                            {}
+                        );
+                    }
                     // Wire updated server state — sync Alpine directly (no dispatch needed)
                     this.cart = {};
                     this.showPaymentModal = false;
                     this.showCart = false;
                     this.paidAmount = 0;
+                    this.splitCashAmount = 0;
+                    this.splitPosAmount = 0;
                     this.existingTotal = this.$wire.existingTotal;
                 } catch (e) {
                     // Errors already shown as Filament notifications from server

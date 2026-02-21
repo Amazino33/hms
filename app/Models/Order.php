@@ -12,6 +12,8 @@ class Order extends Model
     protected $guarded = [];
     protected $casts = [
         'destination' => 'string',
+        'paid_cash' => 'decimal:2',
+        'paid_pos' => 'decimal:2',
     ];
 
     public function items() 

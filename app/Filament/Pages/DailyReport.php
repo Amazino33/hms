@@ -51,12 +51,14 @@ class DailyReport extends Page implements HasForms
         $date = $this->data['date'] ?? now()->format('Y-m-d');
         $targetDate = Carbon::parse($date);
 
-        // 1. CASH FLOW (Actual money received)
-        $payments = OrderPayment::whereDate('paid_at', $targetDate)->get();
+        // 1. CASH FLOW - Now use paid_cash and paid_pos from orders
+        $orders = Order::whereDate('created_at', $targetDate)
+            ->whereIn('status', ['paid', 'partial'])
+            ->get();
 
-        $totalCollected = $payments->sum('amount');
-        $cashHand = $payments->where('method', 'cash')->sum('amount');
-        $posBank = $payments->whereIn('method', ['pos', 'transfer'])->sum('amount');
+        $cashHand = $orders->sum('paid_cash');
+        $posBank = $orders->sum('paid_pos');
+        $totalCollected = $cashHand + $posBank;
 
         // 2. DEBT (Total outstanding debt)
         $totalDebt = Order::where('status', 'partial')
@@ -64,6 +66,7 @@ class DailyReport extends Page implements HasForms
             ->sum(fn($order) => $order->total_amount - $order->amount_paid);
 
         // 3. STAFF PERFORMANCE (Who collected what)
+        $payments = OrderPayment::whereDate('paid_at', $targetDate)->with('user')->get();
         $staffStats = $payments->groupBy('user_id')
             ->map(fn ($items) => [
                 'name' => $items->first()->user->name ?? 'Unknown',

@@ -79,10 +79,20 @@ class OrderSplitter
                     $amountPaid = $paidAmount; // For pending or other cases
                 }
 
+                // Calculate proportional split amounts
+                $paidCash = 0;
+                $paidPos = 0;
+                if ($totalCartAmount > 0) {
+                    $paidCash = round(($groupTotal / $totalCartAmount) * ($options['paid_cash'] ?? 0), 2);
+                    $paidPos = round(($groupTotal / $totalCartAmount) * ($options['paid_pos'] ?? 0), 2);
+                }
+
                 $order = Order::create([
                     'order_number' => 'ORD-' . time() . '-' . strtoupper(substr($destination,0,1)),
                     'total_amount' => $groupTotal,
                     'amount_paid' => $amountPaid,
+                    'paid_cash' => $paidCash,
+                    'paid_pos' => $paidPos,
                     'status' => $orderStatus,
                     'payment_method' => $options['payment_method'] ?? 'cash',
                     'table_id' => $tableId,

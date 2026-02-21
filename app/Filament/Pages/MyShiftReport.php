@@ -58,7 +58,15 @@ class MyShiftReport extends Page
 
         $currentShiftData = [];
         if ($currentShift) {
-            // Current shift data
+            // Current shift data - use paid_cash and paid_pos from orders instead of payment method
+            $myOrders = Order::where('user_id', $userId)
+                ->whereBetween('created_at', [$currentShift->started_at, now()])
+                ->whereIn('status', ['paid', 'partial'])
+                ->get();
+
+            $cashHand = $myOrders->sum('paid_cash');
+            $posTotal = $myOrders->sum('paid_pos');
+
             $myPayments = OrderPayment::where('user_id', $userId)
                 ->where('shift_id', $currentShift->id)
                 ->get();
@@ -75,8 +83,8 @@ class MyShiftReport extends Page
                 'shift_active' => true,
                 'shift_start' => $currentShift->started_at->format('l, d M Y H:i'),
                 'shift_duration' => $currentShift->started_at->diffForHumans(now(), true),
-                'cash_hand' => $myPayments->where('method', 'cash')->sum('amount'),
-                'pos_total' => $myPayments->whereIn('method', ['pos', 'transfer'])->sum('amount'),
+                'cash_hand' => $cashHand,
+                'pos_total' => $posTotal,
                 'total_collected' => $myPayments->sum('amount'),
                 'transaction_count' => $myPayments->count(),
                 'transactions' => $myPayments->sortByDesc('paid_at'),
@@ -100,6 +108,12 @@ class MyShiftReport extends Page
 
         // Format shift history
         $formattedHistory = $shiftHistory->map(function ($shift) {
+            // Get orders from this shift instead of just payments
+            $shiftOrders = Order::where('processed_by_user_id', $shift->user_id)
+                ->whereBetween('created_at', [$shift->started_at, $shift->ended_at])
+                ->whereIn('status', ['paid', 'partial'])
+                ->get();
+
             return [
                 'id' => $shift->id,
                 'started_at' => $shift->started_at,
@@ -107,8 +121,8 @@ class MyShiftReport extends Page
                 'duration' => $shift->started_at->diffInMinutes($shift->ended_at),
                 'total_payments' => $shift->payments->sum('amount'),
                 'transaction_count' => $shift->payments->count(),
-                'cash_payments' => $shift->payments->where('method', 'cash')->sum('amount'),
-                'pos_payments' => $shift->payments->whereIn('method', ['pos', 'transfer'])->sum('amount'),
+                'cash_payments' => $shiftOrders->sum('paid_cash'),
+                'pos_payments' => $shiftOrders->sum('paid_pos'),
             ];
         });
 
