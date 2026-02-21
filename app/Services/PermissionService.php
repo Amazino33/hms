@@ -208,6 +208,56 @@ class PermissionService
     }
 
     /**
+     * Get all available widgets that support dynamic visibility via canView().
+     * Only widgets that implement canView() backed by this permission system
+     * need an entry here — extend the list as you add more.
+     */
+    public static function getAvailableWidgets(): array
+    {
+        $widgets = [];
+
+        $widgetFiles = glob(app_path('Filament/Widgets/*.php'));
+        foreach ($widgetFiles as $file) {
+            $className = 'App\\Filament\\Widgets\\' . basename($file, '.php');
+            if (! class_exists($className)) {
+                continue;
+            }
+
+            $reflection = new \ReflectionClass($className);
+
+            // Skip abstract classes and those that don't declare canView() themselves
+            // (i.e. only include widgets that opted in to permission-gating)
+            if ($reflection->isAbstract()) {
+                continue;
+            }
+
+            if (! $reflection->hasMethod('canView')) {
+                continue;
+            }
+
+            // The method must be declared on THIS class, not inherited from a base widget
+            $method = $reflection->getMethod('canView');
+            if ($method->getDeclaringClass()->getName() !== $className) {
+                continue;
+            }
+
+            $widgets[$className] = self::getWidgetDisplayName($className);
+        }
+
+        return $widgets;
+    }
+
+    /**
+     * Get a human-readable label for a widget class.
+     */
+    private static function getWidgetDisplayName(string $widgetClass): string
+    {
+        $className = basename(str_replace('\\', '/', $widgetClass));
+        // e.g. LowStockAlertsWidget → Low Stock Alerts Widget
+        return trim(preg_replace('/([A-Z])/', ' $1', $className));
+    }
+
+    /**
      * Get all available pages for permission management
      */
     public static function getAvailablePages(): array

@@ -22,6 +22,9 @@ class PagePermissionsManager extends Page
 
     public ?array $permissions = [];
 
+    /** Mirrors $permissions but keyed on widget class names. */
+    public ?array $widgetPermissions = [];
+
     public function mount(): void
     {
         $this->loadCurrentPermissions();
@@ -29,31 +32,52 @@ class PagePermissionsManager extends Page
 
     protected function loadCurrentPermissions(): void
     {
+        // ── Pages ────────────────────────────────────────────────────────────
         $pages = PermissionService::getAvailablePages();
-        $roles = Role::all();
-
         $this->permissions = [];
 
         foreach ($pages as $pageClass => $pageName) {
             $this->permissions[$pageClass] = [
-                'name' => $pageName,
+                'name'  => $pageName,
                 'roles' => PagePermission::getRolesForPage($pageClass),
+            ];
+        }
+
+        // ── Widgets ──────────────────────────────────────────────────────────
+        $widgets = PermissionService::getAvailableWidgets();
+        $this->widgetPermissions = [];
+
+        foreach ($widgets as $widgetClass => $widgetName) {
+            $this->widgetPermissions[$widgetClass] = [
+                'name'  => $widgetName,
+                'roles' => PagePermission::getRolesForPage($widgetClass),
             ];
         }
     }
 
     public function savePermissions(): void
     {
-        // Clear existing permissions
+        // Clear existing permissions for all pages AND widgets
         PagePermission::truncate();
 
-        // Save new permissions
+        // Re-save page permissions
         foreach ($this->permissions ?? [] as $pageClass => $pageData) {
             foreach ($pageData['roles'] ?? [] as $roleName) {
                 PagePermission::create([
                     'page_class' => $pageClass,
-                    'page_name' => $pageData['name'] ?? $pageClass,
-                    'role_name' => $roleName,
+                    'page_name'  => $pageData['name'] ?? $pageClass,
+                    'role_name'  => $roleName,
+                ]);
+            }
+        }
+
+        // Re-save widget permissions (stored in the same table, same columns)
+        foreach ($this->widgetPermissions ?? [] as $widgetClass => $widgetData) {
+            foreach ($widgetData['roles'] ?? [] as $roleName) {
+                PagePermission::create([
+                    'page_class' => $widgetClass,
+                    'page_name'  => $widgetData['name'] ?? $widgetClass,
+                    'role_name'  => $roleName,
                 ]);
             }
         }

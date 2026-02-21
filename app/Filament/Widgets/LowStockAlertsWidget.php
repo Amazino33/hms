@@ -4,12 +4,23 @@ namespace App\Filament\Widgets;
 
 use Filament\Widgets\Widget;
 use App\Services\InventoryService;
+use App\Services\PermissionService;
 
 class LowStockAlertsWidget extends Widget
 {
     protected string $view = 'filament.widgets.low-stock-alerts-widget';
 
     protected int | string | array $columnSpan = 'full';
+
+    /**
+     * Dynamic visibility: controlled via the Page Permissions Manager.
+     * Super Admin always sees it; for other roles a record must exist in
+     * the page_permissions table pointing at this widget class.
+     */
+    public static function canView(): bool
+    {
+        return PermissionService::canAccessPage(self::class);
+    }
 
     // Deferred + collapsed-by-default behavior
     public bool $ready = false;
