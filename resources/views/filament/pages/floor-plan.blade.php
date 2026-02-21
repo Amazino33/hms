@@ -22,7 +22,10 @@
                 '.footer { text-align:center; font-size:10px; margin-top:10px; color:#555; }' +
                 '@media print { body { width:auto; } button { display:none; } }' +
                 '</style></head><body>' +
-                '<h1>HMS RECEIPT</h1>' +
+                (d.company && d.company.logo ? '<div style="text-align:center;margin-bottom:6px;"><img src="' + d.company.logo + '" style="max-height:60px;max-width:140px;object-fit:contain;" /></div>' : '') +
+                '<h1>' + (d.company && d.company.name ? d.company.name : 'HMS RECEIPT') + '</h1>' +
+                (d.company && d.company.address ? '<div class="sub">' + d.company.address + '</div>' : '') +
+                (d.company && d.company.phone ? '<div class="sub">' + d.company.phone + '</div>' : '') +
                 '<div class="sub">*** UNPAID BILL ***</div>' +
                 '<div class="dashed"></div>' +
                 '<div class="meta">Table : <strong>' + d.tableName + '</strong></div>' +
@@ -268,7 +271,13 @@
                                         items: {{ json_encode($printItems) }},
                                         total: {{ $printTotal }},
                                         date: '{{ now()->format('M j, Y g:i A') }}',
-                                        cashier: '{{ addslashes(auth()->user()->name) }}'
+                                        cashier: '{{ addslashes(auth()->user()->name) }}',
+                                        company: {
+                                            name: '{{ addslashes($printCompanyName) }}',
+                                            address: '{{ addslashes($printCompanyAddress) }}',
+                                            phone: '{{ addslashes($printCompanyPhone) }}',
+                                            logo: '{{ $printCompanyLogo }}'
+                                        }
                                     });
                                 "
                                 class="px-4 py-3 font-bold text-white bg-amber-500 rounded-lg hover:bg-amber-600 active:bg-amber-700 touch-manipulation transition flex items-center justify-center gap-2">

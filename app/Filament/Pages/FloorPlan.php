@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Services\PermissionService;
+use App\Models\Company;
 use App\Models\Table;
 use App\Models\Order;
 use Filament\Actions\Action;
@@ -24,6 +25,12 @@ class FloorPlan extends Page
     public string $printTableName = '';
     public array $printItems = [];
     public float $printTotal = 0;
+
+    // Company info for receipt header
+    public string $printCompanyName = '';
+    public string $printCompanyAddress = '';
+    public string $printCompanyPhone = '';
+    public string $printCompanyLogo = '';
 
     // Refresh data for the view
     public function getViewData(): array
@@ -76,6 +83,13 @@ class FloorPlan extends Page
         $this->printTableName = $table->name;
         $this->printItems     = array_values($items);
         $this->printTotal     = $total;
+
+        $company = Company::first();
+        $this->printCompanyName    = $company?->name ?? '';
+        $this->printCompanyAddress = $company?->address ?? '';
+        $this->printCompanyPhone   = $company?->phone_number ?? '';
+        $this->printCompanyLogo    = $company?->logo_path ? asset('storage/' . $company->logo_path) : '';
+
         $this->showPrintModal = true;
     }
 
@@ -89,6 +103,10 @@ class FloorPlan extends Page
         $this->printTableName = '';
         $this->printItems     = [];
         $this->printTotal     = 0;
+        $this->printCompanyName    = '';
+        $this->printCompanyAddress = '';
+        $this->printCompanyPhone   = '';
+        $this->printCompanyLogo    = '';
     }
 
     // Action: Clear a table directly from this screen
