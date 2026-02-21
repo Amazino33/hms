@@ -547,12 +547,7 @@ new class extends Component {
 
             // Add available stock based on warehouse logic
             foreach ($products as $product) {
-                $warehouseId = match(true) {
-                    $product->category && $product->category->type === 'drink' => 4,
-                    $product->category && $product->category->type === 'food' => 5,
-                    default => 3,
-                };
-                
+                $warehouseId = \App\Services\InventoryService::getWarehouseForProduct($product);
                 $product->available_stock = $product->inventory->where('warehouse_id', $warehouseId)->sum('quantity');
             }
 
@@ -588,15 +583,9 @@ new class extends Component {
     }
 
     // Helper to get Warehouse ID consistently
-    private function getWarehouseId($product)
+    private function getWarehouseId($product): int
     {
-        if (!$product || !$product->category) return 3; // Default to Main Warehouse (ID 3)
-
-        return match($product->category->type) {
-            'drink' => 4, // 🍺 Bar
-            'food'  => 5, // 🍔 Kitchen
-            default => 3, // 📦 Main
-        };
+        return \App\Services\InventoryService::getWarehouseForProduct($product);
     }
 };
 ?>
@@ -910,6 +899,18 @@ new class extends Component {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
+                </div>
+                <div class="px-4 py-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 6h18M3 14h18M3 18h18"></path>
+                    </svg>
+                    @if($selectedTableId === 'takeaway')
+                        <span>Take Away</span>
+                    @elseif($selectedTableId)
+                        <span>{{ $tables->find($selectedTableId)?->name ?? 'Table' }}</span>
+                    @else
+                        <span class="italic">No table selected</span>
+                    @endif
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-4 space-y-3 relative">

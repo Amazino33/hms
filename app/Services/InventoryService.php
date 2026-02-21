@@ -200,7 +200,7 @@ class InventoryService
     /**
      * Get the appropriate warehouse ID for a product based on its category
      */
-    private static function getWarehouseForProduct($product): int
+    public static function getWarehouseForProduct($product): int
     {
         return match(true) {
             $product && $product->category && $product->category->type === 'drink' => self::getBarWarehouseId(),
