@@ -7,6 +7,7 @@ use App\Filament\Resources\ShiftManagement\Pages\ViewShiftManagement;
 use App\Filament\Resources\ShiftManagement\Schemas\ShiftManagementInfolist;
 use App\Filament\Resources\ShiftManagement\Tables\ShiftManagementTable;
 use App\Models\Shift;
+use App\Services\PermissionService;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -27,9 +28,7 @@ class ShiftManagementResource extends Resource
 
     public static function canViewAny(): bool
     {
-        $user = auth()->user();
-
-        return $user && $user->hasAnyRole(['supervisor', 'admin']);
+        return PermissionService::canAccessPage(self::class);
     }
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
