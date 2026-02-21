@@ -132,12 +132,16 @@ new class extends Component {
 
         if ($itemType === 'product') {
             $product = Product::with('category')->find($itemId);
-            $warehouseId = $this->getWarehouseId($product);
 
+            // Sum stock across ALL consumer warehouses for this product.
+            // Avoids the fragile orderBy('id') bar/kitchen swap that breaks on each environment.
+            $consumerWarehouseIds = Cache::remember('consumer_warehouse_ids', 3600, fn() =>
+                \App\Models\WareHouse::where('type', 'consumer')->pluck('id')
+            );
             $available = (int) DB::table('inventory_items')
                 ->where('product_id', $itemId)
-                ->where('warehouse_id', $warehouseId)
-                ->value('quantity') ?? 0;
+                ->whereIn('warehouse_id', $consumerWarehouseIds)
+                ->sum('quantity');
 
             if ($available <= $currentQty) {
                 Notification::make()->title('Out of Stock')->body("Only {$available} available in stock.")->danger()->send();
@@ -545,10 +549,13 @@ new class extends Component {
 
             $products = $query->limit(100)->get();
 
-            // Add available stock based on warehouse logic
+            // Add available stock: sum across all consumer warehouses
+            // This avoids wrong results when bar/kitchen warehouse IDs differ per environment
+            $consumerWarehouseIds = \App\Models\WareHouse::where('type', 'consumer')->pluck('id');
             foreach ($products as $product) {
-                $warehouseId = \App\Services\InventoryService::getWarehouseForProduct($product);
-                $product->available_stock = $product->inventory->where('warehouse_id', $warehouseId)->sum('quantity');
+                $product->available_stock = $product->inventory
+                    ->whereIn('warehouse_id', $consumerWarehouseIds->all())
+                    ->sum('quantity');
             }
 
             return $products;
