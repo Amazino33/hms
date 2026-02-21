@@ -11,8 +11,11 @@ class ShiftManager extends Component
     public $currentShift;
     public $shiftDuration;
     public $showModal = false;
+    public $showDeclarationModal = false;
     public $isProcessing = false;
     public bool $ready = false;
+    public $declaredCash = 0;
+    public $declaredPos = 0;
 
     protected $listeners = [
         'open-shift-modal' => 'openModal',
@@ -99,9 +102,34 @@ class ShiftManager extends Component
         }
     }
 
-    public function endShift()
+    public function showEndShiftDeclaration()
+    {
+        if (!auth()->check()) {
+            return;
+        }
+        
+        $this->showDeclarationModal = true;
+    }
+
+    public function cancelDeclaration()
+    {
+        $this->showDeclarationModal = false;
+        $this->declaredCash = 0;
+        $this->declaredPos = 0;
+    }
+
+    public function confirmShiftEnd()
     {
         if ($this->isProcessing || !auth()->check()) {
+            return;
+        }
+
+        // Validate amounts
+        if ($this->declaredCash < 0 || $this->declaredPos < 0) {
+            $this->dispatch('notify', [
+                'type' => 'error',
+                'message' => 'Cash and POS amounts cannot be negative'
+            ]);
             return;
         }
 
@@ -109,6 +137,15 @@ class ShiftManager extends Component
 
         try {
             $shift = auth()->user()->endShift();
+            
+            // Update shift with declared amounts
+            if ($shift) {
+                $shift->update([
+                    'declared_cash' => $this->declaredCash,
+                    'declared_pos' => $this->declaredPos,
+                ]);
+            }
+            
             $this->loadCurrentShift();
             
             // Send notification immediately
@@ -118,8 +155,11 @@ class ShiftManager extends Component
             ]);
             Notification::make()->title('Shift Ended Successfully')->success()->send();
 
-            // Close modal after successful shift end
+            // Close modals after successful shift end
             $this->showModal = false;
+            $this->showDeclarationModal = false;
+            $this->declaredCash = 0;
+            $this->declaredPos = 0;
 
         } catch (\Exception $e) {
             $this->dispatch('notify', [

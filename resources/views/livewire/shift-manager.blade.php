@@ -76,16 +76,15 @@
                                 <div class="text-xs text-green-600 dark:text-green-400">{{ $shiftDuration }} active</div>
                             </div>
                         </div>
-                        <button wire:click="endShift"
+                        <button wire:click="showEndShiftDeclaration"
                             wire:loading.attr="disabled"
                             @if($isProcessing) disabled @endif
-                            onclick="return confirm(\"Are you sure you want to end your current shift? This action cannot be undone.\")"
                             class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
-                            <svg wire:loading wire:target="endShift" class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg wire:loading wire:target="showEndShiftDeclaration" class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                             </svg>
-                            <span wire:loading.remove wire:target="endShift">End Shift</span>
-                            <span wire:loading wire:target="endShift">Stopping Shift...</span>
+                            <span wire:loading.remove wire:target="showEndShiftDeclaration">End Shift</span>
+                            <span wire:loading wire:target="showEndShiftDeclaration">Preparing...</span>
                         </button>
                     </div>
 
@@ -166,6 +165,104 @@
         </div>
     </div>
 </div>
+    @endif
+
+    <!-- SHIFT DECLARATION MODAL -->
+    @if($showDeclarationModal)
+    <div class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto relative">
+            <!-- Loading Overlay -->
+            <div wire:loading wire:target="confirmShiftEnd" class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10 rounded-2xl">
+                <div class="flex flex-col items-center space-y-3">
+                    <div class="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Processing...</p>
+                </div>
+            </div>
+
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">End Shift Declaration</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Declare your cash and POS amounts</p>
+            </div>
+
+            <!-- Content -->
+            <div class="p-6 space-y-6">
+                <!-- Cash Amount -->
+                <div>
+                    <label for="declaredCash" class="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                        💵 Declared Cash Amount
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-3 text-gray-600 dark:text-gray-400 font-bold">₦</span>
+                        <input 
+                            type="number" 
+                            id="declaredCash"
+                            wire:model.live="declaredCash"
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                            wire:loading.attr="disabled"
+                            wire:target="confirmShiftEnd"
+                            class="w-full pl-8 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:opacity-50"
+                        />
+                    </div>
+                </div>
+
+                <!-- POS Amount -->
+                <div>
+                    <label for="declaredPos" class="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                        💳 Declared POS Amount
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-3 text-gray-600 dark:text-gray-400 font-bold">₦</span>
+                        <input 
+                            type="number" 
+                            id="declaredPos"
+                            wire:model.live="declaredPos"
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                            wire:loading.attr="disabled"
+                            wire:target="confirmShiftEnd"
+                            class="w-full pl-8 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:opacity-50"
+                        />
+                    </div>
+                </div>
+
+                <!-- Total Declaration -->
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Total Declared:</span>
+                        <span class="text-xl font-bold text-gray-900 dark:text-white">₦{{ number_format($declaredCash + $declaredPos, 2) }}</span>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-3">
+                    <button 
+                        wire:click="cancelDeclaration"
+                        wire:loading.attr="disabled"
+                        wire:target="confirmShiftEnd"
+                        class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        wire:click="confirmShiftEnd"
+                        wire:loading.attr="disabled"
+                        @if($isProcessing) disabled @endif
+                        class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+                    >
+                        <svg wire:loading wire:target="confirmShiftEnd" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span wire:loading.remove wire:target="confirmShiftEnd">Confirm & End</span>
+                        <span wire:loading wire:target="confirmShiftEnd">Processing...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     @endif
 
     <!-- Toast Notification Container -->

@@ -97,39 +97,45 @@ class AdminPanelProvider extends PanelProvider
             <audio id="notification-sound" src="/sounds/notification.wav" preload="auto"></audio>
 
             <script>
-                let notificationCount = 0;
-                let audioReady = false;
-
-                // Auto-unlock audio on first user interaction
-                document.addEventListener('click', function() {
-                    if (!audioReady) {
-                        const audio = document.getElementById('notification-sound');
-                        audio.play().then(() => {
-                            audio.pause();
-                            audio.currentTime = 0;
-                            audioReady = true;
-                            console.log('🔊 Notification sound ready');
-                        }).catch(e => console.log('Audio unlock failed:', e));
-                    }
-                }, { once: true });
-
-                // Monitor notification badge for changes
-                setInterval(() => {
-                    const badge = document.querySelector('.fi-icon-btn-badge, [class*="badge"]');
+                (function() {
+                    // Use IIFE to prevent duplicate variable declarations
+                    if (window.notificationSystemInitialized) return;
+                    window.notificationSystemInitialized = true;
                     
-                    if (badge) {
-                        const currentCount = parseInt(badge.textContent) || 0;
-                        
-                        // Play sound when count increases (skip initial count)
-                        if (currentCount > notificationCount && notificationCount > 0 && audioReady) {
+                    let notificationCount = 0;
+                    let audioReady = false;
+
+                    // Auto-unlock audio on first user interaction
+                    document.addEventListener('click', function() {
+                        if (!audioReady) {
                             const audio = document.getElementById('notification-sound');
-                            audio.currentTime = 0;
-                            audio.play().catch(err => console.error('Sound play failed:', err));
+                            audio.play().then(() => {
+                                audio.pause();
+                                audio.currentTime = 0;
+                                audioReady = true;
+                                console.log('🔊 Notification sound ready');
+                            }).catch(e => console.log('Audio unlock failed:', e));
                         }
+                    }, { once: true });
+
+                    // Monitor notification badge for changes
+                    setInterval(() => {
+                        const badge = document.querySelector('.fi-icon-btn-badge, [class*="badge"]');
                         
-                        notificationCount = currentCount;
-                    }
-                }, 2000);
+                        if (badge) {
+                            const currentCount = parseInt(badge.textContent) || 0;
+                            
+                            // Play sound when count increases (skip initial count)
+                            if (currentCount > notificationCount && notificationCount > 0 && audioReady) {
+                                const audio = document.getElementById('notification-sound');
+                                audio.currentTime = 0;
+                                audio.play().catch(err => console.error('Sound play failed:', err));
+                            }
+                            
+                            notificationCount = currentCount;
+                        }
+                    }, 2000);
+                })();
             </script>
 
             <!-- Shift Manager Component -->
