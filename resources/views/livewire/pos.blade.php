@@ -19,27 +19,20 @@ new class extends Component {
     public $selectedTableId;
     public $activeCategoryId;
     public $currentOrderId = null;
-    public $cart = [];
     public $existingItems = [];
-    public $total = 0;
+    public $existingTotal = 0; // sum of existingItems, synced to Alpine
     public $search = '';
     public $deferProducts = true; // defer loading heavy product data until after initial render
 
-    // Mobile-specific properties
-    public $showCart = false;
-
-    // Payment Properties
-    public $showPaymentModal = false;
-    public $paidAmount = 0;
-    public $paymentMethod = 'cash';
+    // Payment Properties (guest/debt remain server-side)
     public $selectedGuestId = null;
 
-    // 👇 NEW: Guest Creation Properties
+    // Guest Creation Properties
     public $showGuestModal = false;
     public $newGuestName = '';
     public $newGuestPhone = '';
 
-    // 👇 NEW: Cancellation Reason Properties
+    // Cancellation Reason Properties
     public $showCancelModal = false;
     public $cancellationReason = '';
 
@@ -51,8 +44,8 @@ new class extends Component {
     public function updatedSelectedTableId($value)
     {
         $this->selectedTableId = $value;
-        $this->cart = [];
         $this->existingItems = [];
+        $this->existingTotal = 0;
         $this->currentOrderId = null;
 
         if (!$value)
@@ -85,23 +78,12 @@ new class extends Component {
                 }
             }
 
-            $this->updateTotal();
+            $this->existingTotal = collect($this->existingItems)->sum(fn($i) => $i['price'] * $i['quantity']);
             if ($orders->isNotEmpty()) {
                 Notification::make()->title('Order Resumed')->info()->send();
             }
         }
-        // If table is free, cart remains empty
-    }
-
-    public function updateTotal()
-    {
-        $this->total = 0;
-        foreach ($this->cart as $item) {
-            $this->total += $item['price'] * $item['quantity'];
-        }
-        foreach ($this->existingItems as $item) {
-            $this->total += $item['price'] * $item['quantity'];
-        }
+        // If table is free, existingItems remains empty
     }
 
     public function loadCurrentShift()
@@ -136,144 +118,62 @@ new class extends Component {
         $this->deferProducts = false;
     }
 
-    public function addToCart($itemId, $itemType = 'product')
+    /**
+     * Validate whether an item can be added to the local Alpine cart.
+     * Does NOT mutate Livewire state — so Livewire skips DOM diffing on success.
+     * Returns ['ok' => true, 'item' => [...]] or ['ok' => false].
+     */
+    public function validateAndAddToCart(int $itemId, string $itemType, int $currentQty = 0): array
     {
-        // Check if user has an active shift
         if (!auth()->user()->currentShift()) {
             Notification::make()->title('No Active Shift')->body('You must start a shift before adding items to cart.')->danger()->send();
-            return;
+            return ['ok' => false];
         }
 
         if ($itemType === 'product') {
             $product = Product::with('category')->find($itemId);
+            $warehouseId = $this->getWarehouseId($product);
 
-            // Determine warehouse based on user role (same logic as ReceiveTransfers page)
-            $user = auth()->user();
-            $warehouseId = null;
-
-            if ($user->hasRole('bartender')) {
-                // Find the bar warehouse (consumer type, typically the first consumer warehouse)
-                $barWarehouse = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first();
-                if ($barWarehouse) {
-                    $warehouseId = $barWarehouse->id;
-                }
-            } elseif ($user->hasRole('chef')) {
-                // Find the kitchen warehouse (consumer type, typically the second consumer warehouse)
-                $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
-                if ($consumerWarehouses->count() > 1) {
-                    $kitchenWarehouse = $consumerWarehouses[1]; // Second consumer warehouse
-                    $warehouseId = $kitchenWarehouse->id;
-                } elseif ($consumerWarehouses->count() == 1) {
-                    // If only one consumer warehouse, use it for chef
-                    $warehouseId = $consumerWarehouses[0]->id;
-                }
-            } else {
-                // For other roles, use the appropriate warehouse based on product category
-                $warehouseId = match(true) {
-                    $product && $product->category && $product->category->type === 'drink' => 
-                        \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first()?->id ?? 3,
-                    $product && $product->category && $product->category->type === 'food' => 
-                        \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->skip(1)->first()?->id ?? 5,
-                    default => 3,
-                };
-            }
-
-            // If no warehouse found, default to storage warehouse
-            if (!$warehouseId) {
-                $warehouseId = 3;
-            }
-
-            // Check stock availability in the specific warehouse that will be used for deduction
             $available = (int) DB::table('inventory_items')
                 ->where('product_id', $itemId)
                 ->where('warehouse_id', $warehouseId)
                 ->value('quantity') ?? 0;
 
-            $currentQty = isset($this->cart[$itemId]) ? $this->cart[$itemId]['quantity'] : 0;
             if ($available <= $currentQty) {
                 Notification::make()->title('Out of Stock')->body("Only {$available} available in stock.")->danger()->send();
-                return;
+                return ['ok' => false];
             }
 
-            if (isset($this->cart[$itemId])) {
-                $this->cart[$itemId]['quantity']++;
-            } else {
-                $this->cart[$itemId] = [
-                    'name' => $product->name,
-                    'price' => $product->price,
-                    'quantity' => 1,
-                    'type' => 'product',
-                ];
-            }
-        } elseif ($itemType === 'menu_item') {
-            $menuItem = \App\Models\MenuItem::find($itemId);
-            if (!$menuItem) {
-                $allMenuItems = \App\Models\MenuItem::all()->pluck('name', 'id');
-                Notification::make()
-                    ->title('Menu Item Not Found')
-                    ->body('The selected menu item (ID: ' . $itemId . ') could not be found. Available menu items: ' . $allMenuItems->toJson())
-                    ->danger()
-                    ->send();
-                return;
-            }
-
-            // Check ingredient availability for current quantity + 1
-            $cartKey = 'menu_' . $itemId;
-            $currentQty = isset($this->cart[$cartKey]) ? $this->cart[$cartKey]['quantity'] : 0;
-            $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($itemId, $currentQty + 1);
-            if (!empty($insufficientIngredients)) {
-                $messages = [];
-                foreach ($insufficientIngredients as $insufficient) {
-                    $messages[] = "{$insufficient['ingredient']}: {$insufficient['available']} {$insufficient['unit']} available, need {$insufficient['required']}";
-                }
-                Notification::make()
-                    ->title('Insufficient Ingredients')
-                    ->body('Cannot add menu item: ' . implode('; ', $messages))
-                    ->danger()
-                    ->send();
-                return;
-            }
-
-            $cartKey = 'menu_' . $itemId;
-            if (isset($this->cart[$cartKey])) {
-                $this->cart[$cartKey]['quantity']++;
-            } else {
-                $this->cart[$cartKey] = [
-                    'name' => $menuItem->name,
-                    'price' => $menuItem->sale_price,
-                    'quantity' => 1,
-                    'type' => 'menu_item',
-                    'menu_item_id' => $itemId,
-                ];
-            }
+            return ['ok' => true, 'item' => [
+                'name'  => $product->name,
+                'price' => (float) $product->price,
+                'type'  => 'product',
+            ]];
         }
 
-        $this->calculateTotal();
-    }
+        if ($itemType === 'menu_item') {
+            $menuItem = \App\Models\MenuItem::find($itemId);
+            if (!$menuItem) {
+                Notification::make()->title('Menu Item Not Found')->body("ID: {$itemId}")->danger()->send();
+                return ['ok' => false];
+            }
 
-    public function removeFromCart($productId)
-    {
-        unset($this->cart[$productId]);
-        $this->calculateTotal();
-    }
+            $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($itemId, $currentQty + 1);
+            if (!empty($insufficientIngredients)) {
+                $messages = collect($insufficientIngredients)->map(fn($i) => "{$i['ingredient']}: {$i['available']} {$i['unit']} available, need {$i['required']}")->join('; ');
+                Notification::make()->title('Insufficient Ingredients')->body($messages)->danger()->send();
+                return ['ok' => false];
+            }
 
-    public function calculateTotal()
-    {
-        $this->total = collect($this->cart)->sum(fn($item) => $item['price'] * $item['quantity']) + collect($this->existingItems)->sum(fn($item) => $item['price'] * $item['quantity']);
-    }
+            return ['ok' => true, 'item' => [
+                'name'         => $menuItem->name,
+                'price'        => (float) $menuItem->sale_price,
+                'type'         => 'menu_item',
+                'menu_item_id' => $itemId,
+            ]];
+        }
 
-    // --- PAYMENT LOGIC ---
-
-    public function openPaymentModal()
-    {
-        if (empty($this->cart) && empty($this->existingItems))
-            return;
-        $this->calculateTotal();
-        $this->paidAmount = $this->total;
-        $this->paymentMethod = 'cash';
-        $this->selectedGuestId = null;
-        $this->showPaymentModal = true;
-        $this->showCart = false; // Close cart on mobile when opening payment
+        return ['ok' => false];
     }
 
     // 👇 NEW: Logic to Save a Guest instantly
@@ -302,7 +202,7 @@ new class extends Component {
         Notification::make()->title('Guest Added')->success()->send();
     }
 
-    public function processPayment()
+    public function processPayment(array $cartItems, float $paidAmount, string $paymentMethod, ?int $guestId = null)
     {
         // Check if user has an active shift
         if (!auth()->user()->currentShift()) {
@@ -310,176 +210,180 @@ new class extends Component {
             return;
         }
 
-        // Ensure user is authenticated
         if (!auth()->check()) {
             Notification::make()->title('Authentication Required')->danger()->send();
             return;
         }
 
-        $this->validate([
-            'paidAmount' => 'required|numeric|min:0',
-            'paymentMethod' => 'required',
-            'selectedGuestId' => ($this->paidAmount < $this->total) ? 'required' : 'nullable',
-        ], [
-            'selectedGuestId.required' => 'Select a Guest to record debt.',
-        ]);
+        $total = collect($this->existingItems)->sum(fn($i) => $i['price'] * $i['quantity'])
+               + collect($cartItems)->sum(fn($i) => ($i['price'] ?? 0) * ($i['qty'] ?? $i['quantity'] ?? 1));
 
-        $tableId = $this->selectedTableId;
+        if ($total <= 0) {
+            Notification::make()->title('Cart is empty')->warning()->send();
+            return;
+        }
 
-        $orderStatus = ($this->paidAmount >= $this->total) ? 'paid' : 'partial';
-        $tableStatus = 'available';
+        if ($paidAmount < $total && empty($guestId)) {
+            Notification::make()->title('Select a Guest for Debt')->warning()->send();
+            return;
+        }
 
-        // 1. Restore old stock & delete all previous orders for the table
-        $existingOrders = Order::where('table_id', $tableId)->whereIn('status', ['pending', 'preparing', 'ready', 'served'])->with('items')->get();
+        if (!$this->selectedTableId) {
+            Notification::make()->title('Please select a table or Take Away')->warning()->send();
+            return;
+        }
 
-        // Preserve the original waiter user_id from existing orders so commission
-        // is credited to the waiter, not the cashier processing payment.
-        $waiterUserId = $existingOrders->first()?->user_id ?? auth()->id();
+        $isTakeaway = $this->selectedTableId === 'takeaway';
+        $tableId = $isTakeaway ? null : (int) $this->selectedTableId;
+        $orderStatus = ($paidAmount >= $total) ? 'paid' : 'partial';
 
-        foreach ($existingOrders as $existingOrder) {
-            foreach ($existingOrder->items as $item) {
-                $product = Product::with('category')->find($item->product_id);
-                if ($product) {
-                    $warehouseId = $this->getWarehouseId($product);
-                    DB::table('inventory_items')
-                        ->where('product_id', $item->product_id)
-                        ->where('warehouse_id', $warehouseId)
-                        ->increment('quantity', $item->quantity);
+        // Restore old stock & delete previous orders only when a table is involved
+        $waiterUserId = auth()->id();
+        if (!$isTakeaway && $tableId) {
+            $existingOrders = Order::where('table_id', $tableId)->whereIn('status', ['pending', 'preparing', 'ready', 'served'])->with('items')->get();
+            $waiterUserId = $existingOrders->first()?->user_id ?? auth()->id();
+
+            foreach ($existingOrders as $existingOrder) {
+                foreach ($existingOrder->items as $item) {
+                    $product = Product::with('category')->find($item->product_id);
+                    if ($product) {
+                        $warehouseId = $this->getWarehouseId($product);
+                        DB::table('inventory_items')
+                            ->where('product_id', $item->product_id)
+                            ->where('warehouse_id', $warehouseId)
+                            ->increment('quantity', $item->quantity);
+                    }
                 }
+                $existingOrder->items()->delete();
+                $existingOrder->delete();
             }
-            $existingOrder->items()->delete();
-            $existingOrder->delete();
         }
 
-        // Prepare all items for OrderSplitter (combine existing and new, summing quantities)
+        // Prepare all items for OrderSplitter (combine existing and new)
         $allItems = $this->existingItems;
-        foreach ($this->cart as $productId => $item) {
+        foreach ($cartItems as $productId => $item) {
+            $qty = $item['qty'] ?? $item['quantity'] ?? 1;
+            $normalizedItem = [
+                'name'     => $item['name'],
+                'price'    => $item['price'],
+                'quantity' => $qty,
+                'type'     => $item['type'] ?? 'product',
+            ];
+            if (!empty($item['menu_item_id'])) {
+                $normalizedItem['menu_item_id'] = $item['menu_item_id'];
+            }
             if (isset($allItems[$productId])) {
-                $allItems[$productId]['quantity'] += $item['quantity'];
+                $allItems[$productId]['quantity'] += $qty;
             } else {
-                $allItems[$productId] = $item;
+                $allItems[$productId] = $normalizedItem;
             }
         }
 
-        // Use OrderSplitter service to create separate orders per destination
         try {
             $splitter = new OrderSplitter();
             $orders = $splitter->handle($allItems, $tableId, $waiterUserId, [
-                'amount_paid' => $this->paidAmount,
-                'payment_method' => $this->paymentMethod,
-                'status' => $orderStatus,
-                'guest_id' => $this->selectedGuestId,
-                'processed_by_user_id' => auth()->id(),
+                'amount_paid'           => $paidAmount,
+                'payment_method'        => $paymentMethod,
+                'status'                => $orderStatus,
+                'guest_id'              => $guestId,
+                'processed_by_user_id'  => auth()->id(),
             ]);
         } catch (\Exception $e) {
-            // Handle inventory/stock errors
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
-                Notification::make()
-                    ->title('Stock Error')
-                    ->body($e->getMessage())
-                    ->danger()
-                    ->send();
+                Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
                 return;
             }
-            // Re-throw other exceptions
             throw $e;
         }
 
-        // Create payment record for shift tracking (only one for the total payment)
-        if ($this->paidAmount > 0 && !empty($orders)) {
+        if ($paidAmount > 0 && !empty($orders)) {
             \App\Models\OrderPayment::create([
                 'order_id' => $orders[0]->id,
-                'amount' => $this->paidAmount,
-                'method' => $this->paymentMethod,
-                'user_id' => auth()->id(),
+                'amount'   => $paidAmount,
+                'method'   => $paymentMethod,
+                'user_id'  => auth()->id(),
                 'shift_id' => auth()->user()?->currentShift()?->id,
-                'paid_at' => now(),
+                'paid_at'  => now(),
             ]);
         }
 
-        \App\Models\Table::find($tableId)->update(['status' => $tableStatus]);
+        if ($tableId) {
+            \App\Models\Table::find($tableId)->update(['status' => 'available']);
+            $this->loadTables();
+        }
 
-        // Reload tables to reflect status change
-        $this->loadTables();
-
-        $balance = $this->total - $this->paidAmount;
-        $msg = $orderStatus === 'paid' ? "Paid: ₦" . number_format($this->paidAmount) : "Debt Recorded: ₦" . number_format($balance);
+        $balance = $total - $paidAmount;
+        $msg = $orderStatus === 'paid' ? "Paid: ₦" . number_format($paidAmount) : "Debt Recorded: ₦" . number_format($balance);
         Notification::make()->title($msg)->success()->send();
 
-        // Reset UI
-        $this->showPaymentModal = false;
+        // Reset server-side state (Alpine resets its own state after the await resolves)
         $this->existingItems = [];
-        $this->cart = [];
-        $this->updateTotal(); // Recalculate total after clearing cart
+        $this->existingTotal = 0;
         $this->currentOrderId = null;
         $this->selectedTableId = null;
-        $this->paidAmount = 0;
         $this->selectedGuestId = null;
-        $this->showCart = false; // Close cart on mobile after payment
-        
-        // Clear product cache to refresh inventory display
+
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
     }
 
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
-    public function checkout($action = 'update')
+    public function checkout(array $cartItems, string $action = 'update')
     {
-        // Check if user has an active shift
         if (!auth()->user()->currentShift()) {
             Notification::make()->title('No Active Shift')->body('You must start a shift before sending orders to kitchen.')->danger()->send();
             return;
         }
 
-        if (empty($this->cart)) return;
-        if (!$this->selectedTableId) {
-            Notification::make()->title('Please select a table first')->warning()->send();
+        if (empty($cartItems)) return;
+        if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
+            Notification::make()->title('Please select a table to send orders to the kitchen')->warning()->send();
             return;
         }
         $tableId = $this->selectedTableId;
-        $tableName = \App\Models\Table::find($tableId)?->name ?? 'Unknown';
 
-        // Use OrderSplitter to create separate orders for 'update' checkout
+        // Normalize qty → quantity for OrderSplitter
+        $normalized = [];
+        foreach ($cartItems as $key => $item) {
+            $norm = [
+                'name'     => $item['name'],
+                'price'    => $item['price'],
+                'quantity' => $item['qty'] ?? $item['quantity'] ?? 1,
+                'type'     => $item['type'] ?? 'product',
+            ];
+            if (!empty($item['menu_item_id'])) {
+                $norm['menu_item_id'] = $item['menu_item_id'];
+            }
+            $normalized[$key] = $norm;
+        }
+
         try {
             $splitter = new OrderSplitter();
-            $orders = $splitter->handle($this->cart, $tableId, auth()->id(), [
-                'status' => 'pending',
+            $splitter->handle($normalized, $tableId, auth()->id(), [
+                'status'         => 'pending',
                 'payment_method' => 'cash',
             ]);
         } catch (\Exception $e) {
-            // Handle inventory/stock errors
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
-                Notification::make()
-                    ->title('Stock Error')
-                    ->body($e->getMessage())
-                    ->danger()
-                    ->send();
+                Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
                 return;
             }
-            // Re-throw other exceptions
             throw $e;
         }
 
-        // Update table status to occupied when order is sent to kitchen
         \App\Models\Table::find($tableId)->update(['status' => 'occupied']);
 
-        // Move cart items to existing items (grayed out)
-        foreach ($this->cart as $productId => $item) {
-            $this->existingItems[$productId] = [
-                'id' => $productId,
-                'name' => $item['name'],
-                'price' => $item['price'],
-                'quantity' => $item['quantity'],
-                'image' => null, // Could fetch from product if needed
-            ];
+        // Merge new items into existingItems so they render as grayed-out server-side
+        foreach ($normalized as $key => $item) {
+            if (isset($this->existingItems[$key])) {
+                $this->existingItems[$key]['quantity'] += $item['quantity'];
+            } else {
+                $this->existingItems[$key] = ['id' => $key, 'name' => $item['name'], 'price' => $item['price'], 'quantity' => $item['quantity'], 'image' => null];
+            }
         }
+        $this->existingTotal = collect($this->existingItems)->sum(fn($i) => $i['price'] * $i['quantity']);
 
-        $this->cart = [];
-        $this->updateTotal();
-        $this->showCart = false; // Close cart on mobile after checkout
-        
-        // Clear product cache to refresh inventory display
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
-        
+
         Notification::make()->title('Order Updated')->success()->send();
     }
 
@@ -527,9 +431,9 @@ new class extends Component {
         $tableId = $this->selectedTableId;
 
         // Find all unpaid orders for this table
-        $orders = Order::where('table_id', $tableId)
-            ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
-            ->get();
+        $orders = ($tableId && $tableId !== 'takeaway')
+            ? Order::where('table_id', $tableId)->whereIn('status', ['pending', 'preparing', 'ready', 'served'])->get()
+            : collect();
 
         if ($orders->isEmpty()) {
             Notification::make()->title('No active orders to cancel')->warning()->send();
@@ -546,14 +450,15 @@ new class extends Component {
             ]);
         }
 
-        // Set table status to available
-        \App\Models\Table::find($tableId)->update(['status' => 'available']);
+        // Set table status to available (only for real tables)
+        if ($tableId && $tableId !== 'takeaway') {
+            \App\Models\Table::find($tableId)?->update(['status' => 'available']);
+        }
 
-        // Clear cart and existing items
-        $this->cart = [];
+        // Clear server-side state
         $this->existingItems = [];
+        $this->existingTotal = 0;
         $this->currentOrderId = null;
-        $this->total = 0;
 
         // Reload tables to reflect status change
         $this->loadTables();
@@ -561,11 +466,16 @@ new class extends Component {
         // Clear product cache to refresh inventory display
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
 
+        $reason = $this->cancellationReason;
+
         // Close modal and reset
         $this->showCancelModal = false;
         $this->cancellationReason = '';
 
-        Notification::make()->title('Order Cancelled')->body('Reason: ' . $this->cancellationReason)->success()->send();
+        // Tell Alpine to clear its local cart
+        $this->dispatch('order-cancelled');
+
+        Notification::make()->title('Order Cancelled')->body('Reason: ' . $reason)->success()->send();
     }
 
     public function cancelCancelModal()
@@ -574,25 +484,39 @@ new class extends Component {
         $this->cancellationReason = '';
     }
 
-    public function printBill()
+    public function printBill(array $cartItems = [])
     {
         if (!$this->selectedTableId) {
             Notification::make()->title('Please select a table first')->warning()->send();
             return;
         }
 
-        if (empty($this->existingItems) && empty($this->cart)) {
+        if (empty($this->existingItems) && empty($cartItems)) {
             Notification::make()->title('No items to print')->warning()->send();
             return;
         }
 
-        $table = \App\Models\Table::find($this->selectedTableId);
-        $allItems = array_merge($this->existingItems, $this->cart);
+        $isTakeaway = $this->selectedTableId === 'takeaway';
+        $table = $isTakeaway ? null : \App\Models\Table::find($this->selectedTableId);
+        $tableName = $isTakeaway ? 'Take Away' : ($table?->name ?? 'Table');
+
+        // Normalize cart items for display
+        $normalizedCart = [];
+        foreach ($cartItems as $key => $item) {
+            $normalizedCart[$key] = [
+                'name'     => $item['name'],
+                'price'    => $item['price'],
+                'quantity' => $item['qty'] ?? $item['quantity'] ?? 1,
+            ];
+        }
+
+        $allItems = array_merge($this->existingItems, $normalizedCart);
+        $total = collect($allItems)->sum(fn($i) => $i['price'] * $i['quantity']);
 
         $this->dispatch('print-bill', [
-            'tableName' => $table?->name ?? 'Table',
+            'tableName' => $tableName,
             'items'     => array_values($allItems),
-            'total'     => $this->total,
+            'total'     => $total,
             'date'      => now()->format('M j, Y g:i A'),
             'cashier'   => auth()->user()->name,
         ]);
@@ -678,8 +602,13 @@ new class extends Component {
 ?>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900"
-     x-data="{}"
-     @print-bill.window="printPOSBill($event.detail[0] ?? $event.detail)">
+     x-data="posCart()"
+     x-init="
+         existingTotal = {{ (int) $existingTotal }};
+         $watch('$wire.existingTotal', v => existingTotal = v);
+     "
+     @print-bill.window="printPOSBill($event.detail[0] ?? $event.detail)"
+     @order-cancelled.window="cart = {}; showCart = false">
     <!-- Shift Status Indicator -->
     <div wire:poll.10s="loadCurrentShift" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
         <div class="flex items-center justify-between">
@@ -745,7 +674,7 @@ new class extends Component {
                     @endif
 
                     @foreach($products as $product)
-                        <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }}, 'product')" @endif
+                        <div @if(auth()->user()->currentShift()) @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float)$product->price }}, {{ (int)($product->available_stock ?? 0) }})" @endif
                             class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
                             <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $product->name }}</div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($product->price) }}</div>
@@ -755,7 +684,7 @@ new class extends Component {
                         </div>
                     @endforeach
                     @foreach($menuItems as $menuItem)
-                        <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $menuItem->id }}, 'menu_item')" @endif
+                        <div @if(auth()->user()->currentShift()) @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float)$menuItem->sale_price }})" @endif
                             class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
                             <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $menuItem->name }}</div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($menuItem->sale_price) }}</div>
@@ -773,6 +702,7 @@ new class extends Component {
                     <select wire:model.live="selectedTableId"
                         class="w-full p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold touch-manipulation">
                         <option value="">-- Select a Table --</option>
+                        <option value="takeaway">Take Away</option>
                         @foreach($tables as $table)
                             @php
                                 $hasActiveOrder = $table->orders->isNotEmpty();
@@ -807,29 +737,28 @@ new class extends Component {
                                 <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
                             </div>
                         @endforeach
-                        @if(!empty($cart))
-                            <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 mt-4">New Items</h4>
-                        @endif
+                        <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 mt-4" x-show="cartCount > 0">New Items</h4>
                     @endif
-                    @foreach($cart as $id => $item)
+                    {{-- Alpine-managed new cart items --}}
+                    <template x-for="(item, key) in cart" :key="key">
                         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
                             <div class="flex-1">
-                                <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                                <div class="font-bold text-sm text-gray-800 dark:text-gray-200" x-text="item.name"></div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">₦<span x-text="item.price"></span> x <span x-text="item.qty"></span></div>
                             </div>
-                            <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
-                            <button @if(auth()->user()->currentShift()) wire:click="removeFromCart({{ $id }})" @endif class="ml-3 {{ auth()->user()->currentShift() ? 'text-red-500 hover:text-red-700 cursor-pointer' : 'text-gray-400 cursor-not-allowed' }} touch-manipulation p-1"><span class="text-lg">×</span></button>
+                            <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦<span x-text="(item.price * item.qty).toLocaleString()"></span></div>
+                            <button @if(auth()->user()->currentShift()) @click="removeFromCart(key)" @endif class="ml-3 {{ auth()->user()->currentShift() ? 'text-red-500 hover:text-red-700 cursor-pointer' : 'text-gray-400 cursor-not-allowed' }} touch-manipulation p-1"><span class="text-lg">×</span></button>
                         </div>
-                    @endforeach
+                    </template>
                 </div>
                 <div class="p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
                     <div class="flex justify-between text-xl lg:text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-                        <span>Total:</span><span>₦{{ number_format($total) }}</span>
+                        <span>Total:</span><span>₦<span x-text="total.toLocaleString()"></span></span>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        <button @if(auth()->user()->currentShift()) wire:click="checkout('update')" @endif
+                        <button @if(auth()->user()->currentShift()) @click="sendToKitchen()" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Order</span></button>
-                        <button @if(auth()->user()->currentShift()) wire:click="openPaymentModal" @endif
+                        <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Pay</span></button>
                         <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span class="text-sm lg:text-base">Cancel</span></button>
@@ -902,7 +831,7 @@ new class extends Component {
                 @endif
 
                 @foreach($products as $product)
-                    <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $product->id }}, 'product')" @endif
+                    <div @if(auth()->user()->currentShift()) @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float)$product->price }}, {{ (int)($product->available_stock ?? 0) }})" @endif
                         class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $product->name }}</div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($product->price) }}</div>
@@ -912,7 +841,7 @@ new class extends Component {
                     </div>
                 @endforeach
                 @foreach($menuItems as $menuItem)
-                    <div @if(auth()->user()->currentShift()) wire:click="addToCart({{ $menuItem->id }}, 'menu_item')" @endif
+                    <div @if(auth()->user()->currentShift()) @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float)$menuItem->sale_price }})" @endif
                         class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $menuItem->name }}</div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($menuItem->sale_price) }}</div>
@@ -928,14 +857,12 @@ new class extends Component {
                 <div class="flex items-center space-x-4">
                     <div class="text-center">
                         <div class="text-xs text-gray-500 dark:text-gray-400">Total</div>
-                        <div class="text-lg font-bold text-gray-900 dark:text-white">₦{{ number_format($total) }}</div>
+                        <div class="text-lg font-bold text-gray-900 dark:text-white">₦<span x-text="total.toLocaleString()"></span></div>
                     </div>
-                    @if(!empty($cart) || !empty($existingItems))
-                        <div class="text-center">
-                            <div class="text-xs text-gray-500 dark:text-gray-400">Items</div>
-                            <div class="text-lg font-bold text-blue-600">{{ count($cart) + count($existingItems) }}</div>
-                        </div>
-                    @endif
+                    <div class="text-center" x-show="cartCount + {{ count($existingItems) }} > 0">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Items</div>
+                        <div class="text-lg font-bold text-blue-600" x-text="cartCount + {{ count($existingItems) }}"></div>
+                    </div>
                 </div>
                 <div class="flex space-x-2">
                     <!-- Send and Pay buttons moved to cart modal -->
@@ -951,6 +878,7 @@ new class extends Component {
                     class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg {{ auth()->user()->currentShift() ? 'bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' }} font-bold"
                     {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                     <option value="">Table</option>
+                    <option value="takeaway">Take Away</option>
                     @foreach($tables as $table)
                         @php
                             $hasActiveOrder = $table->orders->isNotEmpty();
@@ -961,194 +889,181 @@ new class extends Component {
                     @endforeach
                 </select>
                 <!-- Cart Toggle -->
-                <button wire:click="$toggle('showCart')" class="relative p-2 bg-blue-600 text-white rounded-lg">
+                <button @click="showCart = !showCart" class="relative p-2 bg-blue-600 text-white rounded-lg">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.1 5H19M7 13v8a2 2 0 002 2h10a2 2 0 002-2v-3"></path>
                     </svg>
-                    @if(!empty($cart) || !empty($existingItems))
-                        <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                            {{ count($cart) + count($existingItems) }}
-                        </span>
-                    @endif
+                    <span x-show="cartCount + {{ count($existingItems) }} > 0"
+                          x-text="cartCount + {{ count($existingItems) }}"
+                          class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center"></span>
                 </button>
             </div>
         </div>
 
         <!-- Mobile Cart Sidebar -->
-        @if(isset($showCart) && $showCart)
-            <div class="fixed inset-0 bg-black bg-opacity-50 z-50 flex">
-                <div class="ml-auto w-80 bg-white dark:bg-gray-900 h-full flex flex-col">
-                    <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">🛒 Cart</h3>
-                        <button wire:click="$toggle('showCart')" class="text-gray-400 hover:text-red-500 p-2">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
+        <div x-show="showCart" x-cloak class="fixed inset-0 bg-black bg-opacity-50 z-50 flex">
+            <div class="ml-auto w-80 bg-white dark:bg-gray-900 h-full flex flex-col">
+                <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">🛒 Cart</h3>
+                    <button @click="showCart = false" class="text-gray-400 hover:text-red-500 p-2">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 space-y-3 relative">
+                    @if(!auth()->user()->currentShift())
+                        <div class="absolute inset-0 bg-gray-900/30 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                                <div class="w-6 h-6 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <svg class="w-3 h-3 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                    </svg>
+                                </div>
+                                <p class="text-xs font-medium text-gray-900 dark:text-white">Cart disabled</p>
+                            </div>
+                        </div>
+                    @endif
+                    @if(!empty($existingItems))
+                        <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
+                        @foreach($existingItems as $id => $item)
+                            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
+                                <div class="flex-1">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                                </div>
+                                <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                            </div>
+                        @endforeach
+                    @endif
+
+                    {{-- Alpine-managed new cart items --}}
+                    <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 {{ !empty($existingItems) ? 'mt-4' : '' }}" x-show="cartCount > 0">New Items</h4>
+                    <template x-for="(item, key) in cart" :key="key">
+                        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
+                            <div class="flex-1">
+                                <div class="font-bold text-sm text-gray-800 dark:text-gray-200" x-text="item.name"></div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">₦<span x-text="item.price"></span> x <span x-text="item.qty"></span></div>
+                            </div>
+                            <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦<span x-text="(item.price * item.qty).toLocaleString()"></span></div>
+                            <button @if(auth()->user()->currentShift()) @click="removeFromCart(key)" @endif class="ml-3 {{ auth()->user()->currentShift() ? 'text-red-500 hover:text-red-700 cursor-pointer' : 'text-gray-400 cursor-not-allowed' }} touch-manipulation p-1">
+                                <span class="text-lg">×</span>
+                            </button>
+                        </div>
+                    </template>
+
+                    <div x-show="cartCount === 0 && {{ count($existingItems) }} === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <div class="text-4xl mb-2">🛒</div>
+                        <div>Your cart is empty</div>
+                        <div class="text-sm">Tap on products to add them</div>
+                    </div>
+                </div>
+
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                     x-show="cartCount > 0 || {{ count($existingItems) > 0 ? 'true' : 'false' }}">
+                    <div class="flex justify-between text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+                        <span>Total:</span><span>₦<span x-text="total.toLocaleString()"></span></span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button @if(auth()->user()->currentShift()) @click="sendToKitchen()" @endif
+                            class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                            Order
+                        </button>
+                        <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
+                            class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                            Pay
+                        </button>
+                        <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
+                            class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
+                            Cancel
                         </button>
                     </div>
-
-                    <div class="flex-1 overflow-y-auto p-4 space-y-3 relative">
-                        @if(!auth()->user()->currentShift())
-                            <div class="absolute inset-0 bg-gray-900/30 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
-                                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
-                                    <div class="w-6 h-6 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
-                                        <svg class="w-3 h-3 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-                                        </svg>
-                                    </div>
-                                    <p class="text-xs font-medium text-gray-900 dark:text-white">Cart disabled</p>
-                                </div>
-                            </div>
-                        @endif
-                        @if(!empty($existingItems))
-                            <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
-                            @foreach($existingItems as $id => $item)
-                                <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
-                                    <div class="flex-1">
-                                        <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
-                                        <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
-                                    </div>
-                                    <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
-                                </div>
-                            @endforeach
-                        @endif
-
-                        @if(!empty($cart))
-                            <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 {{ !empty($existingItems) ? 'mt-4' : '' }}">New Items</h4>
-                            @foreach($cart as $id => $item)
-                                <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2">
-                                    <div class="flex-1">
-                                        <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
-                                        <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
-                                    </div>
-                                    <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
-                                    <button @if(auth()->user()->currentShift()) wire:click="removeFromCart({{ $id }})" @endif class="ml-3 {{ auth()->user()->currentShift() ? 'text-red-500 hover:text-red-700 cursor-pointer' : 'text-gray-400 cursor-not-allowed' }} touch-manipulation p-1">
-                                        <span class="text-lg">×</span>
-                                    </button>
-                                </div>
-                            @endforeach
-                        @endif
-
-                        @if(empty($cart) && empty($existingItems))
-                            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
-                                <div class="text-4xl mb-2">🛒</div>
-                                <div>Your cart is empty</div>
-                                <div class="text-sm">Tap on products to add them</div>
-                            </div>
-                        @endif
-                    </div>
-
-                    @if(!empty($cart) || !empty($existingItems))
-                        <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                            <div class="flex justify-between text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-                                <span>Total:</span><span>₦{{ number_format($total) }}</span>
-                            </div>
-                            <div class="grid grid-cols-3 gap-3">
-                                <button @if(auth()->user()->currentShift()) wire:click="checkout('update')" @endif
-                                    class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    Order
-                                </button>
-                                <button @if(auth()->user()->currentShift()) wire:click="openPaymentModal" @endif
-                                    class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    Pay
-                                </button>
-                                <button @if(auth()->user()->currentShift()) wire:click="cancelOrder" @endif
-                                    class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    @endif
-                </div>
-            </div>
-        @endif
-    </div>
-
-    @if($showPaymentModal)
-        <div class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div
-                class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 relative max-h-[90vh] overflow-y-auto">
-
-                <div
-                    class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0">
-                    <h3 class="text-xl font-bold text-gray-900 dark:text-white">💰 Checkout</h3>
-                    <button wire:click="$set('showPaymentModal', false)" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
-                            class="text-2xl">&times;</span></button>
-                </div>
-
-                <div class="p-6 space-y-4">
-                    <div class="text-center mb-6">
-                        <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wider font-bold">Total Due
-                        </div>
-                        <div class="text-3xl lg:text-4xl font-black text-gray-900 dark:text-white">₦{{ number_format($total) }}</div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Amount Received</label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
-                            <input type="number" wire:model.live="paidAmount" inputmode="decimal"
-                                class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
-                                placeholder="0.00">
-                        </div>
-                    </div>
-
-                    @php $balance = $total - (float) $paidAmount; @endphp
-
-                    @if($balance < 0)
-                        <div
-                            class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800 text-center">
-                            <span class="text-green-700 dark:text-green-400 font-bold text-sm">Change:</span>
-                            <div class="text-2xl font-black text-green-600 dark:text-green-400">
-                                ₦{{ number_format(abs($balance)) }}</div>
-                        </div>
-                    @elseif($balance > 0)
-                        <div
-                            class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800 text-center animate-pulse">
-                            <span class="text-red-700 dark:text-red-400 font-bold text-sm">⚠️ Remaining Debt:</span>
-                            <div class="text-2xl font-black text-red-600 dark:text-red-400">₦{{ number_format($balance) }}</div>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-bold text-red-600 mb-1">Select Guest for Debt *</label>
-                            <div class="flex gap-2">
-                                <select wire:model="selectedGuestId"
-                                    class="w-full p-3 text-base border border-red-300 rounded-lg dark:bg-gray-800 dark:border-red-900 touch-manipulation">
-                                    <option value="">-- Select Guest --</option>
-                                    @foreach(\App\Models\Guest::all() as $guest)
-                                        <option value="{{ $guest->id }}">{{ $guest->name }}</option>
-                                    @endforeach
-                                </select>
-                                <button wire:click="$set('showGuestModal', true)"
-                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-xl font-bold flex items-center justify-center touch-manipulation">
-                                    +
-                                </button>
-                            </div>
-                            @error('selectedGuestId') <span class="text-xs text-red-600 font-bold">{{ $message }}</span>
-                            @enderror
-                        </div>
-                    @endif
-
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Payment Method</label>
-                        <div class="grid grid-cols-3 gap-2">
-                            @foreach(['cash' => '💵 Cash', 'pos' => '💳 POS', 'transfer' => '🏦 Transfer'] as $key => $label)
-                                <button wire:click="$set('paymentMethod', '{{ $key }}')"
-                                    class="p-3 border rounded-lg font-bold text-sm transition-colors touch-manipulation {{ $paymentMethod === $key ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600' }}">{{ $label }}</button>
-                            @endforeach
-                        </div>
-                    </div>
-                </div>
-
-                <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3 sticky bottom-0 bg-white dark:bg-gray-900">
-                    <button wire:click="$set('showPaymentModal', false)"
-                        class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 touch-manipulation">Cancel</button>
-                    <button wire:click="processPayment"
-                        class="px-4 py-3 font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 touch-manipulation"><span>Confirm</span></button>
                 </div>
             </div>
         </div>
-    @endif
+    </div>
+
+    <div x-show="showPaymentModal" x-cloak class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div
+            class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 relative max-h-[90vh] overflow-y-auto">
+
+            <div
+                class="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-white">💰 Checkout</h3>
+                <button @click="showPaymentModal = false" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span
+                        class="text-2xl">&times;</span></button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div class="text-center mb-6">
+                    <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wider font-bold">Total Due</div>
+                    <div class="text-3xl lg:text-4xl font-black text-gray-900 dark:text-white">₦<span x-text="total.toLocaleString()"></span></div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Amount Received</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
+                        <input type="number" x-model="paidAmount" inputmode="decimal"
+                            class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
+                            placeholder="0.00">
+                    </div>
+                </div>
+
+                {{-- Change display (Alpine-driven) --}}
+                <div x-show="balance < 0"
+                    class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800 text-center">
+                    <span class="text-green-700 dark:text-green-400 font-bold text-sm">Change:</span>
+                    <div class="text-2xl font-black text-green-600 dark:text-green-400">
+                        ₦<span x-text="Math.abs(balance).toLocaleString()"></span></div>
+                </div>
+
+                <div x-show="balance > 0"
+                    class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800 text-center animate-pulse">
+                    <span class="text-red-700 dark:text-red-400 font-bold text-sm">⚠️ Remaining Debt:</span>
+                    <div class="text-2xl font-black text-red-600 dark:text-red-400">₦<span x-text="balance.toLocaleString()"></span></div>
+                </div>
+
+                {{-- Guest selector shown only when there is a debt --}}
+                <div x-show="balance > 0">
+                    <label class="block text-sm font-bold text-red-600 mb-1">Select Guest for Debt *</label>
+                    <div class="flex gap-2">
+                        <select wire:model="selectedGuestId"
+                            class="w-full p-3 text-base border border-red-300 rounded-lg dark:bg-gray-800 dark:border-red-900 touch-manipulation">
+                            <option value="">-- Select Guest --</option>
+                            @foreach(\App\Models\Guest::all() as $guest)
+                                <option value="{{ $guest->id }}">{{ $guest->name }}</option>
+                            @endforeach
+                        </select>
+                        <button wire:click="$set('showGuestModal', true)"
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-xl font-bold flex items-center justify-center touch-manipulation">
+                            +
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Payment Method</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        @foreach(['cash' => '💵 Cash', 'pos' => '💳 POS', 'transfer' => '🏦 Transfer'] as $key => $label)
+                            <button @click="paymentMethod = '{{ $key }}'"
+                                :class="paymentMethod === '{{ $key }}' ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600'"
+                                class="p-3 border rounded-lg font-bold text-sm transition-colors touch-manipulation">{{ $label }}</button>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3 sticky bottom-0 bg-white dark:bg-gray-900">
+                <button @click="showPaymentModal = false"
+                    class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 touch-manipulation">Cancel</button>
+                <button @click="confirmPayment()"
+                    :disabled="isLoading"
+                    class="px-4 py-3 font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 touch-manipulation disabled:opacity-50"><span x-text="isLoading ? 'Processing…' : 'Confirm'"></span></button>
+            </div>
+        </div>
+    </div>
 
     @if($showGuestModal)
         <div class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1186,6 +1101,146 @@ new class extends Component {
             </div>
         </div>
     @endif
+
+    {{-- posCart Alpine Component --}}
+    <script>
+    window.posCart = function () {
+        return {
+            // Alpine-managed cart: { key: { name, price, qty, type, menu_item_id? } }
+            cart: {},
+            existingTotal: 0,   // synced from $wire.existingTotal via x-init
+            showCart: false,
+            showPaymentModal: false,
+            paidAmount: 0,
+            paymentMethod: 'cash',
+            isLoading: false,
+
+            get cartCount() {
+                return Object.keys(this.cart).length;
+            },
+
+            get newCartTotal() {
+                return Object.values(this.cart).reduce((sum, i) => sum + i.price * i.qty, 0);
+            },
+
+            get total() {
+                return this.existingTotal + this.newCartTotal;
+            },
+
+            get balance() {
+                return this.total - parseFloat(this.paidAmount || 0);
+            },
+
+            /**
+             * Add a product to cart without a round-trip (optimistic).
+             * Stock is pre-checked at render time via $product->available_stock.
+             * The server's OrderSplitter does the real check on checkout.
+             */
+            addProductToCart(id, name, price, availableStock) {
+                const key = String(id);
+                const currentQty = this.cart[key] ? this.cart[key].qty : 0;
+
+                if (availableStock <= currentQty) {
+                    alert('Out of stock: only ' + availableStock + ' available.');
+                    return;
+                }
+
+                if (this.cart[key]) {
+                    this.cart[key].qty++;
+                } else {
+                    this.cart[key] = { name, price, qty: 1, type: 'product' };
+                }
+            },
+
+            /**
+             * Add a menu item to cart — must hit server for ingredient availability check.
+             */
+            async addMenuItemToCart(id, name, price) {
+                if (this.isLoading) return;
+                const key = 'menu_' + id;
+                const currentQty = this.cart[key] ? this.cart[key].qty : 0;
+
+                this.isLoading = true;
+                try {
+                    const result = await this.$wire.validateAndAddToCart(id, 'menu_item', currentQty);
+                    if (result.ok) {
+                        if (this.cart[key]) {
+                            this.cart[key].qty++;
+                        } else {
+                            this.cart[key] = {
+                                name:         result.item.name ?? name,
+                                price:        result.item.price ?? price,
+                                qty:          1,
+                                type:         'menu_item',
+                                menu_item_id: id,
+                            };
+                        }
+                    }
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            removeFromCart(key) {
+                const updated = { ...this.cart };
+                delete updated[key];
+                this.cart = updated;
+            },
+
+            openPaymentModal() {
+                if (this.total <= 0) return;
+                this.paidAmount = this.total;
+                this.paymentMethod = 'cash';
+                this.$wire.$set('selectedGuestId', null);
+                this.showPaymentModal = true;
+                this.showCart = false;
+            },
+
+            async confirmPayment() {
+                if (this.isLoading) return;
+                this.isLoading = true;
+                try {
+                    await this.$wire.processPayment(
+                        this.cart,
+                        parseFloat(this.paidAmount || 0),
+                        this.paymentMethod,
+                        this.$wire.selectedGuestId || null
+                    );
+                    // Wire updated server state — sync Alpine directly (no dispatch needed)
+                    this.cart = {};
+                    this.showPaymentModal = false;
+                    this.showCart = false;
+                    this.paidAmount = 0;
+                    this.existingTotal = this.$wire.existingTotal;
+                } catch (e) {
+                    // Errors already shown as Filament notifications from server
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            async sendToKitchen() {
+                if (this.isLoading || this.cartCount === 0) return;
+                this.isLoading = true;
+                try {
+                    await this.$wire.checkout(this.cart);
+                    // Sync existingTotal from wire after server merges cart into existingItems
+                    this.existingTotal = this.$wire.existingTotal;
+                    this.cart = {};
+                    this.showCart = false;
+                } catch (e) {
+                    // Errors already shown as Filament notifications from server
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            printBill() {
+                this.$wire.printBill(this.cart);
+            },
+        };
+    };
+    </script>
 
     {{-- Print Bill JS --}}
     <script>

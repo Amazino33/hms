@@ -1,5 +1,5 @@
 
-<div class="min-h-screen p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
+<div wire:init="load" class="min-h-screen p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
     <!-- Toast notifications -->
     <div id="toast" class="fixed top-6 right-6 z-50 hidden">
         <div class="px-6 py-4 rounded-xl shadow-2xl backdrop-blur-sm transform transition-all duration-300" id="toast-content"></div>
@@ -417,47 +417,17 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded, initializing event listeners...');
             
-            // Select all checkbox
-            const selectAllCheckbox = document.getElementById('select-all');
-            if (selectAllCheckbox) {
-                console.log('Found select-all checkbox');
-                selectAllCheckbox.addEventListener('change', function() {
-                    console.log('Select all changed:', this.checked);
-                    const checkboxes = document.querySelectorAll('.transfer-checkbox');
-                    console.log('Found', checkboxes.length, 'transfer checkboxes');
-                    
-                    // Try a different approach - use setAttribute
-                    checkboxes.forEach((cb, index) => {
-                        console.log(`Setting checkbox ${index} to ${this.checked}`);
-                        cb.checked = this.checked;
-                        // Also try setting the attribute
-                        if (this.checked) {
-                            cb.setAttribute('checked', 'checked');
-                        } else {
-                            cb.removeAttribute('checked');
-                        }
-                    });
-                    
-                    // Update the selected count display immediately
-                    updateSelectedCount();
-                    
-                    // Visual feedback
-                    const label = selectAllCheckbox.nextElementSibling;
-                    if (label) {
-                        label.textContent = this.checked ? 'Deselect All' : 'Select All';
-                    }
-                });
-            } else {
-                console.error('Select-all checkbox not found!');
-            }
-
-            // Individual checkboxes
+            // Individual checkboxes + select-all (delegated so they work after wire:init re-renders)
             document.addEventListener('change', function(e) {
-                if (e.target.classList.contains('transfer-checkbox')) {
-                    console.log('Individual checkbox changed:', e.target.value);
+                if (e.target.id === 'select-all') {
+                    const checkboxes = document.querySelectorAll('.transfer-checkbox');
+                    checkboxes.forEach(cb => { cb.checked = e.target.checked; });
                     updateSelectedCount();
-                    
-                    // Update select all checkbox state
+                    const label = e.target.nextElementSibling;
+                    if (label) label.textContent = e.target.checked ? 'Deselect All' : 'Select All';
+                }
+                if (e.target.classList.contains('transfer-checkbox')) {
+                    updateSelectedCount();
                     const allCheckboxes = document.querySelectorAll('.transfer-checkbox');
                     const checkedCheckboxes = document.querySelectorAll('.transfer-checkbox:checked');
                     const selectAll = document.getElementById('select-all');
@@ -468,14 +438,10 @@
                 }
             });
 
-            // Bulk receive button
-            const bulkBtn = document.getElementById('bulk-receive-btn');
-            if (bulkBtn) {
-                console.log('Found bulk receive button');
-                bulkBtn.addEventListener('click', submitBulkReceive);
-            } else {
-                console.error('Bulk receive button not found!');
-            }
+            // Bulk receive button (delegated)
+            document.addEventListener('click', function(e) {
+                if (e.target.closest('#bulk-receive-btn')) submitBulkReceive();
+            });
 
             // Initialize count
             updateSelectedCount();
@@ -616,69 +582,29 @@
         }
 
         // Initialize event listeners
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, initializing event listeners...');
-            
-            // Select all checkbox
-            const selectAllCheckbox = document.getElementById('select-all');
-            if (selectAllCheckbox) {
-                console.log('Found select-all checkbox');
-                selectAllCheckbox.addEventListener('change', function() {
-                    console.log('Select all changed:', this.checked);
-                    const checkboxes = document.querySelectorAll('.transfer-checkbox');
-                    console.log('Found', checkboxes.length, 'transfer checkboxes');
-                    
-                    checkboxes.forEach((cb, index) => {
-                        console.log(`Setting checkbox ${index} to ${this.checked}`);
-                        cb.checked = this.checked;
-                        if (this.checked) {
-                            cb.setAttribute('checked', 'checked');
-                        } else {
-                            cb.removeAttribute('checked');
-                        }
-                    });
-                    
-                    updateSelectedCount();
-                    
-                    // Visual feedback
-                    const label = selectAllCheckbox.nextElementSibling;
-                    if (label) {
-                        label.textContent = this.checked ? 'Deselect All' : 'Select All';
-                    }
-                });
-            } else {
-                console.error('Select-all checkbox not found!');
+        // Delegated listeners — work after wire:init re-renders the DOM
+        document.addEventListener('change', function(e) {
+            if (e.target.id === 'select-all') {
+                const checkboxes = document.querySelectorAll('.transfer-checkbox');
+                checkboxes.forEach(cb => { cb.checked = e.target.checked; });
+                updateSelectedCount();
+                const label = e.target.nextElementSibling;
+                if (label) label.textContent = e.target.checked ? 'Deselect All' : 'Select All';
             }
-
-            // Individual checkboxes
-            document.addEventListener('change', function(e) {
-                if (e.target.classList.contains('transfer-checkbox')) {
-                    console.log('Individual checkbox changed:', e.target.value);
-                    updateSelectedCount();
-                    
-                    // Update select all checkbox state
-                    const allCheckboxes = document.querySelectorAll('.transfer-checkbox');
-                    const checkedCheckboxes = document.querySelectorAll('.transfer-checkbox:checked');
-                    const selectAll = document.getElementById('select-all');
-                    if (selectAll) {
-                        selectAll.checked = allCheckboxes.length === checkedCheckboxes.length && allCheckboxes.length > 0;
-                        selectAll.indeterminate = checkedCheckboxes.length > 0 && checkedCheckboxes.length < allCheckboxes.length;
-                    }
+            if (e.target.classList.contains('transfer-checkbox')) {
+                updateSelectedCount();
+                const allCheckboxes = document.querySelectorAll('.transfer-checkbox');
+                const checkedCheckboxes = document.querySelectorAll('.transfer-checkbox:checked');
+                const selectAll = document.getElementById('select-all');
+                if (selectAll) {
+                    selectAll.checked = allCheckboxes.length === checkedCheckboxes.length && allCheckboxes.length > 0;
+                    selectAll.indeterminate = checkedCheckboxes.length > 0 && checkedCheckboxes.length < allCheckboxes.length;
                 }
-            });
-
-            // Bulk receive button
-            const bulkBtn = document.getElementById('bulk-receive-btn');
-            if (bulkBtn) {
-                console.log('Found bulk receive button');
-                bulkBtn.addEventListener('click', submitBulkReceive);
-            } else {
-                console.error('Bulk receive button not found!');
             }
+        });
 
-            // Initialize count
-            updateSelectedCount();
-            console.log('Event listeners initialized');
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('#bulk-receive-btn')) submitBulkReceive();
         });
 
         document.addEventListener('keydown', function (e) {

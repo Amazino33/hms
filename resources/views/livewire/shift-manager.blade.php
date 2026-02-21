@@ -164,7 +164,8 @@
                 </div>
             @endif
         </div>
-
+    </div>
+</div>
     @endif
 
     <!-- Toast Notification Container -->

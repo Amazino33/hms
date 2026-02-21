@@ -25,7 +25,7 @@ class OrderSplitter
      * @param array $options optional keys: payment_method, amount_paid, guest_id
      * @return array created Order models
      */
-    public function handle($cart, int $tableId, int $userId, array $options = []) : array
+    public function handle($cart, ?int $tableId, int $userId, array $options = []) : array
     {
         $created = [];
 
@@ -150,7 +150,7 @@ class OrderSplitter
                 foreach ($staffUsers as $staffUser) {
                     \Filament\Notifications\Notification::make()
                         ->title("New Order: {$order->order_number}")
-                        ->body("New {$order->destination} order for table {$order->table->name}")
+                        ->body("New {$order->destination} order" . ($order->table ? " for table {$order->table->name}" : ' (Take Away)'))
                         ->info()
                         ->actions([
                             Action::make('view')

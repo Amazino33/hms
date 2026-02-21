@@ -4,6 +4,9 @@
 @source '../../../../resources/views/filament/**/*';
 @config '../../../../tailwind.config.js';
 
+/* Alpine x-cloak: hide elements until Alpine initialises */
+[x-cloak] { display: none !important; }
+
 /* Hide list markers globally for menu items */
 li {
     list-style: none;
