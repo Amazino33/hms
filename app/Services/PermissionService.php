@@ -264,7 +264,7 @@ class PermissionService
     {
         $pages = [];
 
-        // Auto-discover pages from directory
+        // ── 1. Auto-discover standalone Filament pages ───────────────────────
         $pageFiles = glob(app_path('Filament/Pages/*.php'));
         foreach ($pageFiles as $file) {
             $className = 'App\\Filament\\Pages\\' . basename($file, '.php');
@@ -276,9 +276,46 @@ class PermissionService
             }
         }
 
-        // Add manually registered pages if needed
+        // ── 2. Include any resources that use PermissionService::canAccessPage() ───
+        // Resources are not "pages" per se, so they don't live under
+        // Filament/Pages; the normal scan above will miss them.  We look for
+        // Resource classes and pull their navigation label so that the UI can
+        // control access to the index view.
+        $resourceFiles = glob(app_path('Filament/Resources/*/*Resource.php')) ?: [];
+        foreach ($resourceFiles as $file) {
+            // e.g. app/Filament/Resources/ShiftManagement/ShiftManagementResource.php
+            $directory = basename(dirname($file));
+            $className = "App\\Filament\\Resources\\{$directory}\\" . basename($file, '.php');
+
+            if (! class_exists($className)) {
+                continue;
+            }
+
+            // Only include resources that actually honour canAccessPage() –
+            // a quick heuristic is presence of the method, but you can adjust as
+            // your project evolves.
+            $reflection = new \ReflectionClass($className);
+            if ($reflection->hasMethod('canAccess') || $reflection->hasMethod('can') ) {
+                // attempt to read a user‑friendly label; fall back to class name
+                $label = null;
+                if ($reflection->hasProperty('navigationLabel')) {
+                    $prop = $reflection->getProperty('navigationLabel');
+                    if ($prop->isStatic()) {
+                        $label = $prop->getValue();
+                    }
+                }
+                if (!$label) {
+                    $label = class_basename($className);
+                }
+
+                $pages[$className] = $label;
+            }
+        }
+
+        // ── 3. Hand‑picked pages (left here for backwards compatibility) ────
         $manualPages = [
-            // Add any pages that might not be auto-discovered
+            // Add any classes you want to force into the list. e.g.:
+            // App\Filament\Resources\ShiftManagement\ShiftManagementResource::class => 'Shift Management',
         ];
 
         return array_merge($pages, $manualPages);

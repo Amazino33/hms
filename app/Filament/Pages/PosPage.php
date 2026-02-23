@@ -12,7 +12,7 @@ class PosPage extends Page
 {
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-shopping-cart';
     protected string $view = 'filament.pages.pos-page';
-    protected static ?string $title = 'POS';
+    protected static ?string $navigationLabel = 'POS Page';
     
     public $table_id;
 
@@ -24,10 +24,5 @@ class PosPage extends Page
     public function mount()
     {
         $this->table_id = request('table_id');
-    }
-
-    public function getTitle(): string
-    {
-        return '';
     }
 }

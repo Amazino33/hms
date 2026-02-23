@@ -26,14 +26,10 @@ class ShiftManagementResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'id';
 
-    public static function canViewAny(): bool
+    // Register with PermissionService for page access control
+    public static function canAccess(): bool
     {
         return PermissionService::canAccessPage(self::class);
-    }
-
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
-    {
-        return parent::getEloquentQuery()->with('user');
     }
 
     public static function table(Table $table): Table
@@ -44,13 +40,6 @@ class ShiftManagementResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return ShiftManagementInfolist::configure($schema);
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
     }
 
     public static function getPages(): array
