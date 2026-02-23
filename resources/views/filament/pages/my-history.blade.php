@@ -25,7 +25,7 @@
                             <div class="text-sm text-gray-600 dark:text-gray-300">
                                 Table: {{ $order->table?->name }} — Status: {{ $order->status }}
                                 @if($order->processed_by_user_id == $user->id && $order->user_id != $user->id)
-                                    <span class="text-blue-600 dark:text-blue-400">Waiter: {{ $order->user->name ?? 'Unknown' }}</span>
+                                    <span class="text-blue-600 dark:text-blue-400">(Waiter: {{ $order->user->name ?? 'Unknown' }})</span>
                                 @elseif($order->user_id == $user->id)
                                     <span class="text-green-600 dark:text-green-400">(Created by you)</span>
                                 @endif
