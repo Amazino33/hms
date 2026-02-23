@@ -57,6 +57,19 @@ new class extends Component {
 
         // If table has active orders, load existing items
         if ($table->orders->isNotEmpty()) {
+            $activeOrder = $table->orders->first();
+            // Prevent waiter from accessing a table served by someone else
+            if ($activeOrder && $activeOrder->user_id && $activeOrder->user_id !== auth()->id()) {
+                $owner = \App\Models\User::find($activeOrder->user_id);
+                Notification::make()
+                    ->title('Access Denied')
+                    ->body("This table is currently served by " . ($owner?->name ?? 'another waiter'))
+                    ->danger()
+                    ->send();
+                $this->selectedTableId = null;
+                return;
+            }
+
             $orders = \App\Models\Order::where('table_id', $value)
                 ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
                 ->with('items.product')
@@ -344,6 +357,7 @@ new class extends Component {
         $this->selectedGuestId = null;
 
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
+        Cache::forget('menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
     }
 
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
@@ -403,6 +417,7 @@ new class extends Component {
         $this->existingTotal = collect($this->existingItems)->sum(fn($i) => $i['price'] * $i['quantity']);
 
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
+        Cache::forget('menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
 
         Notification::make()->title('Order Updated')->success()->send();
     }
@@ -485,6 +500,7 @@ new class extends Component {
 
         // Clear product cache to refresh inventory display
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
+        Cache::forget('menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
 
         $reason = $this->cancellationReason;
 
@@ -578,13 +594,16 @@ new class extends Component {
         });
 
         // Get menu items
-        $menuItemsCacheKey = 'menu_items_' . $this->search;
-        $menuItems = Cache::remember($menuItemsCacheKey, 1800, function () {
+        $menuItemsCacheKey = 'menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search;
+        // Reduced cache time to 5 seconds to ensure ingredient stock is fresh
+        $menuItems = Cache::remember($menuItemsCacheKey, 5, function () {
             $query = \App\Models\MenuItem::where('available_for_sale', true)
                 ->with(['recipes.ingredient']);
             
             if (!empty($this->search))
                 $query->where(fn($q) => $q->where('name', 'like', "%{$this->search}%")->orWhere('sku', 'like', "%{$this->search}%"));
+            elseif ($this->activeCategoryId)
+                $query->where('category_id', $this->activeCategoryId);
 
             return $query->limit(100)->get();
         });
@@ -609,6 +628,11 @@ new class extends Component {
     private function getWarehouseId($product): int
     {
         return \App\Services\InventoryService::getWarehouseForProduct($product);
+    }
+
+    public function openReturnModal($itemId)
+    {
+        Notification::make()->title('Return Item Request')->body("Item ID: $itemId")->info()->send();
     }
 };
 ?>
@@ -696,12 +720,13 @@ new class extends Component {
                         </div>
                     @endforeach
                     @foreach($menuItems as $menuItem)
-                        <div @if(auth()->user()->currentShift()) @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float)$menuItem->sale_price }})" @endif
-                            class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
+                        @php $stock = $menuItem->available_stock; @endphp
+                        <div @if(auth()->user()->currentShift()) @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float)$menuItem->sale_price }}, {{ $stock === null ? 'null' : $stock }})" @endif
+                            class="relative {{ auth()->user()->currentShift() && ($stock === null || $stock > 0) ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
                             <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">{{ $menuItem->name }}</div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">₦{{ number_format($menuItem->sale_price) }}</div>
                             <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                Menu Item
+                                {{ $stock === null ? 'Menu Item' : $stock . ' portions left' }}
                             </div>
                         </div>
                     @endforeach
@@ -742,11 +767,23 @@ new class extends Component {
                         <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
                         @foreach($existingItems as $id => $item)
                             <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
+                            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75" x-data="{ open: false }">
                                 <div class="flex-1">
                                     <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
                                 </div>
                                 <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                                <div class="flex items-center gap-2">
+                                    <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                                    <div class="relative">
+                                        <button @click="open = !open" @click.outside="open = false" class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-gray-400 hover:text-gray-600">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                                        </button>
+                                        <div x-show="open" x-transition class="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10 overflow-hidden">
+                                            <button wire:click="openReturnModal({{ $item['id'] }})" @click="open = false" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Return Item</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         @endforeach
                         <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 mt-4" x-show="cartCount > 0">New Items</h4>
@@ -853,11 +890,12 @@ new class extends Component {
                     </div>
                 @endforeach
                 @foreach($menuItems as $menuItem)
-                    <div @if(auth()->user()->currentShift()) @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float)$menuItem->sale_price }})" @endif
-                        class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
+                    @php $stock = $menuItem->available_stock; @endphp
+                    <div @if(auth()->user()->currentShift()) @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float)$menuItem->sale_price }}, {{ $stock === null ? 'null' : $stock }})" @endif
+                        class="relative {{ auth()->user()->currentShift() && ($stock === null || $stock > 0) ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">{{ $menuItem->name }}</div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">₦{{ number_format($menuItem->sale_price) }}</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Menu Item</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">{{ $stock === null ? 'Menu Item' : $stock . ' left' }}</div>
                     </div>
                 @endforeach
             </div>
@@ -956,8 +994,22 @@ new class extends Component {
                                 <div class="flex-1">
                                     <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                            <div x-data="{ offset: 0, startX: 0 }" class="relative overflow-hidden border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
+                                <div class="absolute inset-y-0 right-0 flex items-center">
+                                    <button wire:click="openReturnModal({{ $item['id'] }})" class="h-full px-4 bg-red-600 text-white text-sm font-bold flex items-center">Return</button>
                                 </div>
                                 <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                                <div class="flex justify-between items-center bg-white dark:bg-gray-900 relative z-10 transition-transform duration-100"
+                                     :style="`transform: translateX(${offset}px)`"
+                                     @touchstart="startX = $event.touches[0].clientX"
+                                     @touchmove="offset = Math.min(0, Math.max(-70, $event.touches[0].clientX - startX))"
+                                     @touchend="offset = offset < -35 ? -70 : 0">
+                                    <div class="flex-1">
+                                        <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
+                                    </div>
+                                    <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                                </div>
                             </div>
                         @endforeach
                     @endif
@@ -1277,10 +1329,16 @@ new class extends Component {
             /**
              * Add a menu item to cart — must hit server for ingredient availability check.
              */
-            async addMenuItemToCart(id, name, price) {
+            async addMenuItemToCart(id, name, price, availableStock) {
                 if (this.isLoading) return;
                 const key = 'menu_' + id;
                 const currentQty = this.cart[key] ? this.cart[key].qty : 0;
+
+                // Client-side check for menu items
+                if (availableStock !== null && availableStock <= currentQty) {
+                    alert('Out of stock: only ' + availableStock + ' portions available.');
+                    return;
+                }
 
                 this.isLoading = true;
                 try {

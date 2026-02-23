@@ -68,8 +68,8 @@ class OrderObserver
     private function calculateAndSaveCommission(Order $order): void
     {
         try {
-            // Eager-load items → product → category in a single query.
-            $order->loadMissing(['items.product.category']);
+            // Eager-load items → product/menuItem → category in a single query.
+            $order->loadMissing(['items.product.category', 'items.menuItem.category']);
 
             $total = 0.0;
 
@@ -77,10 +77,10 @@ class OrderObserver
                 $rate = 0.0;
 
                 if ($item->item_type === 'product' && $item->product && $item->product->category) {
-                    // commission_rate is a fixed ₦ amount per unit sold
                     $rate = (float) $item->product->category->commission_rate;
+                } elseif ($item->item_type === 'menu_item' && $item->menuItem && $item->menuItem->category) {
+                    $rate = (float) $item->menuItem->category->commission_rate;
                 }
-                // Menu items do not have a category → commission rate stays 0.
 
                 $total += $item->quantity * $rate;
             }

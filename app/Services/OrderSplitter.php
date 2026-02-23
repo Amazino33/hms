@@ -216,16 +216,23 @@ class OrderSplitter
     private static function calculateCommission(Order $order): void
     {
         try {
-            // Fresh load of items with product → category so rates are available.
-            $order->load(['items.product.category']);
+            // Fresh load of items with product/menuItem → category so rates are available.
+            $order->load(['items.product.category', 'items.menuItem.category']);
 
             $total = 0.0;
 
             foreach ($order->items as $item) {
+                $category = null;
+
                 if ($item->item_type === 'product' && $item->product && $item->product->category) {
-                    $total += $item->quantity * (float) $item->product->category->commission_rate;
+                    $category = $item->product->category;
+                } elseif ($item->item_type === 'menu_item' && $item->menuItem && $item->menuItem->category) {
+                    $category = $item->menuItem->category;
                 }
-                // Menu items have no category commission rate.
+
+                if ($category) {
+                    $total += $item->quantity * (float) $category->commission_rate;
+                }
             }
 
             if ($total > 0) {

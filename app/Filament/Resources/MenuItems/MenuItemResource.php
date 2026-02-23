@@ -11,6 +11,7 @@ use App\Filament\Resources\MenuItems\Schemas\MenuItemInfolist;
 use App\Filament\Resources\MenuItems\Tables\MenuItemsTable;
 use App\Models\Ingredient;
 use App\Models\MenuItem;
+use App\Models\Category;
 use BackedEnum;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
@@ -44,9 +45,13 @@ class MenuItemResource extends Resource
         return $schema->schema([
             TextInput::make('name')->required(),
             TextInput::make('sku')->required()->unique(ignoreRecord: true),
+            Select::make('category_id')
+                ->label('Category')
+                ->options(Category::pluck('name', 'id'))
+                ->searchable()
+                ->required(),
             Hidden::make('type')->default('food'),
             TextInput::make('sale_price')->numeric()->required(),
-            TextInput::make('commission_amount')->numeric(),
             Toggle::make('available_for_sale')->default(true),
             Repeater::make('recipes')
                 ->relationship('recipes')
