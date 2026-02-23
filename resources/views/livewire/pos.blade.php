@@ -36,6 +36,13 @@ new class extends Component {
     public $showCancelModal = false;
     public $cancellationReason = '';
 
+    // Return Item Properties
+    public $showReturnModal = false;
+    public $returnItemKey = null;
+    public $returnReason = '';
+    public $returnQuantity = 1;
+    public $maxReturnQuantity = 1;
+
     public function clearSearch()
     {
         $this->search = '';
@@ -80,12 +87,16 @@ new class extends Component {
                     if (isset($this->existingItems[$item->product_id ?: $item->id])) {
                         $this->existingItems[$item->product_id ?: $item->id]['quantity'] += $item->quantity;
                     } else {
-                        $this->existingItems[$item->product_id ?: $item->id] = [
+                        $key = $item->product_id ?: $item->id;
+                        $this->existingItems[$key] = [
                             'id' => $item->product_id ?: $item->menu_item_id,
                             'name' => $item->product_name,
                             'price' => $item->unit_price,
                             'quantity' => $item->quantity,
                             'image' => $item->product ? $item->product->image : null,
+                            'type' => $item->item_type,
+                            'product_id' => $item->product_id,
+                            'menu_item_id' => $item->menu_item_id,
                         ];
                     }
                 }
@@ -146,18 +157,18 @@ new class extends Component {
         if ($itemType === 'product') {
             $product = Product::with('category')->find($itemId);
 
-            // Sum stock across ALL consumer warehouses for this product.
-            // Avoids the fragile orderBy('id') bar/kitchen swap that breaks on each environment.
-            $consumerWarehouseIds = Cache::remember('consumer_warehouse_ids', 3600, fn() =>
-                \App\Models\WareHouse::where('type', 'consumer')->pluck('id')
-            );
+            // Determine the specific warehouse for this product
+            $warehouseId = \App\Services\InventoryService::getWarehouseForProduct($product);
+
+            // Check stock in that specific warehouse
             $available = (int) DB::table('inventory_items')
                 ->where('product_id', $itemId)
-                ->whereIn('warehouse_id', $consumerWarehouseIds)
-                ->sum('quantity');
+                ->where('warehouse_id', $warehouseId)
+                ->value('quantity');
 
             if ($available <= $currentQty) {
-                Notification::make()->title('Out of Stock')->body("Only {$available} available in stock.")->danger()->send();
+                Notification::make()->title('Out of Stock')
+                ->body("Only {$available} available in stock. Warehouse ID: {$warehouseId}")->danger()->send();
                 return ['ok' => false];
             }
 
@@ -411,7 +422,16 @@ new class extends Component {
             if (isset($this->existingItems[$key])) {
                 $this->existingItems[$key]['quantity'] += $item['quantity'];
             } else {
-                $this->existingItems[$key] = ['id' => $key, 'name' => $item['name'], 'price' => $item['price'], 'quantity' => $item['quantity'], 'image' => null];
+                $this->existingItems[$key] = [
+                    'id' => $key,
+                    'name' => $item['name'],
+                    'price' => $item['price'],
+                    'quantity' => $item['quantity'],
+                    'image' => null,
+                    'type' => $item['type'],
+                    'product_id' => $item['type'] === 'product' ? $key : null,
+                    'menu_item_id' => $item['type'] === 'menu_item' ? $item['menu_item_id'] : null,
+                ];
             }
         }
         $this->existingTotal = collect($this->existingItems)->sum(fn($i) => $i['price'] * $i['quantity']);
@@ -581,12 +601,10 @@ new class extends Component {
 
             $products = $query->limit(100)->get();
 
-            // Add available stock: sum across all consumer warehouses
-            // This avoids wrong results when bar/kitchen warehouse IDs differ per environment
-            $consumerWarehouseIds = \App\Models\WareHouse::where('type', 'consumer')->pluck('id');
             foreach ($products as $product) {
+                $warehouseId = \App\Services\InventoryService::getWarehouseForProduct($product);
                 $product->available_stock = $product->inventory
-                    ->whereIn('warehouse_id', $consumerWarehouseIds->all())
+                    ->where('warehouse_id', $warehouseId)
                     ->sum('quantity');
             }
 
@@ -630,9 +648,114 @@ new class extends Component {
         return \App\Services\InventoryService::getWarehouseForProduct($product);
     }
 
-    public function openReturnModal($itemId)
+    public function openReturnModal($key)
     {
-        Notification::make()->title('Return Item Request')->body("Item ID: $itemId")->info()->send();
+        if (!isset($this->existingItems[$key])) {
+            Notification::make()->title('Item not found')->danger()->send();
+            return;
+        }
+
+        $this->returnItemKey = $key;
+        $this->returnReason = '';
+        $this->maxReturnQuantity = $this->existingItems[$key]['quantity'];
+        $this->returnQuantity = 1; // Default to returning 1
+        $this->showReturnModal = true;
+    }
+
+    public function submitReturnRequest()
+    {
+        $this->validate([
+            'returnReason' => 'required|string|min:3',
+            'returnQuantity' => 'required|integer|min:1|max:' . $this->maxReturnQuantity,
+        ]);
+
+        if (!$this->returnItemKey || !isset($this->existingItems[$this->returnItemKey])) {
+            Notification::make()->title('Invalid Item')->danger()->send();
+            return;
+        }
+
+        $itemData = $this->existingItems[$this->returnItemKey];
+        $destination = 'kitchen';
+
+        // Determine destination
+        if ($itemData['type'] === 'product' && $itemData['product_id']) {
+            $product = Product::with('category')->find($itemData['product_id']);
+            if ($product && $product->category && $product->category->type === 'drink') {
+                $destination = 'bar';
+            }
+        }
+
+        DB::transaction(function () use ($itemData, $destination) {
+            // 1. Create Return Order Ticket for KDS / Bar
+            $order = Order::create([
+                'order_number' => 'RET-' . time(),
+                'table_id' => $this->selectedTableId === 'takeaway' ? null : $this->selectedTableId,
+                'user_id' => auth()->id(),
+                'status' => 'pending',
+                'destination' => $destination,
+                'total_amount' => 0, 
+                'is_return' => true,
+            ]);
+
+            OrderItem::create([
+                'order_id' => $order->id,
+                'product_id' => $itemData['type'] === 'product' ? $itemData['product_id'] : null,
+                'menu_item_id' => $itemData['type'] === 'menu_item' ? $itemData['menu_item_id'] : null,
+                'product_name' => $itemData['name'],
+                'item_type' => $itemData['type'],
+                'quantity' => $this->returnQuantity, 
+                'unit_price' => $itemData['price'],
+                'subtotal' => 0,
+                'return_reason' => $this->returnReason,
+            ]);
+
+            // 2. Deduct the returned quantity from the customer's active orders
+            $qtyToReturn = $this->returnQuantity;
+            $tableId = $this->selectedTableId === 'takeaway' ? null : $this->selectedTableId;
+            
+            $activeOrders = Order::where('table_id', $tableId)
+                ->where('is_return', false)
+                ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
+                ->with('items')
+                ->get();
+
+            foreach ($activeOrders as $activeOrder) {
+                foreach ($activeOrder->items as $item) {
+                    if ($qtyToReturn <= 0) break;
+
+                    // Match product or menu item
+                    $isMatch = false;
+                    if ($itemData['type'] === 'product' && $item->product_id == $itemData['product_id']) $isMatch = true;
+                    if ($itemData['type'] === 'menu_item' && $item->menu_item_id == $itemData['menu_item_id']) $isMatch = true;
+
+                    if ($isMatch) {
+                        $deductAmount = min($item->quantity, $qtyToReturn);
+                        $newQty = $item->quantity - $deductAmount;
+
+                        if ($newQty > 0) {
+                            $item->update([
+                                'quantity' => $newQty,
+                                'subtotal' => $newQty * $item->unit_price
+                            ]);
+                        } else {
+                            $item->delete(); // Remove row entirely if returning all
+                        }
+
+                        $qtyToReturn -= $deductAmount;
+                    }
+                }
+            }
+        });
+
+        // 3. Refresh the POS view to reflect the lowered quantities
+        if ($this->selectedTableId) {
+            $this->updatedSelectedTableId($this->selectedTableId);
+        }
+
+        $this->showReturnModal = false;
+        $this->returnReason = '';
+        $this->returnQuantity = 1;
+        Notification::make()->title('Return Request Sent')->success()->send();
     }
 };
 ?>
@@ -766,13 +889,11 @@ new class extends Component {
                     @if(!empty($existingItems))
                         <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
                         @foreach($existingItems as $id => $item)
-                            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
                             <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75" x-data="{ open: false }">
                                 <div class="flex-1">
                                     <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
                                 </div>
-                                <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
                                 <div class="flex items-center gap-2">
                                     <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
                                     <div class="relative">
@@ -780,7 +901,7 @@ new class extends Component {
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
                                         </button>
                                         <div x-show="open" x-transition class="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10 overflow-hidden">
-                                            <button wire:click="openReturnModal({{ $item['id'] }})" @click="open = false" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Return Item</button>
+                                            <button wire:click="openReturnModal('{{ $id }}')" @click="open = false" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Return Item</button>
                                         </div>
                                     </div>
                                 </div>
@@ -990,15 +1111,10 @@ new class extends Component {
                     @if(!empty($existingItems))
                         <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Existing Items</h4>
                         @foreach($existingItems as $id => $item)
-                            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
-                                <div class="flex-1">
-                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200">{{ $item['name'] }}</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">₦{{ $item['price'] }} x {{ $item['quantity'] }}</div>
                             <div x-data="{ offset: 0, startX: 0 }" class="relative overflow-hidden border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
                                 <div class="absolute inset-y-0 right-0 flex items-center">
-                                    <button wire:click="openReturnModal({{ $item['id'] }})" class="h-full px-4 bg-red-600 text-white text-sm font-bold flex items-center">Return</button>
+                                    <button wire:click="openReturnModal('{{ $id }}')" class="h-full px-4 bg-red-600 text-white text-sm font-bold flex items-center">Return</button>
                                 </div>
-                                <div class="font-mono font-bold text-gray-700 dark:text-gray-300">₦{{ number_format($item['price'] * $item['quantity']) }}</div>
                                 <div class="flex justify-between items-center bg-white dark:bg-gray-900 relative z-10 transition-transform duration-100"
                                      :style="`transform: translateX(${offset}px)`"
                                      @touchstart="startX = $event.touches[0].clientX"
@@ -1522,6 +1638,47 @@ new class extends Component {
                         class="px-4 py-3 font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 touch-manipulation flex items-center justify-center gap-2">
                         <span>Cancel Order</span>
                     </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if($showReturnModal)
+        <div class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div class="bg-red-50 dark:bg-red-900/20 p-4 border-b border-red-100 dark:border-red-800 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-red-700 dark:text-red-400">↩️ Return Item</h3>
+                    <button @click="$wire.set('showReturnModal', false)" class="text-gray-400 hover:text-red-500 touch-manipulation p-2"><span class="text-2xl">&times;</span></button>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <div class="text-center mb-2">
+                        <div class="text-gray-800 dark:text-gray-200 font-medium">
+                            Returning: <span class="font-bold">{{ $existingItems[$returnItemKey]['name'] ?? 'Item' }}</span>
+                        </div>
+                    </div>
+
+                    <div x-data="{ qty: @entangle('returnQuantity'), maxQty: @entangle('maxReturnQuantity') }">
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Quantity to Return</label>
+                        <div class="flex items-center gap-3">
+                            <button type="button" @click="if(qty > 1) qty--" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-3 rounded-lg font-bold text-xl text-gray-700 dark:text-gray-300 transition">-</button>
+                            <input type="number" wire:model="returnQuantity" min="1" :max="maxQty" readonly class="w-full text-center p-3 text-lg border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 font-bold">
+                            <button type="button" @click="if(qty < maxQty) qty++" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-3 rounded-lg font-bold text-xl text-gray-700 dark:text-gray-300 transition">+</button>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1 text-center font-medium">Max returnable: <span x-text="maxQty"></span></div>
+                        @error('returnQuantity') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Reason for Return *</label>
+                        <textarea wire:model="returnReason" class="w-full p-3 text-base border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 touch-manipulation resize-none" rows="3" placeholder="e.g. Wrong item, Cold food, Customer changed mind..."></textarea>
+                        @error('returnReason') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3">
+                    <button @click="$wire.set('showReturnModal', false)" class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg touch-manipulation">Cancel</button>
+                    <button wire:click="submitReturnRequest" class="px-4 py-3 font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 touch-manipulation flex items-center justify-center gap-2">Confirm Return</button>
                 </div>
             </div>
         </div>

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Services\PermissionService;
 use App\Models\Order;
+use App\Models\InventoryItem;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -95,6 +96,58 @@ class BarDisplay extends Page
                         ->url(OrderResource::getUrl('view', ['record' => $order->id])),
                 ])
                 ->sendToDatabase($staffUser);
+        }
+    }
+
+    public function confirmAndRestock($returnOrderId) {
+        try {
+            DB::transaction(function () use ($returnOrderId) {
+                // Fetch the specific return order and its items
+                $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
+
+                // Prevent double clicking by checking if it's already processed
+                if ($returnOrder->status === 'returned') {
+                    throw new \Exception('This return has already been processed.');
+                }
+
+                foreach($returnOrder->items as $item) {
+                    // Only attempt to restock physical products
+                    if ($item->item_type === 'product' && $item->product) {
+                        // Find the inventory record for the consumer warehouse
+                        $inventoryRecord = InventoryItem::where('product_id', $item->product_id)
+                            ->whereHas('warehouse', function($q) {
+                                $q->where('type', 'consumer');
+                            })
+                            ->first();
+
+                        if ($inventoryRecord) {
+                            $inventoryRecord->increment('quantity', $item->quantity);
+                        }
+                    }
+                }
+
+                // Mark the return order as returned
+                $returnOrder->update(['status' => 'returned']);
+            });
+
+            // 👇 BUST THE CACHE: Forces the UI to refresh instantly
+            Cache::forget('bar_display:active_orders');
+            Cache::forget('bar_display:recent_history');
+
+            // 👇 USE FILAMENT NOTIFICATION: Replaces standard session flash
+            Notification::make()
+                ->title('Restocked Successfully')
+                ->body('Return processed and inventory updated.')
+                ->success()
+                ->send();
+
+        } catch (\Exception $e) {
+            // 👇 USE FILAMENT NOTIFICATION FOR ERRORS
+            Notification::make()
+                ->title('Restock Failed')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
         }
     }
 
