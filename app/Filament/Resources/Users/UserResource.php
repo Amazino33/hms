@@ -165,7 +165,7 @@ class UserResource extends Resource
                                             ->relationship() // Fetches from the commissions() relationship
                                             ->schema([
                                                 Grid::make(3)->schema([
-                                                    TextInput::make('order_id')
+                                                    TextInput::make('order_number')
                                                         ->label('Order #')
                                                         ->disabled(),
                                                     TextInput::make('amount')
