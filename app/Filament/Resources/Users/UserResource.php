@@ -21,6 +21,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
@@ -93,15 +94,19 @@ class UserResource extends Resource
                                     TextInput::make('base_salary')
                                         ->numeric()
                                         ->prefix('₦'),
-                                    // This fetches the 'commission' column from your users table
-                                    TextColumn::make('commissions_sum_amount')
-                                        ->label('Total Commission')
-                                        ->money('NGN')
-                                        ->sum('commissions', 'amount') // Sums the 'amount' column in the 'commissions' table
-                                        ->sortable()
-                                        ->color('success')
-                                        ->weight('bold')
-                                        ->disabled(), // Make it read-only since it's calculated
+                                    TextInput::make('total_commission')
+                                        ->label('Total Commission Earned')
+                                        ->prefix('₦')
+                                        ->readOnly()
+                                        ->afterStateHydrated(function (TextInput $component, $record) {
+                                            if ($record) {
+                                                // Fetch the sum directly from the commissions relationship
+                                                $sum = $record->commissions()->sum('amount');
+                                                $component->state(number_format($sum, 2));
+                                            } else {
+                                                $component->state('0.00');
+                                            }
+                                        }),
                                     Select::make('bank_name')
                                         ->label('Bank Name')
                                         ->options(self::getNigerianBanks())
