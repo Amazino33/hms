@@ -27,6 +27,8 @@ use Filament\Schemas\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 
 class OrderResource extends Resource
@@ -212,6 +214,16 @@ class OrderResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
+                
+                TextColumn::make('user.name')
+                    ->label('Waiter')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('date')
+                    ->label('Date')
+                    ->date()
+                    ->sortable(),
 
                 TextColumn::make('status')
                     ->badge()
@@ -297,7 +309,65 @@ class OrderResource extends Resource
                     ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
                         Order::whereIn('id', $records->pluck('id')->toArray())->delete();
                     }),
-            ]);
+            ])
+            ->filters([
+                // 1. Filter by Table
+            SelectFilter::make('table_id')
+                ->label('Table')
+                ->relationship('table', 'name')
+                ->searchable()
+                ->preload(),
+
+            // 2. Filter by Waiter
+            SelectFilter::make('user_id')
+                ->label('Waiter')
+                ->relationship('user', 'name')
+                ->searchable()
+                ->preload(),
+
+            // 3. Filter by Status
+            SelectFilter::make('status')
+                ->options([
+                    'pending' => 'PENDING',
+                    'preparing' => 'PREPARING',
+                    'ready' => 'READY',
+                    'served' => 'SERVED',
+                    'paid' => 'PAID',
+                    'cancelled' => 'CANCELLED',
+                    'returned' => 'RETURNED',
+                ]),
+
+            // 4. Filter by Date Range
+            \Filament\Tables\Filters\Filter::make('date')
+                ->form([
+                    \Filament\Forms\Components\DatePicker::make('from'),
+                    \Filament\Forms\Components\DatePicker::make('until'),
+                ])
+                ->query(function (Builder $query, array $data): Builder {
+                    return $query
+                        ->when(
+                            $data['from'],
+                            fn (Builder $query, $date): Builder => $query->whereDate('date', '>=', $date),
+                        )
+                        ->when(
+                            $data['until'],
+                            fn (Builder $query, $date): Builder => $query->whereDate('date', '<=', $date),
+                        );
+                }),
+
+            // 5. Filter for "Debt" (Balance Due)
+            Filter::make('has_debt')
+                ->label('Has Debt')
+                ->query(fn (Builder $query): Builder => $query->whereColumn('amount_paid', '<', 'total_amount')),
+
+            // 6. Filter by Debtor (Guest)
+            SelectFilter::make('guest_id')
+                ->label('Debtor')
+                ->relationship('guest', 'name')
+                ->searchable()
+                ->preload(),
+        ])
+        ->filtersFormColumns(3); // Organizes filters into 3 columns for better UI
     }
 
     public static function getRelations(): array
