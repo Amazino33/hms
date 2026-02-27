@@ -7,6 +7,7 @@ const STATIC_ASSETS = [
     '/favicon.ico',
     '/apple-touch-icon.png',
     '/site.webmanifest',
+    '/manifest.json',
     '/favicon.svg'
 ];
 
@@ -55,6 +56,8 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const { request } = event;
     if (request.method !== 'GET') return;
+    // Ignore non-HTTP(S) requests (like chrome-extension://)
+    if (!request.url.startsWith('http')) return;
 
     const url = new URL(request.url);
 

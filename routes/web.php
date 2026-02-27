@@ -4,17 +4,26 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PwaController;
 
 // PWA Manifest - must be publicly accessible
-Route::get('/site.webmanifest', [PwaController::class, 'manifest'])->name('pwa.manifest');
-
-// PWA Service Worker and static files
-Route::get('/sw.js', function () {
-    $content = file_get_contents(public_path('sw.js'));
-    return response($content, 200, [
-        'Content-Type' => 'application/javascript',
-        'Cache-Control' => 'no-cache, no-store, must-revalidate',
-        'Service-Worker-Allowed' => '/'
+// Serve PWA files without any auth middleware
+Route::get('/manifest.json', function () {
+    return response()->file(public_path('manifest.json'), [
+        'Content-Type' => 'application/manifest+json',
+        'Access-Control-Allow-Origin' => '*',
     ]);
-})->name('pwa.service-worker');
+})->withoutMiddleware(['auth', 'web']);
+
+Route::get('/site.webmanifest', function () {
+    return response()->file(public_path('site.webmanifest'), [
+        'Content-Type' => 'application/manifest+json',
+        'Access-Control-Allow-Origin' => '*',
+    ]);
+})->withoutMiddleware(['auth', 'web']);
+
+Route::get('/sw.js', function () {
+    return response()->file(public_path('sw.js'), [
+        'Content-Type' => 'application/javascript',
+    ]);
+})->withoutMiddleware(['auth', 'web']);
 
 Route::get('/cron-test', function () {
     \App\Jobs\CronQueueTestJob::dispatch();
