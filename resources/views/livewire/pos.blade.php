@@ -15,7 +15,7 @@ use App\Services\OrderSplitter;
 
 new class extends Component {
     public $categories;
-    public $tables;
+    // public $tables; -> Removed to prevent rehydration constraint loss
     public $selectedTableId;
     public $activeCategoryId;
     public $currentOrderId = null;
@@ -43,6 +43,14 @@ new class extends Component {
     public $returnQuantity = 1;
     public $maxReturnQuantity = 1;
 
+    // Computed Property for Tables
+    public function getTablesProperty()
+    {
+        return \App\Models\Table::with(['orders' => function ($q) {
+            $q->whereIn('status', ['pending', 'preparing', 'ready', 'served'])->latest();
+        }])->get();
+    }
+
     public function clearSearch()
     {
         $this->search = '';
@@ -58,15 +66,18 @@ new class extends Component {
         if (!$value)
             return;
 
-        // Get the selected table
-        $table = $this->tables->find($value);
+        $table = \App\Models\Table::find($value);
         if (!$table) return;
 
-        // If table has active orders, load existing items
-        if ($table->orders->isNotEmpty()) {
-            $activeOrder = $table->orders->first();
+        // Directly query the active order to ensure accurate, live authorization
+        $activeOrder = \App\Models\Order::where('table_id', $value)
+            ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
+            ->latest()
+            ->first();
+
+        if ($activeOrder) {
             // Prevent waiter from accessing a table served by someone else
-            if ($activeOrder && $activeOrder->user_id && $activeOrder->user_id !== auth()->id()) {
+            if ($activeOrder->user_id && $activeOrder->user_id !== auth()->id()) {
                 $owner = \App\Models\User::find($activeOrder->user_id);
                 Notification::make()
                     ->title('Access Denied')
@@ -107,7 +118,6 @@ new class extends Component {
                 Notification::make()->title('Order Resumed')->info()->send();
             }
         }
-        // If table is free, existingItems remains empty
     }
 
     public function loadCurrentShift()
@@ -122,8 +132,6 @@ new class extends Component {
             return Category::has('products')->get();
         });
         $this->activeCategoryId = $this->categories->first()?->id;
-
-        $this->loadTables();
 
         $this->selectedTableId = $table_id ?? $this->tables->first(function($table) {
             $hasActiveOrder = $table->orders->isNotEmpty();
@@ -204,7 +212,6 @@ new class extends Component {
         return ['ok' => false];
     }
 
-    // 👇 NEW: Logic to Save a Guest instantly
     public function saveNewGuest()
     {
         $this->validate([
@@ -216,7 +223,6 @@ new class extends Component {
         $guest = Guest::create([
             'name' => $this->newGuestName,
             'phone' => $this->newGuestPhone,
-            // 'email' => ... (if you need it)
         ]);
 
         // Auto-select the new guest in the dropdown
@@ -353,7 +359,6 @@ new class extends Component {
 
         if ($tableId) {
             \App\Models\Table::find($tableId)->update(['status' => 'available']);
-            $this->loadTables();
         }
 
         $balance = $total - $paidAmount;
@@ -515,9 +520,6 @@ new class extends Component {
         $this->existingTotal = 0;
         $this->currentOrderId = null;
 
-        // Reload tables to reflect status change
-        $this->loadTables();
-
         // Clear product cache to refresh inventory display
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
         Cache::forget('menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
@@ -630,16 +632,6 @@ new class extends Component {
             'products' => $products,
             'menuItems' => $menuItems
         ];
-    }
-
-    private function loadTables()
-    {
-        $this->tables = Cache::remember('tables_with_active_orders', 300, function () {
-            return \App\Models\Table::with(['orders' => function ($q) {
-                $q->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
-                    ->latest();
-            }])->get();
-        });
     }
 
     // Helper to get Warehouse ID consistently
@@ -768,7 +760,6 @@ new class extends Component {
      "
      @print-bill.window="printPOSBill($event.detail[0] ?? $event.detail)"
      @order-cancelled.window="cart = {}; showCart = false">
-    <!-- Shift Status Indicator -->
     <div wire:poll.10s="loadCurrentShift" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3">
@@ -794,7 +785,6 @@ new class extends Component {
         </div>
     </div>
 
-    <!-- Desktop Layout (Hidden on Mobile) -->
     <div class="hidden lg:block">
         <div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
             <div class="col-span-8 flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -863,7 +853,7 @@ new class extends Component {
                         class="w-full p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold touch-manipulation">
                         <option value="">-- Select a Table --</option>
                         <option value="takeaway">Take Away</option>
-                        @foreach($tables as $table)
+                        @foreach($this->tables as $table)
                             @php
                                 $hasActiveOrder = $table->orders->isNotEmpty();
                                 $isOccupied = $table->status === 'occupied' && $hasActiveOrder;
@@ -938,9 +928,7 @@ new class extends Component {
         </div>
     </div>
 
-    <!-- Mobile Layout (Hidden on Desktop) -->
     <div class="lg:hidden min-h-screen flex flex-col">
-        <!-- Mobile Search - Fixed -->
         <div class="bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700 fixed top-[62px] left-0 right-0 z-20">
             <div class="relative">
                 <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search products..."
@@ -961,7 +949,6 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Categories - Fixed -->
         <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed top-[137px] left-0 right-0 z-20">
             <div class="flex overflow-x-auto overflow-y-hidden p-3 space-x-2 flex-nowrap">
                 <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', null) }"
@@ -979,7 +966,6 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Products Grid - Scrollable -->
         <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mt-[50px] mb-[120px] relative">
             @if(!auth()->user()->currentShift())
                 <div class="absolute inset-0 bg-gray-900/30 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
@@ -1022,7 +1008,6 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Total - Fixed above POS bar -->
         <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-[62px] left-0 right-0 z-25">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
@@ -1036,21 +1021,18 @@ new class extends Component {
                     </div>
                 </div>
                 <div class="flex space-x-2">
-                    <!-- Send and Pay buttons moved to cart modal -->
-                </div>
+                    </div>
             </div>
         </div>
 
-        <!-- Mobile POS Bar - Fixed at bottom -->
         <div class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3 fixed bottom-0 left-0 right-0 z-25">
             <div class="flex items-center justify-between">
-                <!-- Table Selector -->
                 <select @if(auth()->user()->currentShift()) wire:model.live="selectedTableId" @endif
                     class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg {{ auth()->user()->currentShift() ? 'bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' }} font-bold"
                     {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                     <option value="">Table</option>
                     <option value="takeaway">Take Away</option>
-                    @foreach($tables as $table)
+                    @foreach($this->tables as $table)
                         @php
                             $hasActiveOrder = $table->orders->isNotEmpty();
                             $isOccupied = $table->status === 'occupied' && $hasActiveOrder;
@@ -1059,7 +1041,6 @@ new class extends Component {
                             {{ $table->name }}</option>
                     @endforeach
                 </select>
-                <!-- Cart Toggle -->
                 <button @click="showCart = !showCart" class="relative p-2 bg-blue-600 text-white rounded-lg">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.1 5H19M7 13v8a2 2 0 002 2h10a2 2 0 002-2v-3"></path>
@@ -1071,7 +1052,6 @@ new class extends Component {
             </div>
         </div>
 
-        <!-- Mobile Cart Sidebar -->
         <div x-show="showCart" x-cloak class="fixed inset-0 bg-black bg-opacity-50 z-50 flex">
             <div class="ml-auto w-80 bg-white dark:bg-gray-900 h-full flex flex-col">
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
@@ -1089,7 +1069,7 @@ new class extends Component {
                     @if($selectedTableId === 'takeaway')
                         <span>Take Away</span>
                     @elseif($selectedTableId)
-                        <span>{{ $tables->find($selectedTableId)?->name ?? 'Table' }}</span>
+                        <span>{{ $this->tables->find($selectedTableId)?->name ?? 'Table' }}</span>
                     @else
                         <span class="italic">No table selected</span>
                     @endif
@@ -1193,7 +1173,6 @@ new class extends Component {
                     <div class="text-3xl lg:text-4xl font-black text-gray-900 dark:text-white">₦<span x-text="total.toLocaleString()"></span></div>
                 </div>
 
-                <!-- Payment Type Selector -->
                 <div>
                     <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Payment Type</label>
                     <div class="grid grid-cols-2 gap-2">
@@ -1210,7 +1189,6 @@ new class extends Component {
                     </div>
                 </div>
 
-                <!-- Single Payment (Original) -->
                 <div x-show="paymentType === 'single'">
                     <div>
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Amount Received</label>
@@ -1266,7 +1244,6 @@ new class extends Component {
                 </div>
                 </div>
 
-                <!-- Split Payment (New) -->
                 <div x-show="paymentType === 'split'" class="space-y-4">
                     <div>
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">💵 Cash Amount</label>
