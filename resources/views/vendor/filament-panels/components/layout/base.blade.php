@@ -81,6 +81,13 @@
             }
         </style>
 
+        
+        {{-- PWA --}}
+        <link rel="manifest" href="/manifest.json">
+        <link rel="manifest" href="/site.webmanifest">
+        <meta name="theme-color" content="#E5353A">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
         @stack('styles')
 
         {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::STYLES_AFTER, scopes: $renderHookScopes) }}
