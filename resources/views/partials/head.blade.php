@@ -56,14 +56,49 @@
             setTimeout(() => { bar.style.opacity = '0'; bar.style.width = '0%'; }, 200);
         }
     });
+</script>
 
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js');
-            });
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js');
+        });
     }
 </script>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js');
+        });
+    }
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('pwaInstaller', () => ({
+            deferredPrompt: null,
+
+            init() {
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    this.deferredPrompt = e;
+                });
+
+                window.addEventListener('appinstalled', () => {
+                    this.deferredPrompt = null;
+                });
+            },
+
+            async installApp() {
+                if (!this.deferredPrompt) return;
+                this.deferredPrompt.prompt();
+                const { outcome } = await this.deferredPrompt.userChoice;
+
+                if (outcome === 'accepted') {
+                    this.deferredPrompt = null;
+                }
+            }
+        }));
+    });
 </script>
 
 @fluxAppearance

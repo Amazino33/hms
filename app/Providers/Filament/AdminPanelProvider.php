@@ -264,16 +264,76 @@ class AdminPanelProvider extends PanelProvider
         );
 
         FilamentView::registerRenderHook(
+            'panels::user-menu.before',
+            fn (): string => Blade::render('
+                <div x-data="{
+                    deferredPrompt: null,
+                    init() {
+                        window.addEventListener(\'beforeinstallprompt\', (e) => {
+                            e.preventDefault();
+                            this.deferredPrompt = e;
+                        });
+                        window.addEventListener(\'appinstalled\', () => {
+                            this.deferredPrompt = null;
+                        });
+                    },
+                    async installApp() {
+                        if (!this.deferredPrompt) return;
+                        this.deferredPrompt.prompt();
+                        const { outcome } = await this.deferredPrompt.userChoice;
+                        if (outcome === \'accepted\') {
+                            this.deferredPrompt = null;
+                        }
+                    }
+                }" class="flex items-center mr-4">
+                    <button 
+                        x-show="deferredPrompt" 
+                        x-cloak
+                        @click="installApp()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Install App
+                    </button>
+                </div>
+            ')
+        );
+
+        FilamentView::registerRenderHook(
+            'panels::user-menu.before',
+            fn (): string => Blade::render('
+            <div x-data="pwaInstaller()" class="flex items-center mr-4">
+                <button 
+                    x-show="deferredPrompt" 
+                    x-cloak
+                    @click="installApp()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Install App
+                </button>
+            </div>
+        ')
+        );
+
+        // 3. Register the Alpine JS Logic and Service Worker Script globally
+        FilamentView::registerRenderHook(
             'panels::scripts.after',
-            fn (): string => Blade::render("
+            fn (): string => Blade::render(`
             <script>
-                if ('serviceWorker' in navigator) {
-                    window.addEventListener('load', () => {
-                        navigator.serviceWorker.register('/sw.js');
+                if ("serviceWorker" in navigator) {
+                    window.addEventListener("load", () => {
+                        navigator.serviceWorker.register("/sw.js");
                     });
                 }
             </script>
-        ")
+            
+            <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+            <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
+            <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('favicon-16x16.png') }}">
+            <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}">
+            <link rel="manifest" href="{{ asset('site.webmanifest') }}">
+            <link rel="mask-icon" href="{{ asset('safari-pinned-tab.svg') }}" color="#E5353A">
+            <link rel="manifest" href="/manifest.json">
+        `)
         );
     }
 }
