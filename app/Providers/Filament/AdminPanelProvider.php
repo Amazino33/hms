@@ -258,7 +258,7 @@ class AdminPanelProvider extends PanelProvider
             'panels::head.end',
             fn (): string => Blade::render('
             <link rel="manifest" href="/manifest.json">
-            <meta name="theme-color" content="#2563eb">
+            <meta name="theme-color" content="#E5353A">
             <link rel="apple-touch-icon" href="/icons/icon-192.png">
         ')
         );
