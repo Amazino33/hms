@@ -32,11 +32,11 @@
         left: 0;
         width: 0%;
         height: 3px;
-        background: #f59e0b;
+        background: #E5353A;
         z-index: 99999;
         transition: width 0.1s ease;
         border-radius: 0 2px 2px 0;
-        box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+        box-shadow: 0 0 8px rgba(229,53,58,0.6);
         pointer-events: none;
     }
 </style>
