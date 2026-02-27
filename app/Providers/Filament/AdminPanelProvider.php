@@ -10,7 +10,6 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
@@ -253,6 +252,28 @@ class AdminPanelProvider extends PanelProvider
                 })();
             </script>
         HTML)
+        );
+
+        FilamentView::registerRenderHook(
+            'panels::head.end',
+            fn (): string => Blade::render('
+            <link rel="manifest" href="/manifest.json">
+            <meta name="theme-color" content="#2563eb">
+            <link rel="apple-touch-icon" href="/icons/icon-192.png">
+        ')
+        );
+
+        FilamentView::registerRenderHook(
+            'panels::scripts.after',
+            fn (): string => Blade::render("
+            <script>
+                if ('serviceWorker' in navigator) {
+                    window.addEventListener('load', () => {
+                        navigator.serviceWorker.register('/sw.js');
+                    });
+                }
+            </script>
+        ")
         );
     }
 }

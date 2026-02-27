@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}">
 <link rel="manifest" href="{{ asset('site.webmanifest') }}">
 <link rel="mask-icon" href="{{ asset('safari-pinned-tab.svg') }}" color="#1f2937">
+<link rel="manifest" href="/manifest.json">
 
 <meta name="theme-color" content="#1f2937">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,14 +28,15 @@
 <style>
     #nprogress-bar {
         position: fixed;
-        top: 0; left: 0;
+        top: 0;
+        left: 0;
         width: 0%;
         height: 3px;
         background: #f59e0b;
         z-index: 99999;
         transition: width 0.1s ease;
         border-radius: 0 2px 2px 0;
-        box-shadow: 0 0 8px rgba(245,158,11,0.6);
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
         pointer-events: none;
     }
 </style>
@@ -54,6 +56,14 @@
             setTimeout(() => { bar.style.opacity = '0'; bar.style.width = '0%'; }, 200);
         }
     });
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js');
+            });
+    }
+</script>
 </script>
 
 @fluxAppearance
