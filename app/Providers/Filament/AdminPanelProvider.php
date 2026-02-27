@@ -238,7 +238,7 @@ class AdminPanelProvider extends PanelProvider
                 >
                     <button
                         @click="install()"
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-1"
+                        class="bg-blue-600 hover:bg-blue-700 text-white ml-2 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-1"
                         title="Install HMS App"
                     >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
