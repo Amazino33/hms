@@ -258,6 +258,16 @@ new class extends Component {
             return;
         }
 
+        // STRICT RULE 1: Prevent paying for items that haven't been sent to the kitchen yet
+        if (!empty($cartItems)) {
+            Notification::make()
+                ->title('Unsent Items')
+                ->body('You must send new items to the kitchen by clicking "Order" before processing payment.')
+                ->warning()
+                ->send();
+            return;
+        }
+
         $total = collect($this->existingItems)->sum(fn($i) => $i['price'] * $i['quantity'])
             + collect($cartItems)->sum(fn($i) => ($i['price'] ?? 0) * ($i['qty'] ?? $i['quantity'] ?? 1));
 
@@ -294,10 +304,27 @@ new class extends Component {
         $tableId = $isTakeaway ? null : (int) $this->selectedTableId;
         $orderStatus = ($paidAmount >= $total) ? 'paid' : 'partial';
 
+        // STRICT RULE 2: Prevent paying for orders that are still cooking/pending
+        $unprocessedOrdersQuery = Order::where('table_id', $tableId)
+            ->whereIn('status', ['pending', 'preparing']);
+            
+        if ($isTakeaway) {
+            $unprocessedOrdersQuery->where('user_id', auth()->id());
+        }
+
+        if ($unprocessedOrdersQuery->exists()) {
+            Notification::make()
+                ->title('Order Not Ready')
+                ->body('Payment blocked. The kitchen or bar has not approved this order yet.')
+                ->danger()
+                ->send();
+            return;
+        }
+
         // Restore old stock & delete previous orders only when a table is involved
         $waiterUserId = auth()->id();
         if (!$isTakeaway && $tableId) {
-            $existingOrders = Order::where('table_id', $tableId)->whereIn('status', ['pending', 'preparing', 'ready', 'served'])->with('items')->get();
+            $existingOrders = Order::where('table_id', $tableId)->whereIn('status', ['ready', 'served'])->with('items')->get();
             $waiterUserId = $existingOrders->first()?->user_id ?? auth()->id();
 
             foreach ($existingOrders as $existingOrder) {
@@ -1601,6 +1628,11 @@ new class extends Component {
                 },
 
                 openPaymentModal() {
+                    if (this.cartCount > 0) {
+                        // Ensure the waiter has sent the order items to the waiter/chef for processing first
+                        alert('Please send the order to the kitchen before proceeding to payment.');
+                        return; 
+                    }
                     if (this.total <= 0) return;
                     this.paidAmount = this.total;
                     this.paymentMethod = 'cash';
