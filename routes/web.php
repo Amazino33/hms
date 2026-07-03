@@ -25,11 +25,6 @@ Route::get('/sw.js', function () {
     ]);
 })->withoutMiddleware(['auth', 'web']);
 
-Route::get('/cron-test', function () {
-    \App\Jobs\CronQueueTestJob::dispatch();
-    return 'queued';
-});
-
 Route::get('/browserconfig.xml', function () {
     $content = file_get_contents(public_path('browserconfig.xml'));
     return response($content, 200, [
@@ -44,22 +39,28 @@ Route::get('/offline.html', function () {
     ]);
 })->name('pwa.offline');
 
-// Debug route to test manifest
-Route::get('/test-manifest', function () {
-    return response()->json(['test' => 'manifest working'], 200, [
-        'Content-Type' => 'application/json'
-    ]);
-});
+// Debug/diagnostic routes — never exposed outside local development.
+if (app()->environment('local')) {
+    Route::get('/cron-test', function () {
+        \App\Jobs\CronQueueTestJob::dispatch();
+        return 'queued';
+    });
 
-// Debug route for manifest test page
-Route::get('/manifest-test', function () {
-    return file_get_contents(public_path('manifest-test.html'));
-});
+    Route::get('/test-manifest', function () {
+        return response()->json(['test' => 'manifest working'], 200, [
+            'Content-Type' => 'application/json'
+        ]);
+    });
 
-// PWA diagnostic page (local only) — shows Service Worker / manifest / install status
-Route::get('/pwa-test', function () {
-    return view('pwa-test');
-})->name('pwa.test');
+    Route::get('/manifest-test', function () {
+        return file_get_contents(public_path('manifest-test.html'));
+    });
+
+    // PWA diagnostic page — shows Service Worker / manifest / install status
+    Route::get('/pwa-test', function () {
+        return view('pwa-test');
+    })->name('pwa.test');
+}
 
 // Redirect the homepage directly to the Admin Panel (named 'home' for tests/views)
 Route::get('/', function () {

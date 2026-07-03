@@ -37,6 +37,7 @@ class TablesTable
                         'reserved' => 'warning',     // Amber
                         'cleaning' => 'info',        // Blue
                         'maintenance' => 'gray',     // Gray
+                        default => 'gray',
                     }),
 
                 // 4. Location

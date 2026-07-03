@@ -45,7 +45,7 @@ class ProductImport implements OnEachRow, WithHeadingRow
 
         // 4. Update Inventory
         // We find the warehouse by the name provided in the Excel (e.g. "Main Bar")
-        $warehouse = Warehouse::where('name', $row['warehouse'])->first();
+        $warehouse = WareHouse::where('name', $row['warehouse'])->first();
 
         if ($warehouse) {
             InventoryItem::updateOrCreate(

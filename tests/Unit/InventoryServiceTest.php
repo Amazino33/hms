@@ -12,7 +12,7 @@ uses(Tests\TestCase::class, RefreshDatabase::class);
 
 it('returns inventory when order is cancelled', function () {
     // Create a warehouse with the ID that InventoryService expects for storage (id=3)
-    $warehouse = \App\Models\Warehouse::create([
+    $warehouse = WareHouse::create([
         'id' => 3,
         'name' => 'Main Warehouse',
         'type' => 'storage',
@@ -63,7 +63,7 @@ it('returns inventory when order is cancelled', function () {
 
 it('does not return inventory for non-cancelled status changes', function () {
     // Create a warehouse with the ID that InventoryService expects for storage (id=3)
-    $warehouse = \App\Models\Warehouse::create([
+    $warehouse = WareHouse::create([
         'id' => 3,
         'name' => 'Main Warehouse',
         'type' => 'storage',

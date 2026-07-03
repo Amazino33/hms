@@ -96,7 +96,7 @@ class StatOverview extends StatsOverviewWidget
         }
 
         // 🤵 SCENARIO 3: WAITER (See Personal Stats)
-        if ($user->hasRole('waiter')) {
+        if ($user->hasRole(['waiter', 'porter'])) {
             
             // 1. "My Ready Orders" (Only show orders created by THIS waiter that are ready)
             $cacheKeyReady = "stat:waiter:ready:{$user->id}";

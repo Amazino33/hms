@@ -16,7 +16,6 @@ it('limits visible low-stock alerts and toggles to show all', function () {
             'sku' => 'M' . $i,
             'type' => 'food',
             'sale_price' => 100,
-            'commission_amount' => 0,
             'available_for_sale' => true,
         ]);
 

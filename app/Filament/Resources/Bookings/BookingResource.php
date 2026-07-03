@@ -5,8 +5,6 @@ namespace App\Filament\Resources\Bookings;
 use App\Filament\Resources\Bookings\Pages\CreateBooking;
 use App\Filament\Resources\Bookings\Pages\EditBooking;
 use App\Filament\Resources\Bookings\Pages\ListBookings;
-use App\Filament\Resources\Bookings\Schemas\BookingForm;
-use App\Filament\Resources\Bookings\Tables\BookingsTable;
 use App\Models\Booking;
 use BackedEnum;
 use UnitEnum;
@@ -92,11 +90,12 @@ class BookingResource extends Resource
         $checkIn = $get('check_in');
         $checkOut = $get('check_out');
 
-        if ($roomId && $checkIn && $checkOut) {
-            $room = Room::find($roomId);
+        $room = $roomId ? Room::find($roomId) : null;
+
+        if ($room && $checkIn && $checkOut) {
             $days = Carbon::parse($checkIn)->diffInDays(Carbon::parse($checkOut));
             $days = $days < 1 ? 1 : $days; // Minimum 1 night
-            
+
             $set('total_price', $room->price_per_night * $days);
         }
     }

@@ -66,7 +66,7 @@ class StaffCashSummary extends StatsOverviewWidget
         }
 
         // Waiter: show payments collected by this user today
-        if ($user->hasRole('waiter')) {
+        if ($user->hasRole(['waiter', 'porter'])) {
             $history = Cache::remember("staff_cash:waiter:{$user->id}", $ttl, fn () => $service->staffDailyHistory($user->id, $from, $to));
             $todayKey = $from->format('Y-m-d');
             $paymentsTotal = $history[$todayKey]['payments_total'] ?? 0;

@@ -30,6 +30,41 @@
             </div>
         </div>
 
+        @if($orders && $orders->isNotEmpty())
+            {{-- Per-order status + confirm-served --}}
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-base md:text-lg font-semibold text-gray-900 dark:text-white mb-4">Orders on this ticket</h3>
+                <div class="space-y-3">
+                    @foreach($orders as $ticketOrder)
+                        <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <div>
+                                <div class="font-medium text-gray-900 dark:text-white">
+                                    #{{ $ticketOrder->order_number }} &middot; {{ ucfirst($ticketOrder->destination ?? 'main') }}
+                                </div>
+                                <div class="text-sm text-gray-500 dark:text-gray-400">
+                                    Status: <span class="font-semibold">{{ ucfirst($ticketOrder->status) }}</span>
+                                    @if($ticketOrder->served_at)
+                                        &middot; Served {{ $ticketOrder->served_at->diffForHumans() }}
+                                    @endif
+                                </div>
+                            </div>
+
+                            @if($ticketOrder->status === 'ready')
+                                <button wire:click="confirmServed({{ $ticketOrder->id }})"
+                                    class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition text-sm">
+                                    Confirm Served
+                                </button>
+                            @elseif($ticketOrder->status === 'served')
+                                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                                    Served
+                                </span>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
         @if($order)
             {{-- Order Summary --}}
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">

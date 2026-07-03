@@ -5,8 +5,6 @@ namespace App\Filament\Resources\Guests;
 use App\Filament\Resources\Guests\Pages\CreateGuest;
 use App\Filament\Resources\Guests\Pages\EditGuest;
 use App\Filament\Resources\Guests\Pages\ListGuests;
-use App\Filament\Resources\Guests\Schemas\GuestForm;
-use App\Filament\Resources\Guests\Tables\GuestsTable;
 use App\Models\Guest;
 use BackedEnum;
 use UnitEnum;
@@ -110,12 +108,14 @@ class GuestResource extends Resource
         ->recordActions([
             Action::make('edit')
                 ->icon('heroicon-o-pencil')
-                ->label('Edit'),
+                ->label('Edit')
+                ->url(fn (Guest $record) => EditGuest::getUrl(['record' => $record])),
             Action::make('delete')
                 ->icon('heroicon-o-trash')
                 ->label('Delete')
                 ->requiresConfirmation()
-                ->color('danger'),
+                ->color('danger')
+                ->action(fn (Guest $record) => $record->delete()),
         ])
         ->paginated([10, 25, 50, 100])
         ->toolbarActions([
@@ -123,7 +123,8 @@ class GuestResource extends Resource
                 ->icon('heroicon-o-trash')
                 ->label('Delete Selected')
                 ->requiresConfirmation()
-                ->color('danger'),
+                ->color('danger')
+                ->action(fn (\Illuminate\Database\Eloquent\Collection $records) => $records->each->delete()),
         ]);
     }
 

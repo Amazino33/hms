@@ -4,7 +4,6 @@ namespace App\Filament\Resources\Products;
 use App\Filament\Resources\Products\Pages\CreateProduct;
 use App\Filament\Resources\Products\Pages\EditProduct;
 use App\Filament\Resources\Products\Pages\ListProducts;
-use App\Filament\Resources\Products\Schemas\ProductForm;
 use App\Filament\Resources\Products\Tables\ProductsTable;
 use App\Models\Product;
 use BackedEnum;
@@ -39,7 +38,7 @@ class ProductResource extends Resource
         return $schema->schema([
             Section::make()->schema([
                 TextInput::make('name')->required(),
-                TextInput::make('sku')->label('SKU (Barcode)'),
+                TextInput::make('sku')->label('SKU (Barcode)')->unique(ignoreRecord: true),
                 Select::make('category_id')
                     ->relationship('category', 'name') // Magic: Auto-fetches Category names
                     ->required()

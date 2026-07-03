@@ -17,6 +17,12 @@ class Shift extends Model
         'declared_pos',
         'supervisor_confirmed_cash',
         'supervisor_confirmed_pos',
+        'expected_cash',
+        'expected_pos',
+        'cash_variance',
+        'surplus_amount',
+        'settlement_notes',
+        'settled_at',
     ];
 
     protected $casts = [
@@ -26,6 +32,11 @@ class Shift extends Model
         'declared_pos' => 'decimal:2',
         'supervisor_confirmed_cash' => 'decimal:2',
         'supervisor_confirmed_pos' => 'decimal:2',
+        'expected_cash' => 'decimal:2',
+        'expected_pos' => 'decimal:2',
+        'cash_variance' => 'decimal:2',
+        'surplus_amount' => 'decimal:2',
+        'settled_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -36,6 +47,16 @@ class Shift extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(OrderPayment::class);
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    public function debts(): HasMany
+    {
+        return $this->hasMany(StaffDebt::class);
     }
 
     // Check if shift is currently active

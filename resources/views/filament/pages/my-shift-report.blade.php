@@ -82,8 +82,8 @@
             </div>
 
             @if($partial_orders->count() > 0)
-            <h3 class="font-bold text-sm text-gray-500 uppercase mb-3 mt-6">Outstanding Debts</h3>
-            
+            <h3 class="font-bold text-sm text-gray-500 uppercase mb-3 mt-6">Unpaid Orders — Must Resolve Before Ending Shift</h3>
+
             <div class="max-h-64 overflow-y-auto space-y-2 pr-2">
                 @foreach($partial_orders as $order)
                     <div class="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg border border-transparent hover:border-gray-100 dark:hover:border-gray-700">
@@ -92,14 +92,49 @@
                                 #{{ $order->order_number }}
                             </div>
                             <div class="text-xs text-gray-400">
-                                {{ $order->created_at->format('h:i A') }} • {{ $order->guest ? $order->guest->name : 'Walk-in' }}
+                                {{ $order->created_at->format('h:i A') }} • {{ $order->guest ? $order->guest->name : 'Walk-in' }} • {{ ucfirst($order->status) }}
                             </div>
                         </div>
-                        <div class="font-mono font-bold text-red-600">
-                            ₦{{ number_format($order->total_amount - $order->amount_paid) }}
+                        <div class="flex items-center gap-3">
+                            <div class="font-mono font-bold text-red-600">
+                                ₦{{ number_format($order->total_amount - $order->amount_paid) }}
+                            </div>
+                            @if($can_convert_debt ?? false)
+                                <button wire:click="convertToDebt({{ $order->id }})"
+                                    onclick="return confirm('Convert this order\'s unpaid balance into a staff debt?')"
+                                    class="text-xs px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-medium">
+                                    Convert to Debt
+                                </button>
+                            @endif
                         </div>
                     </div>
                 @endforeach
+            </div>
+            @endif
+
+            @if(($my_debts ?? collect())->count() > 0)
+            <h3 class="font-bold text-sm text-gray-500 uppercase mb-3 mt-6">My Open Debts</h3>
+
+            <div class="max-h-64 overflow-y-auto space-y-2 pr-2">
+                @foreach($my_debts as $debt)
+                    <div class="flex justify-between items-center text-sm p-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+                        <div>
+                            <div class="font-bold text-gray-800 dark:text-gray-200">
+                                {{ ucfirst(str_replace('_', ' ', $debt->reason)) }}
+                            </div>
+                            <div class="text-xs text-gray-400">
+                                {{ $debt->created_at->format('M j, Y') }} • {{ ucfirst(str_replace('_', ' ', $debt->status)) }}
+                            </div>
+                        </div>
+                        <div class="font-mono font-bold text-amber-700 dark:text-amber-400">
+                            ₦{{ number_format($debt->remainingBalance()) }}
+                        </div>
+                    </div>
+                @endforeach
+                <div class="flex justify-between items-center text-sm p-2 font-bold border-t border-gray-200 dark:border-gray-700 pt-2">
+                    <span>Total Owed</span>
+                    <span class="text-amber-700 dark:text-amber-400">₦{{ number_format($my_debts_total ?? 0) }}</span>
+                </div>
             </div>
             @endif
         </div>

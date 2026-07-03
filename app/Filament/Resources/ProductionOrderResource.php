@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProductionOrderResource\Pages;
 use App\Models\ProductionOrder;
+use App\Services\ProductionOrderService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -89,6 +90,7 @@ class ProductionOrderResource extends Resource
                         'normal' => 'gray',
                         'high' => 'warning',
                         'urgent' => 'danger',
+                        default => 'gray',
                     }),
 
                 Tables\Columns\TextColumn::make('orderItem.order.order_number')

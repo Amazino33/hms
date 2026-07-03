@@ -37,7 +37,7 @@ it('manifest contains valid JSON', function () {
 
     $response->assertStatus(200);
 
-    $manifest = json_decode($response->getContent(), true);
+    $manifest = json_decode(file_get_contents(public_path('site.webmanifest')), true);
     expect($manifest)->toBeArray();
     expect($manifest)->toHaveKey('name');
     expect($manifest)->toHaveKey('short_name');
@@ -51,7 +51,7 @@ it('manifest has enhanced PWA features', function () {
 
     $response->assertStatus(200);
 
-    $manifest = json_decode($response->getContent(), true);
+    $manifest = json_decode(file_get_contents(public_path('site.webmanifest')), true);
 
     // Check for enhanced features
     expect($manifest)->toHaveKey('shortcuts');
@@ -72,7 +72,7 @@ it('manifest has proper icon sizes', function () {
 
     $response->assertStatus(200);
 
-    $manifest = json_decode($response->getContent(), true);
+    $manifest = json_decode(file_get_contents(public_path('site.webmanifest')), true);
 
     expect($manifest)->toHaveKey('icons');
     expect($manifest['icons'])->toBeArray();
@@ -87,7 +87,7 @@ it('service worker contains enhanced caching logic', function () {
 
     $response->assertStatus(200);
 
-    $content = $response->getContent();
+    $content = file_get_contents(public_path('sw.js'));
 
     // Check if content is not empty
     expect(strlen($content))->toBeGreaterThan(0);

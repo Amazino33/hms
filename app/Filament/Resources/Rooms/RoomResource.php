@@ -5,8 +5,6 @@ namespace App\Filament\Resources\Rooms;
 use App\Filament\Resources\Rooms\Pages\CreateRoom;
 use App\Filament\Resources\Rooms\Pages\EditRoom;
 use App\Filament\Resources\Rooms\Pages\ListRooms;
-use App\Filament\Resources\Rooms\Schemas\RoomForm;
-use App\Filament\Resources\Rooms\Tables\RoomsTable;
 use App\Models\Room;
 use BackedEnum;
 use UnitEnum;
@@ -78,6 +76,7 @@ class RoomResource extends Resource
                     'available' => 'success',
                     'occupied' => 'danger',
                     'maintenance' => 'warning',
+                    default => 'gray',
                 }),
         ])
         ->filters([

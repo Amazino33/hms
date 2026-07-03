@@ -3,8 +3,12 @@
 namespace App\Filament\Resources\ShiftManagement\Tables;
 
 use App\Models\Shift;
+use App\Services\ShiftAccountingService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -45,6 +49,16 @@ class ShiftManagementTable
                     ->money('NGN')
                     ->sortable()
                     ->placeholder('—'),
+                TextColumn::make('cash_variance')
+                    ->label('Variance')
+                    ->money('NGN')
+                    ->placeholder('—')
+                    ->color(fn (?string $state): string => match (true) {
+                        $state === null => 'gray',
+                        (float) $state < 0 => 'danger',
+                        (float) $state > 0 => 'warning',
+                        default => 'success',
+                    }),
             ])
             ->defaultSort('started_at', 'desc')
             ->filters([
@@ -60,25 +74,56 @@ class ShiftManagementTable
                     ->label('Review & Confirm')
                     ->color('primary')
                     ->icon('heroicon-o-check-badge')
-                    ->visible(fn (Shift $record): bool => $record->status === 'pending_supervisor')
-                    ->form([
-                        TextInput::make('supervisor_confirmed_cash')
-                            ->label('Supervisor Confirmed Cash')
-                            ->numeric()
-                            ->required()
-                            ->minValue(0),
-                        TextInput::make('supervisor_confirmed_pos')
-                            ->label('Supervisor Confirmed POS')
-                            ->numeric()
-                            ->required()
-                            ->minValue(0),
-                    ])
+                    ->visible(fn (Shift $record): bool => $record->status === 'pending_supervisor'
+                        && auth()->user()->hasRole(['manager', 'admin', 'super_admin']))
+                    ->authorize(fn (): bool => auth()->user()->hasRole(['manager', 'admin', 'super_admin']))
+                    ->form(function (Shift $record): array {
+                        $service = new ShiftAccountingService();
+                        $expectedCash = $service->expectedCashRemittance($record);
+                        $expectedPos = $service->expectedPosTotal($record);
+
+                        return [
+                            Placeholder::make('expected_summary')
+                                ->label('System-computed expectations')
+                                ->content("Expected cash: ₦" . number_format($expectedCash, 2) . " · Expected POS: ₦" . number_format($expectedPos, 2)),
+                            TextInput::make('supervisor_confirmed_cash')
+                                ->label('Supervisor Confirmed Cash')
+                                ->numeric()
+                                ->required()
+                                ->minValue(0)
+                                ->default($record->declared_cash),
+                            TextInput::make('supervisor_confirmed_pos')
+                                ->label('Supervisor Confirmed POS')
+                                ->numeric()
+                                ->required()
+                                ->minValue(0)
+                                ->default($record->declared_pos),
+                            Textarea::make('settlement_notes')
+                                ->label('Notes')
+                                ->columnSpanFull(),
+                        ];
+                    })
                     ->action(function (Shift $record, array $data): void {
-                        $record->update([
-                            'supervisor_confirmed_cash' => $data['supervisor_confirmed_cash'],
-                            'supervisor_confirmed_pos' => $data['supervisor_confirmed_pos'],
-                            'status' => 'closed',
-                        ]);
+                        $debt = (new ShiftAccountingService())->applyShiftSettlement(
+                            $record,
+                            auth()->user(),
+                            (float) $data['supervisor_confirmed_cash'],
+                            (float) $data['supervisor_confirmed_pos'],
+                            $data['settlement_notes'] ?? null,
+                        );
+
+                        if ($debt) {
+                            Notification::make()
+                                ->title('Shift closed with a shortfall')
+                                ->body('₦' . number_format($debt->amount, 2) . ' recorded as a staff debt for ' . $record->user->name)
+                                ->warning()
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title('Shift closed')
+                                ->success()
+                                ->send();
+                        }
                     }),
             ]);
     }

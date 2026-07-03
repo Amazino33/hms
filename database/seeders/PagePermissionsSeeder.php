@@ -21,6 +21,11 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'POS Page',
                 'role_name' => 'waiter',
             ],
+            [
+                'page_class' => 'App\Filament\Pages\PosPage',
+                'page_name' => 'POS Page',
+                'role_name' => 'porter',
+            ],
 
             // Floor Plan - Managers, Waiters, Super Admin
             [
@@ -37,6 +42,11 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\FloorPlan',
                 'page_name' => 'Floor Plan',
                 'role_name' => 'waiter',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\FloorPlan',
+                'page_name' => 'Floor Plan',
+                'role_name' => 'porter',
             ],
 
             // Kitchen Display - Chefs and Super Admin
@@ -83,6 +93,11 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\MyHistory',
                 'page_name' => 'My History',
                 'role_name' => 'waiter',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyHistory',
+                'page_name' => 'My History',
+                'role_name' => 'porter',
             ],
             [
                 'page_class' => 'App\Filament\Pages\MyHistory',
@@ -179,10 +194,35 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'My Shift Report',
                 'role_name' => 'storekeeper',
             ],
+            [
+                'page_class' => 'App\Filament\Pages\MyShiftReport',
+                'page_name' => 'My Shift Report',
+                'role_name' => 'porter',
+            ],
+
+            // Waiter Ledger - Managers, Admins, Super Admin only
+            [
+                'page_class' => 'App\Filament\Pages\WaiterLedger',
+                'page_name' => 'Waiter Ledger',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\WaiterLedger',
+                'page_name' => 'Waiter Ledger',
+                'role_name' => 'admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\WaiterLedger',
+                'page_name' => 'Waiter Ledger',
+                'role_name' => 'manager',
+            ],
         ];
 
         foreach ($permissions as $permission) {
-            PagePermission::create($permission);
+            PagePermission::firstOrCreate(
+                ['page_class' => $permission['page_class'], 'role_name' => $permission['role_name']],
+                $permission,
+            );
         }
 
         $this->command->info('Page permissions created successfully!');

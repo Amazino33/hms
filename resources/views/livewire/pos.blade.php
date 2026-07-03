@@ -307,7 +307,7 @@ new class extends Component {
         // STRICT RULE 2: Prevent paying for orders that are still cooking/pending
         $unprocessedOrdersQuery = Order::where('table_id', $tableId)
             ->whereIn('status', ['pending', 'preparing']);
-            
+
         if ($isTakeaway) {
             $unprocessedOrdersQuery->where('user_id', auth()->id());
         }
@@ -316,6 +316,19 @@ new class extends Component {
             Notification::make()
                 ->title('Order Not Ready')
                 ->body('Payment blocked. The kitchen or bar has not approved this order yet.')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        // STRICT RULE 3: For dine-in tables, prevent paying before the waiter
+        // has confirmed they actually carried the items to the table. Being
+        // "ready" only means the kitchen/bar finished prep — it doesn't mean
+        // it left the pass. Takeaway has no table to carry to, so it's exempt.
+        if (!$isTakeaway && Order::where('table_id', $tableId)->where('status', 'ready')->exists()) {
+            Notification::make()
+                ->title('Not Yet Served')
+                ->body('Confirm you have carried the order to the table before processing payment.')
                 ->danger()
                 ->send();
             return;
@@ -371,6 +384,10 @@ new class extends Component {
                 'status' => $orderStatus,
                 'guest_id' => $guestId,
                 'processed_by_user_id' => auth()->id(),
+                // Attribute to the waiter's own shift (accountability is
+                // per-waiter, even if a different staff member is the one
+                // finalizing checkout at the till).
+                'shift_id' => \App\Models\User::find($waiterUserId)?->currentShift()?->id,
                 'paid_cash' => $splitPayments['cash'] ?? ($paymentMethod === 'cash' ? $paidAmount : 0),
                 'paid_pos' => $splitPayments['pos'] ?? ($paymentMethod !== 'cash' ? $paidAmount : 0),
             ]);
@@ -383,14 +400,28 @@ new class extends Component {
         }
 
         if ($paidAmount > 0 && !empty($orders)) {
-            \App\Models\OrderPayment::create([
-                'order_id' => $orders[0]->id,
-                'amount' => $paidAmount,
-                'method' => !empty($splitPayments) ? 'split' : $paymentMethod,
-                'user_id' => auth()->id(),
-                'shift_id' => auth()->user()?->currentShift()?->id,
-                'paid_at' => now(),
-            ]);
+            // A mixed cart (e.g. food + drinks) is split by OrderSplitter into
+            // one Order per destination, each already carrying its own
+            // proportional amount_paid. Record a payment per order — not just
+            // the first — otherwise destination-level cash reporting silently
+            // drops whatever was paid against the other split orders.
+            $shiftId = auth()->user()?->currentShift()?->id;
+            $method = !empty($splitPayments) ? 'split' : $paymentMethod;
+
+            foreach ($orders as $order) {
+                if ($order->amount_paid <= 0) {
+                    continue;
+                }
+
+                \App\Models\OrderPayment::create([
+                    'order_id' => $order->id,
+                    'amount' => $order->amount_paid,
+                    'method' => $method,
+                    'user_id' => auth()->id(),
+                    'shift_id' => $shiftId,
+                    'paid_at' => now(),
+                ]);
+            }
         }
 
         if ($tableId) {
@@ -448,6 +479,7 @@ new class extends Component {
             $splitter->handle($normalized, $tableId, auth()->id(), [
                 'status' => 'pending',
                 'payment_method' => 'cash',
+                'shift_id' => auth()->user()->currentShift()->id,
             ]);
         } catch (\Exception $e) {
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
@@ -748,6 +780,8 @@ new class extends Component {
                 ->with('items')
                 ->get();
 
+            $touchedOrderIds = [];
+
             foreach ($activeOrders as $activeOrder) {
                 foreach ($activeOrder->items as $item) {
                     if ($qtyToReturn <= 0)
@@ -774,8 +808,17 @@ new class extends Component {
                         }
 
                         $qtyToReturn -= $deductAmount;
+                        $touchedOrderIds[$activeOrder->id] = true;
                     }
                 }
+            }
+
+            // Keep the order's stored total in sync with what its items now
+            // add up to — otherwise total_amount goes stale after a return
+            // and every "outstanding balance" calculation built on it is wrong.
+            foreach (array_keys($touchedOrderIds) as $touchedOrderId) {
+                $newTotal = OrderItem::where('order_id', $touchedOrderId)->sum('subtotal');
+                Order::where('id', $touchedOrderId)->update(['total_amount' => $newTotal]);
             }
         });
 
@@ -864,6 +907,23 @@ new class extends Component {
                                 <p class="text-sm font-medium text-gray-900 dark:text-white">Start shift to add items</p>
                             </div>
                         </div>
+                    @elseif(!$selectedTableId)
+                        <div
+                            class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                            <div
+                                class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                                <div
+                                    class="w-8 h-8 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+                                        </path>
+                                    </svg>
+                                </div>
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Select a table (or Take Away) to start adding items</p>
+                            </div>
+                        </div>
                     @endif
 
                     @if($products->isEmpty())
@@ -874,11 +934,12 @@ new class extends Component {
                         @endfor
                     @endif
 
+                    @php $canAddToCart = auth()->user()->currentShift() && $selectedTableId; @endphp
                     @foreach($products as $product)
-                        <div @if(auth()->user()->currentShift())
+                        <div @if($canAddToCart)
                             @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float) $product->price }}, {{ (int) ($product->available_stock ?? 0) }})"
                         @endif
-                            class="relative {{ auth()->user()->currentShift() ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
+                            class="relative {{ $canAddToCart ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
                             <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">
                                 {{ $product->name }}
                             </div>
@@ -911,22 +972,33 @@ new class extends Component {
             <div
                 class="col-span-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full lg:h-full max-h-[50vh] lg:max-h-none">
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Select Table</label>
-                    <select wire:model.live="selectedTableId"
-                        class="w-full p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-bold touch-manipulation">
-                        <option value="">-- Select a Table --</option>
-                        <option value="takeaway">Take Away</option>
+                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        Select Table {{ !$selectedTableId ? '(required before adding items)' : '' }}
+                    </label>
+                    <div class="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                        <button type="button" wire:click="$set('selectedTableId', 'takeaway')"
+                            class="p-2 rounded-lg text-xs font-bold border-2 transition-colors touch-manipulation {{ $selectedTableId === 'takeaway'
+                                ? 'border-amber-500 bg-amber-500 text-white'
+                                : 'border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 hover:border-blue-500' }}">
+                            Take Away
+                        </button>
                         @foreach($this->tables as $table)
                             @php
                                 $hasActiveOrder = $table->orders->isNotEmpty();
                                 $isOccupied = $table->status === 'occupied' && $hasActiveOrder;
+                                $isSelected = (string) $selectedTableId === (string) $table->id;
                             @endphp
-                            <option value="{{ $table->id }}"
-                                class="{{ $isOccupied ? 'text-red-600 font-bold' : 'text-green-600' }}">
-                                {{ $table->name }} {{ $isOccupied ? '(Occupied)' : '(Free)' }}
-                            </option>
+                            <button type="button" wire:click="$set('selectedTableId', {{ $table->id }})"
+                                class="p-2 rounded-lg text-xs font-bold border-2 transition-colors touch-manipulation {{ $isSelected
+                                    ? 'border-amber-500 bg-amber-500 text-white'
+                                    : ($isOccupied
+                                        ? 'border-red-300 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+                                        : 'border-green-300 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 hover:border-green-500') }}">
+                                {{ $table->name }}
+                                <div class="text-[10px] font-normal opacity-80">{{ $isOccupied ? 'Occupied' : 'Free' }}</div>
+                            </button>
                         @endforeach
-                    </select>
+                    </div>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-3 relative">
                     @if(!auth()->user()->currentShift())
@@ -1083,7 +1155,25 @@ new class extends Component {
                         <p class="text-xs font-medium text-gray-900 dark:text-white">Start shift to add items</p>
                     </div>
                 </div>
+            @elseif(!$selectedTableId)
+                <div
+                    class="absolute inset-0 bg-gray-900/30 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                        <div
+                            class="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <svg class="w-3 h-3 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+                                </path>
+                            </svg>
+                        </div>
+                        <p class="text-xs font-medium text-gray-900 dark:text-white">Pick a table below to start adding items</p>
+                    </div>
+                </div>
             @endif
+            @php $canAddToCartMobile = auth()->user()->currentShift() && $selectedTableId; @endphp
             <div wire:init="loadProducts" class="grid grid-cols-2 gap-3">
                 @if($products->isEmpty())
                     @for($i = 0; $i < 8; $i++)
@@ -1094,10 +1184,10 @@ new class extends Component {
                 @endif
 
                 @foreach($products as $product)
-                    <div @if(auth()->user()->currentShift())
+                    <div @if($canAddToCartMobile)
                         @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float) $product->price }}, {{ (int) ($product->available_stock ?? 0) }})"
                     @endif
-                        class="relative {{ auth()->user()->currentShift() ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
+                        class="relative {{ $canAddToCartMobile ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">
                             {{ $product->name }}
                         </div>
@@ -1110,10 +1200,10 @@ new class extends Component {
                 @endforeach
                 @foreach($menuItems as $menuItem)
                     @php $stock = $menuItem->available_stock; @endphp
-                    <div @if(auth()->user()->currentShift())
+                    <div @if($canAddToCartMobile)
                         @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float) $menuItem->sale_price }}, {{ $stock === null ? 'null' : $stock }})"
                     @endif
-                        class="relative {{ auth()->user()->currentShift() && ($stock === null || $stock > 0) ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
+                        class="relative {{ $canAddToCartMobile && ($stock === null || $stock > 0) ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
                         <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">
                             {{ $menuItem->name }}
                         </div>

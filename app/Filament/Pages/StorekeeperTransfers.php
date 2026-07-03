@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use App\Services\PermissionService;
 use App\Models\StockTransfer;
-use App\Models\Warehouse;
+use App\Models\WareHouse;
 
 class StorekeeperTransfers extends Page
 {
@@ -29,7 +29,7 @@ class StorekeeperTransfers extends Page
     {
         // Short cache for lookup lists (these are cheap and useful immediately)
         $products = Cache::remember('storekeeper:products', 60, fn () => Product::with('category')->orderBy('name')->get());
-        $warehouses = Cache::remember('storekeeper:warehouses', 60, fn () => Warehouse::orderBy('name')->get());
+        $warehouses = Cache::remember('storekeeper:warehouses', 60, fn () => WareHouse::orderBy('name')->get());
 
         if (! $this->ready) {
             return [

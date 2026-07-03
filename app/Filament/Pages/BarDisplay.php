@@ -81,7 +81,7 @@ class BarDisplay extends Page
         
         // Send database notification to all staff users
         $staffUsers = \App\Models\User::whereHas('roles', function($q) {
-            $q->whereIn('name', ['super_admin', 'chef', 'waiter']);
+            $q->whereIn('name', ['super_admin', 'chef', 'waiter', 'porter']);
         })->get();
         
         foreach ($staffUsers as $staffUser) {

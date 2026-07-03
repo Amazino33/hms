@@ -3,9 +3,11 @@
 namespace App\Providers;
 
 use App\Models\Order;
+use App\Models\StaffDebt;
 use App\Models\User;
 use App\Models\PagePermission;
 use App\Observers\OrderObserver;
+use App\Observers\StaffDebtObserver;
 use App\Observers\UserObserver;
 use App\Observers\RoleObserver;
 use App\Observers\PermissionObserver;
@@ -88,6 +90,7 @@ class AppServiceProvider extends ServiceProvider
         Order::observe(OrderObserver::class);
         User::observe(UserObserver::class);
         PagePermission::observe(PagePermissionObserver::class);
+        StaffDebt::observe(StaffDebtObserver::class);
 
         // Spatie models
         Role::observe(RoleObserver::class);

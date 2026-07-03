@@ -97,6 +97,7 @@ class OrderSplitter
                     'payment_method' => $options['payment_method'] ?? 'cash',
                     'table_id' => $tableId,
                     'user_id' => $userId,
+                    'shift_id' => $options['shift_id'] ?? null,
                     'processed_by_user_id' => $options['processed_by_user_id'] ?? null,
                     'guest_id' => $options['guest_id'] ?? null,
                     'destination' => $destination,
@@ -154,7 +155,7 @@ class OrderSplitter
 
                 // Send database notification to all staff users
                 $staffUsers = \App\Models\User::whereHas('roles', function($q) {
-                    $q->whereIn('name', ['super_admin', 'chef', 'waiter']);
+                    $q->whereIn('name', ['super_admin', 'chef', 'waiter', 'porter']);
                 })->get();
 
                 foreach ($staffUsers as $staffUser) {

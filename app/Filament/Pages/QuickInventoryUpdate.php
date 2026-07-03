@@ -3,7 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Product;
-use App\Models\Warehouse;
+use App\Models\WareHouse;
 use Filament\Pages\Page;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -41,7 +41,7 @@ class QuickInventoryUpdate extends Page implements HasTable
     public function mount(): void
     {
         // Default to first warehouse
-        $this->selectedWarehouseId = Warehouse::first()?->id;
+        $this->selectedWarehouseId = WareHouse::first()?->id;
     }
 
     public function table(Table $table): Table
@@ -90,7 +90,7 @@ class QuickInventoryUpdate extends Page implements HasTable
             ])
             ->filters([
                 SelectFilter::make('warehouse')
-                    ->options(Warehouse::pluck('name', 'id'))  // Use options instead of relationship to avoid joins
+                    ->options(WareHouse::pluck('name', 'id'))  // Use options instead of relationship to avoid joins
                     ->default($this->selectedWarehouseId)
                     ->query(function ($query, $value) {
                         if ($value) {
@@ -132,7 +132,7 @@ class QuickInventoryUpdate extends Page implements HasTable
                             ->placeholder('e.g., INV-001 or PO-123'),
                     ])
                     ->action(function (Product $record, array $data) {
-                        $warehouse = Warehouse::find($this->selectedWarehouseId);
+                        $warehouse = WareHouse::find($this->selectedWarehouseId);
                         
                         if (!$warehouse) {
                             Notification::make()

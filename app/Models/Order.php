@@ -14,6 +14,7 @@ class Order extends Model
         'destination' => 'string',
         'paid_cash' => 'decimal:2',
         'paid_pos' => 'decimal:2',
+        'served_at' => 'datetime',
     ];
 
     public function items() 
@@ -29,6 +30,11 @@ class Order extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class);
     }
 
     public function processedByUser()

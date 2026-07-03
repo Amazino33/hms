@@ -22,7 +22,7 @@ use Filament\Actions\BulkAction;
 
 class WarehouseResource extends Resource
 {
-    protected static ?string $model = Warehouse::class;
+    protected static ?string $model = WareHouse::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-storefront';
 
@@ -71,6 +71,7 @@ class WarehouseResource extends Resource
                     ->color(fn (string $state): string => match ($state) {
                         'storage' => 'success',
                         'consumer' => 'info',
+                        default => 'gray',
                     })
                     ->searchable(),
 
@@ -86,14 +87,14 @@ class WarehouseResource extends Resource
                 Action::make('edit')
                     ->icon('heroicon-o-pencil')
                     ->label('Edit')
-                    ->url(fn (Warehouse $record) => EditWarehouse::getUrl(['record' => $record])),
-                
+                    ->url(fn (WareHouse $record) => EditWarehouse::getUrl(['record' => $record])),
+
                 Action::make('delete')
                     ->requiresConfirmation()
                     ->label('Delete')
                     ->icon('heroicon-o-trash')
                     ->color('danger')
-                    ->action(fn (Warehouse $record) => $record->delete()),
+                    ->action(fn (WareHouse $record) => $record->delete()),
             ])
             ->toolbarActions([
                 BulkAction::make('delete')
@@ -101,7 +102,7 @@ class WarehouseResource extends Resource
                     ->label('Delete Selected')
                     ->requiresConfirmation()
                     ->color('danger')
-                    ->action(fn (array $records) => Warehouse::whereIn('id', $records)->delete()),
+                    ->action(fn (array $records) => WareHouse::whereIn('id', $records)->delete()),
             ]);
     }   
 

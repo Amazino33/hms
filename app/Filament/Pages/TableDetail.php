@@ -23,6 +23,7 @@ class TableDetail extends Page
     public $table;
     public $order;
     public $orderItems = [];
+    public $orders;
 
     public function mount(Request $request)
     {
@@ -38,6 +39,11 @@ class TableDetail extends Page
             return redirect('/admin/floor-plan');
         }
 
+        $this->loadOrders($tableId);
+    }
+
+    protected function loadOrders($tableId): void
+    {
         // Get all active orders for the table created by the current user
         $this->orderItems = collect();
         $orders = Order::where('table_id', $tableId)
@@ -50,8 +56,61 @@ class TableDetail extends Page
             $this->orderItems = $this->orderItems->merge($order->items);
         }
 
+        $this->orders = $orders;
+
         // Set order to the first one for compatibility, but we'll use orderItems
         $this->order = $orders->first();
+    }
+
+    /**
+     * Waiter (or a supervisor) confirms an order has been picked up/carried
+     * to the table. This is the only path that moves an order from 'ready'
+     * to 'served' — payment is blocked until this happens.
+     */
+    public function confirmServed(int $orderId): void
+    {
+        $order = Order::find($orderId);
+
+        if (!$order || $order->table_id !== $this->table->id) {
+            \Filament\Notifications\Notification::make()
+                ->title('Order not found')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        $isOwner = $order->user_id === auth()->id();
+        $isSupervisor = auth()->user()->hasRole(['manager', 'admin', 'super_admin']);
+
+        if (!$isOwner && !$isSupervisor) {
+            \Filament\Notifications\Notification::make()
+                ->title('Not your order')
+                ->body('Only the waiter who took this order (or a supervisor) can confirm it as served.')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        if ($order->status !== 'ready') {
+            \Filament\Notifications\Notification::make()
+                ->title('Order is not ready yet')
+                ->body('This order must be marked ready by the kitchen/bar before it can be confirmed served.')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        $order->update([
+            'status' => 'served',
+            'served_at' => now(),
+        ]);
+
+        \Filament\Notifications\Notification::make()
+            ->title('Order marked as served')
+            ->success()
+            ->send();
+
+        $this->loadOrders($this->table->id);
     }
 
     public function cancelOrder()

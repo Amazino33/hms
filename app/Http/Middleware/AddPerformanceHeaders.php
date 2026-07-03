@@ -19,11 +19,11 @@ class AddPerformanceHeaders
 
         // Add caching headers for static assets
         if ($this->isStaticAsset($request)) {
-            $response->header('Cache-Control', 'public, max-age=31536000, immutable');
+            $response->headers->set('Cache-Control', 'public, max-age=31536000, immutable');
         }
 
         // Add compression hint
-        $response->header('Vary', 'Accept-Encoding');
+        $response->headers->set('Vary', 'Accept-Encoding');
 
         // NOTE: removed hard-coded preload for `/build/assets/app.css` because
         // the build pipeline emits hashed filenames (Vite). Use `@vite()` in

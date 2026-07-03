@@ -12,15 +12,28 @@ class WarehouseTypeSeeder extends Seeder
      */
     public function run(): void
     {
-        // Set warehouse types
-        // Storage warehouses: can have direct quantity input
-        WareHouse::where('id', 1)->update(['type' => 'storage']);
-        
-        // Consumer warehouses: receive stock through transfers only
-        // Typically: ID 4 = Bar, ID 5 = Kitchen
-        WareHouse::whereIn('id', [4, 5])->update(['type' => 'consumer']);
-        
-        // Any other warehouses default to storage
-        WareHouse::whereNotIn('id', [1, 4, 5])->update(['type' => 'storage']);
+        // These IDs are relied on as hardcoded fallbacks elsewhere (e.g.
+        // OrderSplitter::getBarWarehouseId(), InventoryService), so they
+        // must exist in every environment, not just local/demo setups.
+        WareHouse::firstOrCreate(
+            ['id' => 1],
+            ['name' => 'Main Store', 'type' => 'storage', 'is_active' => true],
+        );
+
+        WareHouse::firstOrCreate(
+            ['id' => 4],
+            ['name' => 'Bar', 'type' => 'consumer', 'is_active' => true],
+        );
+
+        WareHouse::firstOrCreate(
+            ['id' => 5],
+            ['name' => 'Kitchen', 'type' => 'consumer', 'is_active' => true],
+        );
+
+        // Backfill type for any warehouse rows that predate this seeder
+        // and still have a null/unset type.
+        WareHouse::where('id', 1)->whereNull('type')->update(['type' => 'storage']);
+        WareHouse::whereIn('id', [4, 5])->whereNull('type')->update(['type' => 'consumer']);
+        WareHouse::whereNotIn('id', [1, 4, 5])->whereNull('type')->update(['type' => 'storage']);
     }
 }

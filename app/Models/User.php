@@ -7,6 +7,7 @@ namespace App\Models;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use App\Models\Order;
+use App\Services\ShiftAccountingService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -130,6 +131,15 @@ class User extends Authenticatable implements FilamentUser
     {
         $shift = $this->currentShift();
         if ($shift) {
+            $outstanding = (new ShiftAccountingService())->outstandingOrders($shift);
+
+            if ($outstanding->isNotEmpty()) {
+                $count = $outstanding->count();
+                throw new \Exception(
+                    "You have {$count} unpaid order(s) that must be paid, returned, or resolved by a supervisor before you can end your shift."
+                );
+            }
+
             $endedAt = now();
 
             $orders = Order::query()
@@ -155,7 +165,7 @@ class User extends Authenticatable implements FilamentUser
      */
     public function warehouse()
     {
-        return $this->belongsTo(\App\Models\Warehouse::class);
+        return $this->belongsTo(\App\Models\WareHouse::class);
     }
 
     /**
@@ -164,6 +174,14 @@ class User extends Authenticatable implements FilamentUser
     public function commissions(): HasMany
     {
         return $this->hasMany(\App\Models\Commission::class);
+    }
+
+    /**
+     * Staff debts owed by this user (shortfalls, converted unpaid orders, etc.).
+     */
+    public function debts(): HasMany
+    {
+        return $this->hasMany(\App\Models\StaffDebt::class);
     }
 
     public function canAccessPanel(Panel $panel): bool

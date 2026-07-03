@@ -5,8 +5,6 @@ namespace App\Filament\Resources\Users;
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
-use App\Filament\Resources\Users\Schemas\UserForm;
-use App\Filament\Resources\Users\Tables\UsersTable;
 use App\Models\User;
 use BackedEnum;
 use UnitEnum;
@@ -55,7 +53,8 @@ class UserResource extends Resource
                 TextInput::make('email')
                     ->email()
                     ->required()
-                    ->maxLength(255),
+                    ->maxLength(255)
+                    ->unique(ignoreRecord: true),
 
                 // Password Field (Smart handling)
                 TextInput::make('password')
@@ -72,7 +71,8 @@ class UserResource extends Resource
                             ->schema([
                                 Grid::make(3)->schema([
                                     TextInput::make('staff_code')
-                                        ->placeholder('e.g. LH-001'),
+                                        ->placeholder('e.g. LH-001')
+                                        ->unique(ignoreRecord: true),
                                     Select::make('roles')
                                         ->relationship('roles', 'name')
                                         ->multiple()
@@ -98,7 +98,7 @@ class UserResource extends Resource
                                         ->label('Total Commission Earned')
                                         ->prefix('₦')
                                         ->readOnly()
-                                        ->visible(fn ($record) => $record && $record->hasRole('waiter'))
+                                        ->visible(fn ($record) => $record && $record->hasRole(['waiter', 'porter']))
                                         ->afterStateHydrated(function (TextInput $component, $record) {
                                             if ($record) {
                                                 // Fetch the sum directly from the commissions relationship
@@ -156,7 +156,7 @@ class UserResource extends Resource
                             ->schema([
                                 Placeholder::make('total_earned')
                                     ->label('Lifetime Earnings')
-                                    ->content(fn($record) => '₦' . number_format($record->commissions()->sum('amount'), 2)),
+                                    ->content(fn($record) => $record ? '₦' . number_format($record->commissions()->sum('amount'), 2) : '₦0.00'),
 
                                 Section::make('Commission History')
                                     ->description('Recent earnings from served orders')

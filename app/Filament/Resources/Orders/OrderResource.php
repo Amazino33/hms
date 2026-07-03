@@ -2,12 +2,9 @@
 
 namespace App\Filament\Resources\Orders;
 
-use App\Filament\Resources\Orders\Pages\CreateOrder;
 use App\Filament\Resources\Orders\Pages\EditOrder;
 use App\Filament\Resources\Orders\Pages\ListOrders;
 use App\Filament\Resources\Orders\Pages\ViewOrder;
-use App\Filament\Resources\Orders\Schemas\OrderForm;
-use App\Filament\Resources\Orders\Tables\OrdersTable;
 use App\Models\Order;
 use BackedEnum;
 use UnitEnum;
@@ -254,7 +251,6 @@ class OrderResource extends Resource
                 TextColumn::make('balance_due')
                     ->label('Debt')
                     ->money('NGN')
-                    ->state(fn(Order $record): float => max(0, $record->total_amount - $record->amount_paid))
                     ->color('danger')
                     ->weight('bold')
                     ->state(function (Order $record) {
@@ -381,9 +377,14 @@ class OrderResource extends Resource
     {
         return [
             'index' => ListOrders::route('/'),
-            'create' => CreateOrder::route('/create'),
             'view' => ViewOrder::route('/{record}'),
             'edit' => EditOrder::route('/{record}/edit'),
         ];
+    }
+
+    public static function canCreate(): bool
+    {
+        // Orders are created exclusively through the POS checkout flow.
+        return false;
     }
 }
