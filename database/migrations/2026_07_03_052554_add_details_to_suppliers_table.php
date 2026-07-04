@@ -12,7 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('suppliers', function (Blueprint $table) {
-            $table->string('name')->after('id');
+            // Default to '' rather than a hard NOT NULL — production may
+            // already have supplier rows from the old (previously blank)
+            // form, and this must not fail against existing data.
+            $table->string('name')->default('')->after('id');
             $table->string('contact_person')->nullable();
             $table->string('phone')->nullable();
             $table->string('email')->nullable();

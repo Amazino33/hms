@@ -15,9 +15,12 @@ return new class extends Migration
         // orders (see OrderSplitter), but it was never actually added to the
         // enum, causing every guest-debt checkout to throw a data-truncation
         // error. Adding it here makes that existing code path actually work.
+        // Appended at the end, not inserted in the middle — this is the only
+        // way to guarantee MySQL treats it as a safe, low-risk metadata-level
+        // change rather than forcing a full table rewrite on production data.
         Schema::table('orders', function (Blueprint $table) {
             $table->enum('status', [
-                'pending', 'preparing', 'ready', 'served', 'partial', 'paid', 'cancelled', 'returned',
+                'pending', 'preparing', 'ready', 'served', 'paid', 'cancelled', 'returned', 'partial',
             ])->default('pending')->change();
         });
     }
