@@ -2,103 +2,40 @@
 
 namespace App\Filament\Resources\Products\RelationManagers;
 
-use Filament\Actions\AssociateAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\CreateAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\DissociateAction;
-use Filament\Actions\DissociateBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\TextInputColumn;
 use Filament\Tables\Table;
 
+/**
+ * Read-only. Stock quantity can only move through recorded, attributable
+ * events (purchases, transfers, sales, returns, and approved Stock
+ * Adjustments) — never by editing a number here, for any role, including
+ * super_admin. Use Quick Inventory Update (purchases/initial stock), Stock
+ * Transfers, or the Stock Adjustment flow instead.
+ */
 class InventoryRelationManager extends RelationManager
 {
     protected static string $relationship = 'inventory';
 
     public function form(Schema $schema): Schema
     {
-        return $schema
-            ->schema([
-                Select::make('warehouse_id')
-                    ->relationship('warehouse', 'name')
-                    ->required()
-                    // Disable selecting a warehouse that already has this product, except for storage warehouses
-                    ->disableOptionWhen(function ($value, $record) {
-                        if ($record !== null) return false; // Allow editing existing records
-                        
-                        $warehouse = \App\Models\WareHouse::find($value);
-                        if (!$warehouse) return true;
-                        
-                        // Allow storage warehouses always, disable consumer warehouses that already have this product
-                        if ($warehouse->type === 'storage') return false;
-                        
-                        return $this->ownerRecord->inventory()->where('warehouse_id', $value)->exists();
-                    })
-                    ->live()
-                    ->afterStateUpdated(function ($state, callable $set) {
-                        // Reset quantity when warehouse changes
-                        $warehouse = \App\Models\WareHouse::find($state);
-                        if ($warehouse && $warehouse->type !== 'storage') {
-                            $set('quantity', 0);
-                        }
-                    }),
-
-                TextInput::make('quantity')
-                    ->numeric()
-                    ->default(0)
-                    ->required()
-                    ->disabled(function (callable $get) {
-                        $warehouseId = $get('warehouse_id');
-                        if (!$warehouseId) return true;
-                        
-                        $warehouse = \App\Models\WareHouse::find($warehouseId);
-                        return !$warehouse || $warehouse->type !== 'storage';
-                    })
-                    ->helperText(function (callable $get) {
-                        $warehouseId = $get('warehouse_id');
-                        if (!$warehouseId) return '';
-                        
-                        $warehouse = \App\Models\WareHouse::find($warehouseId);
-                        if (!$warehouse) return '';
-                        
-                        return $warehouse->type === 'storage' 
-                            ? 'Enter quantity for storage warehouse' 
-                            : 'Quantity managed through transfers from storage warehouses';
-                    }),
-            ]);
+        return $schema->schema([]);
     }
 
     public function table(Table $table): Table
     {
         return $table
-            ->recordTitleAttribute('id') // We don't really use this
+            ->recordTitleAttribute('id')
             ->columns([
                 TextColumn::make('warehouse.name')
                     ->label('Warehouse')
                     ->sortable(),
-                TextInputColumn::make('quantity') // Editable directly in the table!
-                    ->rules(['numeric', 'min:0'])
-                    ->disabled(function ($record) {
-                        return $record->warehouse->type !== 'storage';
-                    })
-                    ->placeholder(function ($record) {
-                        return $record->warehouse->type !== 'storage' ? 'Managed via transfers' : 'Enter quantity';
-                    }),
+                TextColumn::make('quantity')
+                    ->label('Current Stock')
+                    ->numeric(),
             ])
-            ->headerActions([
-                CreateAction::make()
-                    ->label('Add to Warehouse'),
-            ])
-            ->actions([
-                DeleteAction::make()
-                    ->hidden(fn ($record) => $record->warehouse->type === 'storage'), // Can't delete storage warehouse inventory
-            ]);
+            ->headerActions([])
+            ->actions([]);
     }
 }

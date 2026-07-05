@@ -40,7 +40,7 @@ class LowStockAlertsWidget extends Widget
     public function visibleLowStockAlerts()
     {
         $alerts = collect(InventoryService::getLowStockAlerts(10))
-            ->sortBy(fn ($a) => $a['ingredient']->quantity);
+            ->sortBy(fn ($a) => $a['ingredient']->current_stock);
 
         return $this->expanded ? $alerts : $alerts->take($this->visibleLimit);
     }
@@ -62,6 +62,6 @@ class LowStockAlertsWidget extends Widget
     // Backwards-compatible: full sorted list (used by tests or other callers)
     public function getLowStockAlerts()
     {
-        return collect(InventoryService::getLowStockAlerts(10))->sortBy(fn($a) => $a['ingredient']->quantity)->values()->all();
+        return collect(InventoryService::getLowStockAlerts(10))->sortBy(fn($a) => $a['ingredient']->current_stock)->values()->all();
     }
 }

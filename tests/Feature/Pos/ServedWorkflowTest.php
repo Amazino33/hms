@@ -126,6 +126,7 @@ it('blocks POS payment for a dine-in table while an order is still only ready, n
 it('allows POS payment once the order has been confirmed served', function () {
     $waiter = User::factory()->create();
     Shift::create(['user_id' => $waiter->id, 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
 
     $order = makeReadyOrder($waiter);
     $order->update(['status' => 'served', 'served_at' => now()]);

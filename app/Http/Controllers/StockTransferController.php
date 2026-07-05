@@ -25,19 +25,23 @@ class StockTransferController extends Controller
         $data = $request->validate([
             'from_warehouse_id' => 'required|integer',
             'to_warehouse_id' => 'required|integer',
-            'items' => 'required|array|min:1',
+            'items' => 'required_without:ingredient_items|array',
             'items.*.product_id' => 'required|integer',
             'items.*.quantity' => 'required|numeric|min:1',
+            'ingredient_items' => 'required_without:items|array',
+            'ingredient_items.*.ingredient_id' => 'required|integer',
+            'ingredient_items.*.quantity' => 'required|numeric|min:1',
         ]);
 
         $transfer = $this->service->createTransfer(
             $data['from_warehouse_id'],
             $data['to_warehouse_id'],
             $user->id,
-            $data['items']
+            $data['items'] ?? [],
+            $data['ingredient_items'] ?? []
         );
 
-        return response()->json($transfer->load('items'));
+        return response()->json($transfer->load(['items', 'ingredientItems']));
     }
 
     public function send(StockTransfer $stockTransfer, Request $request)
@@ -53,7 +57,7 @@ class StockTransferController extends Controller
 
         $stockTransfer->update(['status' => 'sent']);
 
-        return response()->json($stockTransfer->fresh()->load('items'));
+        return response()->json($stockTransfer->fresh()->load(['items', 'ingredientItems']));
     }
 
     public function receive(StockTransfer $stockTransfer, Request $request)

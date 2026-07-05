@@ -4,9 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
 
 class Commission extends Model
 {
+    use LogsActivity;
+
     // Only created_at — no updated_at column.
     const UPDATED_AT = null;
 
@@ -16,6 +20,14 @@ class Commission extends Model
         'amount'     => 'decimal:2',
         'created_at' => 'datetime',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->useLogName('commission')
+            ->dontLogEmptyChanges();
+    }
 
     // -----------------------------------------------------------------
     // Relationships

@@ -5,12 +5,16 @@ namespace App\Services;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Ingredient;
+use App\Models\InventoryItem;
+use App\Models\InventoryTransaction;
+use App\Models\IngredientInventoryItem;
+use App\Models\IngredientTransaction;
 use Illuminate\Support\Facades\DB;
 
 class InventoryService
 {
     /**
-     * Return inventory items back to stock when an order is cancelled
+     * Return inventory items back to stock when an order is cancelled or returned.
      *
      * @param Order $order
      * @return void
@@ -19,17 +23,17 @@ class InventoryService
     {
         foreach ($order->items as $orderItem) {
             if ($orderItem->item_type === 'product') {
-                self::returnProductInventory($orderItem);
+                self::returnProductInventory($orderItem, $order);
             } elseif ($orderItem->item_type === 'menu_item') {
-                self::returnMenuItemIngredients($orderItem);
+                self::returnMenuItemIngredients($orderItem, $order);
             }
         }
     }
 
     /**
-     * Return product inventory
+     * Return product inventory, logging the movement as an InventoryTransaction.
      */
-    private static function returnProductInventory($orderItem): void
+    private static function returnProductInventory($orderItem, Order $order): void
     {
         $product = Product::with('category')->find($orderItem->product_id);
 
@@ -37,20 +41,41 @@ class InventoryService
             return; // Skip if product doesn't exist
         }
 
-        // Determine warehouse based on product category
         $warehouseId = self::getWarehouseForProduct($product);
 
-        // Return the quantity back to inventory
-        DB::table('inventory_items')
-            ->where('product_id', $orderItem->product_id)
-            ->where('warehouse_id', $warehouseId)
-            ->increment('quantity', $orderItem->quantity);
+        DB::transaction(function () use ($orderItem, $product, $warehouseId, $order) {
+            $inventory = InventoryItem::query()
+                ->where('product_id', $orderItem->product_id)
+                ->where('warehouse_id', $warehouseId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($inventory) {
+                $inventory->increment('quantity', $orderItem->quantity);
+            } else {
+                InventoryItem::create([
+                    'product_id' => $orderItem->product_id,
+                    'warehouse_id' => $warehouseId,
+                    'quantity' => $orderItem->quantity,
+                ]);
+            }
+
+            InventoryTransaction::create([
+                'product_id' => $orderItem->product_id,
+                'warehouse_id' => $warehouseId,
+                'type' => 'return',
+                'quantity' => $orderItem->quantity,
+                'reference' => "order:{$order->id}",
+                'user_id' => $order->user_id ?? auth()->id(),
+            ]);
+        });
     }
 
     /**
-     * Return menu item ingredients back to stock
+     * Return menu item ingredients back to stock (kitchen warehouse), logging
+     * the movement as an IngredientTransaction.
      */
-    private static function returnMenuItemIngredients($orderItem): void
+    private static function returnMenuItemIngredients($orderItem, Order $order): void
     {
         $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($orderItem->menu_item_id);
 
@@ -58,9 +83,37 @@ class InventoryService
             return;
         }
 
+        $warehouseId = self::getKitchenWarehouseId();
+
         foreach ($menuItem->recipes as $recipe) {
             $requiredQuantity = $recipe->quantity_needed * $orderItem->quantity;
-            $recipe->ingredient->increment('quantity', $requiredQuantity);
+
+            DB::transaction(function () use ($recipe, $requiredQuantity, $warehouseId, $order) {
+                $inventory = IngredientInventoryItem::query()
+                    ->where('ingredient_id', $recipe->ingredient_id)
+                    ->where('warehouse_id', $warehouseId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($inventory) {
+                    $inventory->increment('quantity', $requiredQuantity);
+                } else {
+                    IngredientInventoryItem::create([
+                        'ingredient_id' => $recipe->ingredient_id,
+                        'warehouse_id' => $warehouseId,
+                        'quantity' => $requiredQuantity,
+                    ]);
+                }
+
+                IngredientTransaction::create([
+                    'ingredient_id' => $recipe->ingredient_id,
+                    'warehouse_id' => $warehouseId,
+                    'type' => 'return',
+                    'quantity' => $requiredQuantity,
+                    'reference' => "order:{$order->id}",
+                    'user_id' => $order->user_id ?? auth()->id(),
+                ]);
+            });
         }
     }
 
@@ -76,44 +129,54 @@ class InventoryService
     {
         foreach ($order->items as $item) {
             if ($item->item_type === 'product') {
-                self::deductProductInventory($item);
+                self::deductProductInventory($item, $order);
             } elseif ($item->item_type === 'menu_item') {
-                self::deductMenuItemIngredients($item);
+                self::deductMenuItemIngredients($item, $order);
             }
         }
     }
 
     /**
-     * Deduct product inventory
+     * Deduct product inventory, logging the movement as an InventoryTransaction.
      */
-    private static function deductProductInventory($item): void
+    private static function deductProductInventory($item, Order $order): void
     {
         $productId = $item->product_id;
         $product = Product::with('category')->find($productId);
 
         $warehouseId = self::getWarehouseForProduct($product);
 
-        // Check stock
-        $currentStock = DB::table('inventory_items')
-            ->where('product_id', $productId)
-            ->where('warehouse_id', $warehouseId)
-            ->value('quantity');
+        DB::transaction(function () use ($item, $productId, $warehouseId, $order) {
+            $inventory = InventoryItem::query()
+                ->where('product_id', $productId)
+                ->where('warehouse_id', $warehouseId)
+                ->lockForUpdate()
+                ->first();
 
-        if (($currentStock ?? 0) < $item->quantity) {
-            throw new \Exception("Out of Stock: Only {$currentStock} left of {$item->product_name}");
-        }
+            $currentStock = $inventory->quantity ?? 0;
 
-        // Deduct from inventory
-        DB::table('inventory_items')
-            ->where('product_id', $productId)
-            ->where('warehouse_id', $warehouseId)
-            ->decrement('quantity', $item->quantity);
+            if ($currentStock < $item->quantity) {
+                throw new \Exception("Out of Stock: Only {$currentStock} left of {$item->product_name}");
+            }
+
+            $inventory->decrement('quantity', $item->quantity);
+
+            InventoryTransaction::create([
+                'product_id' => $productId,
+                'warehouse_id' => $warehouseId,
+                'type' => 'sale',
+                'quantity' => $item->quantity,
+                'reference' => "order:{$order->id}",
+                'user_id' => $order->user_id ?? auth()->id(),
+            ]);
+        });
     }
 
     /**
-     * Deduct ingredients for menu item
+     * Deduct ingredients for menu item (kitchen warehouse), logging each
+     * movement as an IngredientTransaction.
      */
-    private static function deductMenuItemIngredients($item): void
+    private static function deductMenuItemIngredients($item, Order $order): void
     {
         $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($item->menu_item_id);
 
@@ -121,19 +184,41 @@ class InventoryService
             throw new \Exception("Menu item not found: {$item->product_name}");
         }
 
+        $warehouseId = self::getKitchenWarehouseId();
+
         foreach ($menuItem->recipes as $recipe) {
             $requiredQuantity = $recipe->quantity_needed * $item->quantity;
 
-            if ($recipe->ingredient->quantity < $requiredQuantity) {
-                throw new \Exception("Insufficient ingredients: Only {$recipe->ingredient->quantity} {$recipe->ingredient->unit_name} of {$recipe->ingredient->name} available, need {$requiredQuantity}");
-            }
+            DB::transaction(function () use ($recipe, $requiredQuantity, $warehouseId, $order, $item) {
+                $inventory = IngredientInventoryItem::query()
+                    ->where('ingredient_id', $recipe->ingredient_id)
+                    ->where('warehouse_id', $warehouseId)
+                    ->lockForUpdate()
+                    ->first();
 
-            $recipe->ingredient->decrement('quantity', $requiredQuantity);
+                $currentStock = $inventory->quantity ?? 0;
+
+                if ($currentStock < $requiredQuantity) {
+                    throw new \Exception("Insufficient ingredients: Only {$currentStock} {$recipe->ingredient->unit_name} of {$recipe->ingredient->name} available, need {$requiredQuantity}");
+                }
+
+                $inventory->decrement('quantity', $requiredQuantity);
+
+                IngredientTransaction::create([
+                    'ingredient_id' => $recipe->ingredient_id,
+                    'warehouse_id' => $warehouseId,
+                    'type' => 'usage',
+                    'quantity' => $requiredQuantity,
+                    'reference' => "order:{$order->id}",
+                    'user_id' => $order->user_id ?? auth()->id(),
+                ]);
+            });
         }
     }
 
     /**
-     * Check if ingredients are available for a menu item
+     * Check if ingredients are available for a menu item (against kitchen
+     * warehouse stock, since that is where consumption happens)
      *
      * @param int $menuItemId
      * @param int $quantity
@@ -148,13 +233,16 @@ class InventoryService
             return ['Menu item not found'];
         }
 
+        $warehouseId = self::getKitchenWarehouseId();
+
         foreach ($menuItem->recipes as $recipe) {
             $requiredQuantity = $recipe->quantity_needed * $quantity;
+            $available = self::getIngredientStock($recipe->ingredient_id, $warehouseId);
 
-            if ($recipe->ingredient->quantity < $requiredQuantity) {
+            if ($available < $requiredQuantity) {
                 $insufficient[] = [
                     'ingredient' => $recipe->ingredient->name,
-                    'available' => $recipe->ingredient->quantity,
+                    'available' => $available,
                     'required' => $requiredQuantity,
                     'unit' => $recipe->ingredient->unit_name,
                 ];
@@ -165,14 +253,35 @@ class InventoryService
     }
 
     /**
+     * Current kitchen-warehouse stock for a single ingredient.
+     */
+    public static function getIngredientStock(int $ingredientId, ?int $warehouseId = null): float
+    {
+        $warehouseId ??= self::getKitchenWarehouseId();
+
+        return (float) (IngredientInventoryItem::query()
+            ->where('ingredient_id', $ingredientId)
+            ->where('warehouse_id', $warehouseId)
+            ->value('quantity') ?? 0);
+    }
+
+    /**
      * Get low stock alerts for ingredients used in popular menu items
+     * (evaluated against kitchen-warehouse stock)
      *
      * @param int $threshold Threshold quantity for low stock alert
      * @return array
      */
     public static function getLowStockAlerts(int $threshold = 10): array
     {
-        $lowStockIngredients = Ingredient::where('quantity', '<=', $threshold)
+        $warehouseId = self::getKitchenWarehouseId();
+
+        $lowStockIngredientIds = IngredientInventoryItem::query()
+            ->where('warehouse_id', $warehouseId)
+            ->where('quantity', '<=', $threshold)
+            ->pluck('ingredient_id');
+
+        $lowStockIngredients = Ingredient::whereIn('id', $lowStockIngredientIds)
             ->with(['recipes.menuItem' => function($query) {
                 $query->where('available_for_sale', true);
             }])
@@ -212,7 +321,7 @@ class InventoryService
     /**
      * Get the bar warehouse ID (first consumer warehouse)
      */
-    private static function getBarWarehouseId(): int
+    public static function getBarWarehouseId(): int
     {
         return \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first()?->id ?? 4;
     }
@@ -220,7 +329,7 @@ class InventoryService
     /**
      * Get the kitchen warehouse ID (second consumer warehouse)
      */
-    private static function getKitchenWarehouseId(): int
+    public static function getKitchenWarehouseId(): int
     {
         $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
         if ($consumerWarehouses->count() > 1) {

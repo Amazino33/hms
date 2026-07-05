@@ -6,12 +6,24 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\WareHouse;
 use App\Models\Category;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
 
 class Product extends Model
 {
     use HasFactory;
+    use LogsActivity;
 
     protected $guarded = [];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['name', 'sku', 'price', 'cost_price', 'category_id', 'is_active'])
+            ->logOnlyDirty()
+            ->useLogName('product')
+            ->dontLogEmptyChanges();
+    }
 
     public function category()
     {

@@ -27,8 +27,16 @@ class OrderObserver
      */
     public function updating(Order $order): void
     {
-        // Return inventory when an order is cancelled.
-        if ($order->isDirty('status') && $order->status === 'cancelled' && $order->getOriginal('status') !== 'cancelled') {
+        // Return inventory when an order is cancelled or returned. These are
+        // the only two terminal statuses that give stock back — every other
+        // status transition leaves inventory untouched.
+        $restockStatuses = ['cancelled', 'returned'];
+
+        if (
+            $order->isDirty('status')
+            && in_array($order->status, $restockStatuses, true)
+            && ! in_array($order->getOriginal('status'), $restockStatuses, true)
+        ) {
             InventoryService::returnInventoryForCancelledOrder($order);
         }
     }

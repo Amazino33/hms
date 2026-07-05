@@ -5,14 +5,27 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
 
 class StaffDebt extends Model
 {
+    use LogsActivity;
+
     protected $guarded = [];
 
     protected $casts = [
         'amount' => 'decimal:2',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->useLogName('staff_debt')
+            ->dontLogEmptyChanges();
+    }
 
     public function user(): BelongsTo
     {

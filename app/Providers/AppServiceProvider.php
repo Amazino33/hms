@@ -25,6 +25,9 @@ use Spatie\Permission\Events\PermissionAttached;
 use Spatie\Permission\Events\PermissionDetached;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -46,23 +49,67 @@ class AppServiceProvider extends ServiceProvider
 
         // Listen to spatie permission attach/detach events and invalidate sidebar cache accordingly
         Event::listen([RoleAttached::class, RoleDetached::class], function ($event) {
-            if (isset($event->model) && $event->model instanceof User) {
+            if ($event->model instanceof User) {
                 SidebarCache::clearForUser($event->model->id);
-                return;
+            } else {
+                // fallback: clear all user sidebars
+                SidebarCache::clearForAllUsers();
             }
 
-            // fallback: clear all user sidebars
-            SidebarCache::clearForAllUsers();
+            $verb = $event instanceof RoleAttached ? 'attached to' : 'detached from';
+            $subject = $event->model instanceof User ? ($event->model->name ?? $event->model->email) : get_class($event->model) . '#' . $event->model->id;
+
+            activity('role')
+                ->performedOn($event->model)
+                ->causedBy(auth()->user())
+                ->withProperties(['rolesOrIds' => self::describeRolesOrPermissions($event->rolesOrIds)])
+                ->log("Role(s) {$verb} {$subject}");
         });
 
         Event::listen([PermissionAttached::class, PermissionDetached::class], function ($event) {
-            // If event contains a role, clear cache for users who have that role
-            if (isset($event->role) && $event->role instanceof Role) {
-                $event->role->users()->pluck('id')->each(fn($id) => SidebarCache::clearForUser($id));
-                return;
+            // The model a permission is attached to/detached from is usually a
+            // Role (e.g. $role->givePermissionTo(...)) but Spatie allows giving
+            // permissions directly to a User too — handle both.
+            if ($event->model instanceof Role) {
+                $event->model->users()->pluck('id')->each(fn($id) => SidebarCache::clearForUser($id));
+            } elseif ($event->model instanceof User) {
+                SidebarCache::clearForUser($event->model->id);
+            } else {
+                SidebarCache::clearForAllUsers();
             }
 
-            SidebarCache::clearForAllUsers();
+            $verb = $event instanceof PermissionAttached ? 'attached to' : 'detached from';
+            $subject = $event->model instanceof Role
+                ? 'role ' . $event->model->name
+                : (($event->model->name ?? $event->model->email) ?? get_class($event->model) . '#' . $event->model->id);
+
+            activity('permission')
+                ->performedOn($event->model)
+                ->causedBy(auth()->user())
+                ->withProperties(['permissionsOrIds' => self::describeRolesOrPermissions($event->permissionsOrIds)])
+                ->log("Permission(s) {$verb} {$subject}");
+        });
+
+        // Auth events — logins, failed logins, logouts
+        Event::listen(Login::class, function (Login $event) {
+            activity('auth')
+                ->causedBy($event->user)
+                ->withProperties(['guard' => $event->guard])
+                ->log('Login: ' . ($event->user->email ?? $event->user->getAuthIdentifier()));
+        });
+
+        Event::listen(Failed::class, function (Failed $event) {
+            activity('auth')
+                ->causedBy($event->user)
+                ->withProperties(['guard' => $event->guard, 'email' => $event->credentials['email'] ?? null])
+                ->log('Failed login attempt' . (isset($event->credentials['email']) ? ' for ' . $event->credentials['email'] : ''));
+        });
+
+        Event::listen(Logout::class, function (Logout $event) {
+            activity('auth')
+                ->causedBy($event->user)
+                ->withProperties(['guard' => $event->guard])
+                ->log('Logout: ' . ($event->user?->email ?? 'unknown'));
         });
     }
 
@@ -83,6 +130,25 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null
         );
+    }
+
+    /**
+     * Spatie's Role/PermissionAttached/Detached events pass rolesOrIds /
+     * permissionsOrIds as any of: an id, an array of ids, a Role/Permission
+     * model, an array of models, or a Collection — normalize whatever shows
+     * up into something readable for the activity log property.
+     */
+    protected static function describeRolesOrPermissions(mixed $value): array
+    {
+        $items = $value instanceof \Illuminate\Support\Collection ? $value->all() : (is_array($value) ? $value : [$value]);
+
+        return collect($items)->map(function ($item) {
+            if (is_object($item) && method_exists($item, 'getAttribute')) {
+                return $item->name ?? $item->getKey();
+            }
+
+            return $item;
+        })->all();
     }
 
     protected function registerObservers(): void

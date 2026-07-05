@@ -444,13 +444,11 @@ new class extends Component {
     }
 
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
+    // Shift enforcement (waiter, and bartender/chef for bar/kitchen
+    // destinations) lives entirely in OrderSplitter now — this is the only
+    // choke point, so it can't be bypassed by any other entry point either.
     public function checkout(array $cartItems, string $action = 'update')
     {
-        if (!auth()->user()->currentShift()) {
-            Notification::make()->title('No Active Shift')->body('You must start a shift before sending orders to kitchen.')->danger()->send();
-            return;
-        }
-
         if (empty($cartItems))
             return;
         if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
@@ -479,11 +477,15 @@ new class extends Component {
             $splitter->handle($normalized, $tableId, auth()->id(), [
                 'status' => 'pending',
                 'payment_method' => 'cash',
-                'shift_id' => auth()->user()->currentShift()->id,
+                'shift_id' => auth()->user()->currentShift()?->id,
             ]);
         } catch (\Exception $e) {
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
                 Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
+                return;
+            }
+            if (str_contains($e->getMessage(), 'shift') || str_contains($e->getMessage(), 'session')) {
+                Notification::make()->title('No Active Shift')->body($e->getMessage())->danger()->send();
                 return;
             }
             throw $e;

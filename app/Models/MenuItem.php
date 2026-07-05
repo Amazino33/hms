@@ -3,12 +3,24 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
 
 class MenuItem extends Model
 {
     use HasFactory;
+    use LogsActivity;
 
     protected $fillable = ['name', 'sku', 'category_id', 'type', 'sale_price', 'available_for_sale'];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->useLogName('menu_item')
+            ->dontLogEmptyChanges();
+    }
 
     public function recipes()
     {

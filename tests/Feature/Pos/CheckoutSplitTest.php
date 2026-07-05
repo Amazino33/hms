@@ -11,6 +11,9 @@ use App\Services\OrderSplitter;
 it('creates separate kitchen and bar orders from a mixed cart', function () {
     // Create a user
     $user = User::factory()->create();
+    \App\Models\Shift::create(['user_id' => $user->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+    \App\Models\Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
+    \App\Models\Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'chef', 'started_at' => now(), 'status' => 'active']);
 
     // Create categories
     $drinkCat = Category::create(['name' => 'Drinks', 'type' => 'drink']);

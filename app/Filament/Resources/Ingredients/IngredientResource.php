@@ -35,7 +35,12 @@ class IngredientResource extends Resource
             TextInput::make('name')->required(),
             TextInput::make('sku')->required()->unique(ignoreRecord: true),
             TextInput::make('unit_name')->required(),
-            TextInput::make('quantity')->numeric()->required(),
+            TextInput::make('quantity')
+                ->label('Opening Stock (Main Store)')
+                ->helperText('Only used when creating a new ingredient. Stock afterwards moves only through transfers, kitchen usage, and Stock Adjustments.')
+                ->numeric()
+                ->required()
+                ->visibleOn('create'),
             TextInput::make('cost_per_unit')->numeric()->required(),
             TextInput::make('category')->required(),
         ]);
@@ -52,7 +57,9 @@ class IngredientResource extends Resource
             TextColumn::make('name')->searchable(),
             TextColumn::make('sku'),
             TextColumn::make('category'),
-            TextColumn::make('quantity')->numeric(),
+            TextColumn::make('current_stock')
+                ->label('Current Stock')
+                ->numeric(),
             TextColumn::make('cost_per_unit')->money('NGN'),
         ])->actions([
             ViewAction::make(),

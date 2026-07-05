@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
 
 class Order extends Model
 {
     use HasFactory;
+    use LogsActivity;
 
     protected $guarded = [];
     protected $casts = [
@@ -16,6 +19,21 @@ class Order extends Model
         'paid_pos' => 'decimal:2',
         'served_at' => 'datetime',
     ];
+
+    /**
+     * Only the fields that matter for accountability (status transitions,
+     * cancellations, returns, payment totals) are logged — order creation
+     * is high volume, so we deliberately don't log every attribute on
+     * every new order, only these.
+     */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['status', 'cancellation_reason', 'is_return', 'amount_paid', 'total_amount'])
+            ->logOnlyDirty()
+            ->useLogName('order')
+            ->dontLogEmptyChanges();
+    }
 
     public function items() 
     { 

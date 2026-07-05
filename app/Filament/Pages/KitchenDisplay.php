@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Services\PermissionService;
 use App\Models\Order;
-use App\Models\InventoryItem;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -110,23 +109,10 @@ class KitchenDisplay extends Page
                     throw new \Exception('This return has already been processed.');
                 }
 
-                foreach($returnOrder->items as $item) {
-                    // Only attempt to restock physical products
-                    if ($item->item_type === 'product' && $item->product) {
-                        // Find the inventory record for the consumer warehouse
-                        $inventoryRecord = InventoryItem::where('product_id', $item->product_id)
-                            ->whereHas('warehouse', function($q) {
-                                $q->where('type', 'consumer');
-                            })
-                            ->first();
-
-                        if ($inventoryRecord) {
-                            $inventoryRecord->increment('quantity', $item->quantity);
-                        }
-                    }
-                }
-
-                // Mark the return order as returned
+                // Restocking (products + menu-item ingredients) and its
+                // InventoryTransaction/IngredientTransaction records are
+                // handled centrally by OrderObserver on this status change —
+                // there is no separate mutation path here.
                 $returnOrder->update(['status' => 'returned']);
             });
 

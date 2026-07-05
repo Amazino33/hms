@@ -6,7 +6,9 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\InventoryItem;
 use App\Models\InventoryList;
+use App\Models\InventoryTransaction;
 use App\Models\WareHouse;
+use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Row;
@@ -43,20 +45,43 @@ class ProductImport implements OnEachRow, WithHeadingRow
             ]
         );
 
-        // 4. Update Inventory
-        // We find the warehouse by the name provided in the Excel (e.g. "Main Bar")
+        // 4. Add Inventory
+        // We find the warehouse by the name provided in the Excel (e.g. "Main Bar").
+        // A bulk import row is a stock intake, not a correction — it can only
+        // ever ADD to existing stock, never silently overwrite it, and every
+        // addition is logged as an InventoryTransaction like any other
+        // purchase.
         $warehouse = WareHouse::where('name', $row['warehouse'])->first();
+        $quantity = (float) ($row['quantity'] ?? 0);
 
-        if ($warehouse) {
-            InventoryItem::updateOrCreate(
-                [
-                    'product_id'   => $product->id,
+        if ($warehouse && $quantity > 0) {
+            DB::transaction(function () use ($product, $warehouse, $quantity, $rowIndex) {
+                $inventory = InventoryItem::query()
+                    ->where('product_id', $product->id)
+                    ->where('warehouse_id', $warehouse->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($inventory) {
+                    $inventory->increment('quantity', $quantity);
+                } else {
+                    InventoryItem::create([
+                        'product_id' => $product->id,
+                        'warehouse_id' => $warehouse->id,
+                        'quantity' => $quantity,
+                    ]);
+                }
+
+                InventoryTransaction::create([
+                    'product_id' => $product->id,
                     'warehouse_id' => $warehouse->id,
-                ],
-                [
-                    'quantity' => $row['quantity'] ?? 0,
-                ]
-            );
+                    'type' => 'purchase',
+                    'quantity' => $quantity,
+                    'cost_per_unit' => $product->cost_price,
+                    'reference' => 'bulk_import_row_' . $rowIndex,
+                    'user_id' => auth()->id(),
+                ]);
+            });
         }
     }
 

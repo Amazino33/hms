@@ -34,8 +34,10 @@ it('returns inventory when order is cancelled', function () {
         'quantity' => 10,
     ]);
 
-    // Create an order
-    $order = Order::factory()->create(['status' => 'pending']);
+    // Create an order (with an owning user — every stock movement must be
+    // attributable to someone, matching how OrderSplitter always assigns a
+    // user_id when it creates real orders)
+    $order = Order::factory()->create(['status' => 'pending', 'user_id' => \App\Models\User::factory()->create()->id]);
 
     // Create an order item
     $orderItem = OrderItem::factory()->create([
@@ -85,8 +87,10 @@ it('does not return inventory for non-cancelled status changes', function () {
         'quantity' => 10,
     ]);
 
-    // Create an order
-    $order = Order::factory()->create(['status' => 'pending']);
+    // Create an order (with an owning user — every stock movement must be
+    // attributable to someone, matching how OrderSplitter always assigns a
+    // user_id when it creates real orders)
+    $order = Order::factory()->create(['status' => 'pending', 'user_id' => \App\Models\User::factory()->create()->id]);
 
     // Create an order item
     $orderItem = OrderItem::factory()->create([

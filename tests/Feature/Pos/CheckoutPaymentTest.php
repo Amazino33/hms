@@ -35,6 +35,8 @@ function seedPosFixtures(): array
 it('records a separate OrderPayment for each destination order in a mixed cart', function () {
     $user = User::factory()->create();
     Shift::create(['user_id' => $user->id, 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'chef', 'started_at' => now(), 'status' => 'active']);
 
     ['beer' => $beer, 'rice' => $rice] = seedPosFixtures();
 
@@ -66,6 +68,7 @@ it('records a separate OrderPayment for each destination order in a mixed cart',
 it('creates a partial order when a guest pays less than the total', function () {
     $user = User::factory()->create();
     Shift::create(['user_id' => $user->id, 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
 
     ['beer' => $beer] = seedPosFixtures();
     $guest = \App\Models\Guest::create(['name' => 'Debt Guest', 'phone' => '080000000']);

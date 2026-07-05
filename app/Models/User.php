@@ -15,11 +15,27 @@ use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
 
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles;
+    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles, LogsActivity;
+
+    /**
+     * Never log credentials or secrets, even hashed — only the fields an
+     * admin would actually be editing (name, contact/bank/KYC details).
+     */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logExcept(['password'])
+            ->logOnlyDirty()
+            ->useLogName('user')
+            ->dontLogEmptyChanges();
+    }
 
     /**
      * The attributes that are mass assignable.

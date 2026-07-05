@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\MenuItem;
+use App\Models\Shift;
 use Illuminate\Support\Facades\DB;
 use App\Events\OrderCreated;
 use App\Services\InventoryService;
@@ -68,6 +69,8 @@ class OrderSplitter
             $orderStatus = $options['status'] ?? 'pending';
 
             foreach ($groups as $destination => $items) {
+                self::assertShiftsActive($destination, $userId);
+
                 $groupTotal = collect($items)->sum(fn($i) => $i['price'] * $i['quantity']);
 
                 // Distribute payment proportionally for partial payments
@@ -176,6 +179,31 @@ class OrderSplitter
         });
 
         return $created;
+    }
+
+    /**
+     * The single choke point for order-creation shift enforcement — every
+     * caller (POS, future API, imports, etc.) goes through here. A waiter
+     * must be on an active, non-stale shift to create any order; a bar
+     * destination additionally requires an active bartender shift, and a
+     * kitchen destination an active chef shift, so every sale is always
+     * inside exactly one accountable person's shift.
+     *
+     * @throws \Exception
+     */
+    private static function assertShiftsActive(string $destination, int $waiterUserId): void
+    {
+        if (!Shift::query()->where('user_id', $waiterUserId)->activeNonStale('waiter')->exists()) {
+            throw new \Exception('You must start a shift before creating orders.');
+        }
+
+        if ($destination === 'bar' && !Shift::query()->activeNonStale('bartender')->exists()) {
+            throw new \Exception('No active bartender session — a bar sale cannot be recorded without one.');
+        }
+
+        if ($destination === 'kitchen' && !Shift::query()->activeNonStale('chef')->exists()) {
+            throw new \Exception('No active chef session — a kitchen sale cannot be recorded without one.');
+        }
     }
 
     /**

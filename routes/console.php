@@ -2,7 +2,13 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 use App\Jobs\CronQueueTestJob;
+
+// Prune activity log entries older than config('activitylog.clean_after_days')
+// (default 365 days / ~12 months). Retention-only pruning — there is no
+// manual delete/edit path anywhere in the UI, by design.
+Schedule::command('activitylog:clean')->daily();
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());

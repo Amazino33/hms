@@ -11,6 +11,7 @@ use Livewire\Livewire;
 it('stamps shift_id on orders created via checkout (send to kitchen)', function () {
     $waiter = User::factory()->create();
     $shift = Shift::create(['user_id' => $waiter->id, 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'chef', 'started_at' => now(), 'status' => 'active']);
 
     $category = Category::create(['name' => 'Food', 'type' => 'food']);
     $rice = Product::create(['name' => 'Rice', 'price' => 1000, 'category_id' => $category->id, 'is_active' => true]);

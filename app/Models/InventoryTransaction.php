@@ -3,11 +3,23 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
 
 class InventoryTransaction extends Model
 {
+    use LogsActivity;
+
     // Allow mass assignment for all fields
     protected $guarded = [];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->useLogName('inventory_transaction')
+            ->dontLogEmptyChanges();
+    }
 
     // Relations
     public function product()
