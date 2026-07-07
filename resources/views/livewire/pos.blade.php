@@ -150,23 +150,46 @@ new class extends Component {
 
     /**
      * Runs before every request (initial mount AND every subsequent
-     * Livewire update/poll) — unlike mount(), which only fires once. A
-     * kiosk/staff PIN session can be logged out from a different browser
-     * tab sharing the same session (e.g. that tab's order completed and
-     * triggered the auto-logout), while this tab's wire:poll keeps ticking
-     * every 10s. Without this check, the next poll or click here would
-     * hard-crash on auth()->user()->currentShift() throughout the view
-     * instead of bouncing back to the PIN pad.
+     * Livewire update/poll) — unlike mount(), which only fires once. Two
+     * separate jobs, both learned the hard way in production:
+     *
+     * 1. Auth::shouldUse('staff_pin') is what makes every auth()->id()/
+     *    auth()->user() call elsewhere in this component (including
+     *    checkout()'s OrderSplitter call) resolve against the PIN-
+     *    identified waiter instead of the default 'web' guard. The
+     *    EnsureStaffPinAuthenticated middleware calls it, but only for the
+     *    request that middleware actually runs on — Livewire's follow-up
+     *    "component update" AJAX request (e.g. clicking "Send to Kitchen")
+     *    does NOT reliably re-run that middleware, so without setting it
+     *    again here, auth()->id() silently comes back null on exactly the
+     *    request that places the order, throwing a TypeError deep inside
+     *    OrderSplitter. This must be set on every request, not assumed to
+     *    already be in effect from the initial page load.
+     *
+     * 2. A kiosk/staff PIN session can be logged out from a different
+     *    browser tab sharing the same session (e.g. that tab's order
+     *    completed and triggered the auto-logout), while this tab's
+     *    wire:poll keeps ticking every 10s. Without this check, the next
+     *    poll or click here would hard-crash on auth()->user()->
+     *    currentShift() throughout the view instead of bouncing back to
+     *    the PIN pad.
      */
     public function boot(): void
     {
         $isKioskOrStaffSession = session('kiosk_device_id') || session('trusted_device_user_id');
 
-        if ($isKioskOrStaffSession && !auth()->guard('staff_pin')->check()) {
+        if (!$isKioskOrStaffSession) {
+            return;
+        }
+
+        if (!auth()->guard('staff_pin')->check()) {
             $routeName = session('kiosk_device_id') ? 'kiosk.home' : 'staff.home';
             $this->redirect(route($routeName), navigate: false);
             $this->skipRender();
+            return;
         }
+
+        auth()->shouldUse('staff_pin');
     }
 
     public function mount($table_id = null)
