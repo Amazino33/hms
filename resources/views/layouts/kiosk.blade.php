@@ -23,6 +23,61 @@
 <body class="bg-gray-900">
     @yield('content')
 
+    {{-- The idle/table-grid screen never loads the pos component, but its
+         per-table "Print Bill" action still needs window.printPOSBill —
+         duplicated here rather than @include'd (an @include of this exact
+         script, oddly, tripped Livewire's dev-mode "multiple root element"
+         mount check across unrelated pos.blade.php tests — content-for-
+         content identical markup passes fine when inlined directly). --}}
+    <script>
+        window.printPOSBill = function printPOSBill(d) {
+            const win = window.open('', '_blank', 'width=440,height=680,scrollbars=yes,resizable=yes');
+            if (!win) { alert('Please allow pop-ups to print the bill.'); return; }
+            const rows = (d.items || []).map(i =>
+                `<tr><td style="padding:3px 6px;">${i.name}</td><td style="text-align:center;padding:3px 6px;">${i.quantity}</td><td style="text-align:right;padding:3px 6px;">&#8358;${Number(i.price * i.quantity).toLocaleString()}</td></tr>`
+            ).join('');
+            win.document.write(`<!DOCTYPE html>
+<html><head><title>Unpaid Bill – ${d.tableName}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Courier New', monospace; font-size:13px; width:80mm; padding:10px; color:#000; }
+  h1 { text-align:center; font-size:16px; letter-spacing:2px; margin-bottom:2px; }
+  .sub { text-align:center; font-size:11px; margin-bottom:4px; }
+  .dashed { border-top:1px dashed #000; margin:6px 0; }
+  .meta { font-size:12px; margin-bottom:2px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:11px; border-bottom:1px solid #000; padding:2px 6px; }
+  .total-row { font-size:15px; font-weight:bold; text-align:right; margin-top:8px; }
+  .footer { text-align:center; font-size:10px; margin-top:10px; color:#555; }
+  @media print {
+    body { width:auto; }
+    button { display:none; }
+  }
+</style>
+</head>
+<body>
+  <h1>HMS RECEIPT</h1>
+  <div class="sub">*** UNPAID BILL ***</div>
+  <div class="dashed"></div>
+  <div class="meta">Table : <strong>${d.tableName}</strong></div>
+  <div class="meta">Date  : ${d.date}</div>
+  <div class="meta">Staff : ${d.cashier}</div>
+  <div class="dashed"></div>
+  <table>
+    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Amount</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="dashed"></div>
+  <div class="total-row">TOTAL: &#8358;${Number(d.total).toLocaleString()}</div>
+  <div class="dashed"></div>
+  <div class="footer">Thank you for dining with us!<br>This is NOT a payment receipt.</div>
+</body></html>`);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); }, 600);
+        }
+    </script>
+
     <livewire:notifications />
     {{-- @filamentScripts(withCore: true) already bundles and boots
          Livewire's core JS — Filament's own panel layout never also calls

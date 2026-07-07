@@ -1676,7 +1676,7 @@ new class extends Component {
                 </div>
 
                 <div @if($deferProducts) wire:init="loadProducts" @endif
-                    class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3 content-start relative">
+                    class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 content-start relative">
                     @if(!auth()->user()->currentShift())
                         <div
                             class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
@@ -1704,10 +1704,25 @@ new class extends Component {
                         @endfor
                     @endif
 
+                    @php
+                        // Availability is shown as a discrete state (Low/Sold
+                        // out/nothing), never the raw count — the exact number
+                        // must not be readable from this page (view-source,
+                        // network tab, or an onclick attribute), since it
+                        // would leak the expected quantity to whoever is
+                        // meant to be blind-counted against it later. 5 is a
+                        // simple default; no per-product threshold exists yet
+                        // to reuse.
+                        $kioskLowStockThreshold = 5;
+                    @endphp
                     @foreach($products as $product)
-                        @php $kioskSoldOut = ($product->available_stock ?? 0) <= 0; @endphp
-                        <div @if($canAddToCartKiosk)
-                            @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float) $product->price }}, {{ (int) ($product->available_stock ?? 0) }})"
+                        @php
+                            $kioskStockLevel = (int) ($product->available_stock ?? 0);
+                            $kioskSoldOut = $kioskStockLevel <= 0;
+                            $kioskLowStock = !$kioskSoldOut && $kioskStockLevel <= $kioskLowStockThreshold;
+                        @endphp
+                        <div @if($canAddToCartKiosk && !$kioskSoldOut)
+                            @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float) $product->price }})"
                             @endif
                             class="relative select-none {{ $canAddToCartKiosk && !$kioskSoldOut ? 'cursor-pointer active:scale-[0.97] active:brightness-125 hover:border-amber-500' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-40 touch-manipulation">
                             <div class="font-semibold text-gray-800 dark:text-gray-200 line-clamp-2 text-lg">
@@ -1716,11 +1731,10 @@ new class extends Component {
                                 ₦{{ number_format($product->price) }}</div>
                             @if($kioskSoldOut)
                                 <span
-                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Sold
-                                    out</span>
-                            @else
-                                <span class="mt-1 text-xs text-gray-400 dark:text-gray-500">Bar:
-                                    {{ $product->available_stock ?? 0 }}</span>
+                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Sold out</span>
+                            @elseif($kioskLowStock)
+                                <span
+                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Low</span>
                             @endif
                             <span x-show="cart['{{ $product->id }}']"
                                 x-text="'×' + (cart['{{ $product->id }}']?.qty ?? '')"
@@ -1728,9 +1742,13 @@ new class extends Component {
                         </div>
                     @endforeach
                     @foreach($menuItems as $menuItem)
-                        @php $kioskStock = $menuItem->available_stock; $kioskMenuSoldOut = $kioskStock !== null && $kioskStock <= 0; @endphp
-                        <div @if(auth()->user()->currentShift() && $selectedTableId)
-                            @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float) $menuItem->sale_price }}, {{ $kioskStock === null ? 'null' : $kioskStock }})"
+                        @php
+                            $kioskMenuStockLevel = $menuItem->available_stock;
+                            $kioskMenuSoldOut = $kioskMenuStockLevel !== null && $kioskMenuStockLevel <= 0;
+                            $kioskMenuLowStock = !$kioskMenuSoldOut && $kioskMenuStockLevel !== null && $kioskMenuStockLevel <= $kioskLowStockThreshold;
+                        @endphp
+                        <div @if(auth()->user()->currentShift() && $selectedTableId && !$kioskMenuSoldOut)
+                            @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float) $menuItem->sale_price }})"
                             @endif
                             class="relative select-none {{ auth()->user()->currentShift() && $selectedTableId && !$kioskMenuSoldOut ? 'cursor-pointer active:scale-[0.97] active:brightness-125 hover:border-amber-500' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-40 touch-manipulation">
                             <div class="font-semibold text-gray-800 dark:text-gray-200 line-clamp-2 text-lg">
@@ -1739,11 +1757,10 @@ new class extends Component {
                                 ₦{{ number_format($menuItem->sale_price) }}</div>
                             @if($kioskMenuSoldOut)
                                 <span
-                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Sold
-                                    out</span>
-                            @else
-                                <span class="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                                    {{ $kioskStock === null ? 'Menu item' : $kioskStock . ' left' }}</span>
+                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Sold out</span>
+                            @elseif($kioskMenuLowStock)
+                                <span
+                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Low</span>
                             @endif
                             <span x-show="cart['menu_{{ $menuItem->id }}']"
                                 x-text="'×' + (cart['menu_{{ $menuItem->id }}']?.qty ?? '')"
@@ -1836,54 +1853,71 @@ new class extends Component {
                         class="text-amber-400 font-bold text-sm shrink-0 h-10 px-3 touch-manipulation">Undo</button>
                 </div>
 
-                <div class="shrink-0 p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-                    <div class="flex justify-between items-baseline mb-3">
-                        <span class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase">Total <span
-                                x-show="cartCount + existingCount > 0"
-                                x-text="'· ' + (cartCount + existingCount) + ' items'"></span></span>
-                        <span class="text-3xl font-bold tabular-nums text-amber-500"
-                            x-text="'₦' + total.toLocaleString()"></span>
-                    </div>
+                <div class="shrink-0 p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700"
+                    x-data="{ showMarkPaidMethods: false }" x-effect="if (cartCount > 0 || existingCount === 0) showMarkPaidMethods = false">
 
-                    <button @if(auth()->user()->currentShift()) @click="sendToKitchen()" @endif
-                        :disabled="isLoading || cartCount === 0 || !$wire.selectedTableId"
-                        :class="(isLoading || cartCount === 0 || !$wire.selectedTableId) ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'"
-                        class="w-full h-16 rounded-xl text-white text-xl font-semibold touch-manipulation transition-colors">
-                        <span x-text="isLoading ? 'Sending…' : 'Place Order'"></span>
-                    </button>
-                    <p class="text-xs text-center text-gray-500 dark:text-gray-400 mt-1" x-show="!$wire.selectedTableId">
-                        Select a table to continue</p>
-                    <p class="text-xs text-center text-gray-500 dark:text-gray-400 mt-1"
-                        x-show="$wire.selectedTableId && cartCount === 0">Tap a product to add items</p>
-
-                    <div class="grid grid-cols-2 gap-3 mt-3">
-                        <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
-                            class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} h-14 rounded-xl text-white text-lg font-semibold touch-manipulation transition-colors">
-                            Pay
-                        </button>
-                        <button @if(auth()->user()->currentShift()) @click="$wire.call('cancelOrder')" @endif
-                            class="{{ auth()->user()->currentShift() ? 'border-2 border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer' : 'border-2 border-gray-300 text-gray-400 cursor-not-allowed' }} h-14 rounded-xl text-lg font-semibold touch-manipulation transition-colors">
-                            Cancel
-                        </button>
-                    </div>
-
-                    <div class="mt-3">
-                        <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Mark Paid</div>
-                        <div class="grid grid-cols-3 gap-2">
-                            <button wire:click="markPaidFast('cash')" wire:loading.attr="disabled"
-                                wire:target="markPaidFast"
-                                class="h-12 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
-                                Cash</button>
-                            <button wire:click="markPaidFast('pos')" wire:loading.attr="disabled"
-                                wire:target="markPaidFast"
-                                class="h-12 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
-                                POS</button>
-                            <button wire:click="markPaidFast('transfer')" wire:loading.attr="disabled"
-                                wire:target="markPaidFast"
-                                class="h-12 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
-                                Transfer</button>
+                    {{-- STATE 1: unsent new items — Place Order is the only path forward --}}
+                    <template x-if="cartCount > 0">
+                        <div>
+                            <button @if(auth()->user()->currentShift()) @click="sendToKitchen()" @endif
+                                :disabled="isLoading || !$wire.selectedTableId"
+                                :class="(isLoading || !$wire.selectedTableId) ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'"
+                                class="w-full h-16 rounded-xl text-white text-xl font-semibold touch-manipulation transition-colors">
+                                <span
+                                    x-text="isLoading ? 'Sending…' : ('Place Order · ₦' + newCartTotal.toLocaleString())"></span>
+                            </button>
+                            <p class="text-xs text-center text-gray-500 dark:text-gray-400 mt-1"
+                                x-show="!$wire.selectedTableId">Select a table to continue</p>
+                            <button @click="clearNewItems()"
+                                class="mt-2 w-full h-10 rounded-lg text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 touch-manipulation">
+                                Clear
+                            </button>
                         </div>
-                    </div>
+                    </template>
+
+                    {{-- STATE 2: nothing new, but existing (already-sent) items are unpaid --}}
+                    <template x-if="cartCount === 0 && existingCount > 0">
+                        <div>
+                            <button @click="showMarkPaidMethods = !showMarkPaidMethods"
+                                class="w-full h-16 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xl font-semibold touch-manipulation transition-colors">
+                                <span x-text="'Mark Paid · ₦' + existingTotal.toLocaleString()"></span>
+                            </button>
+                            <div class="grid grid-cols-3 gap-2 mt-2" x-show="showMarkPaidMethods" x-transition>
+                                <button wire:click="markPaidFast('cash')" wire:loading.attr="disabled"
+                                    wire:target="markPaidFast"
+                                    class="h-14 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                    Cash</button>
+                                <button wire:click="markPaidFast('pos')" wire:loading.attr="disabled"
+                                    wire:target="markPaidFast"
+                                    class="h-14 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                    POS</button>
+                                <button wire:click="markPaidFast('transfer')" wire:loading.attr="disabled"
+                                    wire:target="markPaidFast"
+                                    class="h-14 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                    Transfer</button>
+                            </div>
+                            <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
+                                class="mt-2 w-full h-10 rounded-lg text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation">
+                                Split payment…
+                            </button>
+                        </div>
+                    </template>
+
+                    {{-- STATE 3: nothing pending either way --}}
+                    <template x-if="cartCount === 0 && existingCount === 0">
+                        <div
+                            class="w-full h-16 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 text-lg font-semibold flex items-center justify-center">
+                            No pending items
+                        </div>
+                    </template>
+
+                    {{-- Cancel voids already-sent orders (reason required) — orthogonal
+                         to whichever state above is showing, so it's available whenever
+                         there's anything sent to void, new cart or not. --}}
+                    <button x-show="existingCount > 0" @if(auth()->user()->currentShift()) @click="$wire.call('cancelOrder')" @endif
+                        class="mt-2 w-full h-10 rounded-lg text-sm font-semibold border-2 border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 touch-manipulation">
+                        Cancel Order
+                    </button>
                 </div>
             </div>
         </div>
@@ -2206,14 +2240,21 @@ new class extends Component {
 
                 /**
                  * Add a product to cart without a round-trip (optimistic).
-                 * Stock is pre-checked at render time via $product->available_stock.
-                 * The server's OrderSplitter does the real check on checkout.
+                 *
+                 * availableStock is only ever passed by the admin Sales page
+                 * and staff-phone layouts (unchanged, legacy behavior) — the
+                 * kiosk shell never sends it, since the exact stock figure
+                 * must not be exposed to whoever taps the button (blind
+                 * counting control). Without it, the kiosk relies entirely
+                 * on the server's OrderSplitter/InventoryService check when
+                 * the order is actually sent; sold-out kiosk cards are simply
+                 * not tappable at all, so this path never even runs for them.
                  */
-                addProductToCart(id, name, price, availableStock) {
+                addProductToCart(id, name, price, availableStock = undefined) {
                     const key = String(id);
                     const currentQty = this.cart[key] ? this.cart[key].qty : 0;
 
-                    if (availableStock <= currentQty) {
+                    if (availableStock !== undefined && availableStock <= currentQty) {
                         alert('Out of stock: only ' + availableStock + ' available.');
                         return;
                     }
@@ -2221,21 +2262,25 @@ new class extends Component {
                     if (this.cart[key]) {
                         this.cart[key].qty++;
                     } else {
-                        this.cart[key] = { name, price, qty: 1, type: 'product', stock: availableStock };
+                        this.cart[key] = {
+                            name, price, qty: 1, type: 'product',
+                            ...(availableStock !== undefined ? { stock: availableStock } : {}),
+                        };
                     }
                     this.lastAddedKey = key;
                 },
 
                 /**
-                 * Add a menu item to cart — must hit server for ingredient availability check.
+                 * Add a menu item to cart — must hit server for ingredient
+                 * availability check either way. availableStock is legacy,
+                 * admin/staff-phone-only — see addProductToCart.
                  */
-                async addMenuItemToCart(id, name, price, availableStock) {
+                async addMenuItemToCart(id, name, price, availableStock = undefined) {
                     if (this.isLoading) return;
                     const key = 'menu_' + id;
                     const currentQty = this.cart[key] ? this.cart[key].qty : 0;
 
-                    // Client-side check for menu items
-                    if (availableStock !== null && availableStock <= currentQty) {
+                    if (availableStock !== undefined && availableStock !== null && availableStock <= currentQty) {
                         alert('Out of stock: only ' + availableStock + ' portions available.');
                         return;
                     }
@@ -2253,7 +2298,7 @@ new class extends Component {
                                     qty: 1,
                                     type: 'menu_item',
                                     menu_item_id: id,
-                                    stock: availableStock,
+                                    ...(availableStock !== undefined ? { stock: availableStock } : {}),
                                 };
                             }
                             this.lastAddedKey = key;
@@ -2264,10 +2309,11 @@ new class extends Component {
                 },
 
                 /**
-                 * Decrement/increment for the kiosk cart row +/- stepper. Stock
-                 * is the same render-time snapshot captured when the item was
-                 * first added — same staleness tradeoff as addProductToCart;
-                 * the server re-checks for real on checkout regardless.
+                 * Decrement/increment for the kiosk cart row +/- stepper.
+                 * Only caps against a stored stock snapshot when one exists
+                 * (legacy admin/staff-phone adds) — kiosk-added items never
+                 * carry one, so the server is the only check once the order
+                 * is sent, consistent with the card never exposing the number.
                  */
                 decrementCartItem(key) {
                     if (!this.cart[key]) return;
@@ -2286,6 +2332,19 @@ new class extends Component {
                         return;
                     }
                     item.qty++;
+                },
+
+                /**
+                 * Clears only unsent (New Items) cart lines — Existing Items
+                 * are never touched here; they can only leave via the
+                 * per-line Return flow (bartender confirmation) or a
+                 * manager void, both unaffected by this.
+                 */
+                clearNewItems() {
+                    if (this.cartCount === 0) return;
+                    if (this.cartCount > 1 && !confirm('Clear all new items from this order?')) return;
+                    this.cart = {};
+                    this.undoStack = null;
                 },
 
                 /**

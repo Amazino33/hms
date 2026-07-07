@@ -49,8 +49,7 @@ it('renders the touch-first kiosk shell, including Place Order, for an actual ki
     Livewire::test('pos', ['table_id' => $table->id])
         ->assertSee('Place Order')
         ->assertSee('Select a Table')
-        ->assertSee('Pay')
-        ->assertSee('Cancel');
+        ->assertSee('Mark Paid');
 });
 
 it('keeps the original layout for the admin Sales page, with no kiosk-only markup', function () {
@@ -102,4 +101,123 @@ it('groups the kiosk table picker by table location', function () {
         ->assertSee('PSB')
         ->assertSee('BB')
         ->assertSee('Take Away');
+});
+
+/**
+ * Blind counting (Inventory Integrity package) requires that expected
+ * quantities are never casually visible to whoever will later be counted
+ * against them — so the exact figure must not appear anywhere in the kiosk
+ * order page's rendered output, not just be visually hidden by CSS. This
+ * asserts against the full Livewire response body (the same HTML/payload a
+ * curious user could inspect via view-source or the network tab), not just
+ * what a screenshot would show.
+ */
+it('never renders an exact stock quantity anywhere on the kiosk order page, healthy or low', function () {
+    $admin = User::factory()->create();
+    $deviceService = new KioskDeviceService();
+    ['code' => $code] = $deviceService->generateRegistrationCode($admin);
+    ['device' => $device] = $deviceService->registerDevice($code, 'Bar Kiosk 1');
+
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $healthyStock = Product::create(['name' => 'Healthy Stock Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    $lowStock = Product::create(['name' => 'Low Stock Beer', 'price' => 600, 'category_id' => $category->id, 'is_active' => true]);
+    $bar = WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'is_active' => 1]);
+    // A distinctive, unlikely-to-collide quantity for the "healthy" product,
+    // and a below-threshold quantity for the "low" one.
+    InventoryItem::create(['product_id' => $healthyStock->id, 'warehouse_id' => $bar->id, 'quantity' => 173]);
+    InventoryItem::create(['product_id' => $lowStock->id, 'warehouse_id' => $bar->id, 'quantity' => 3]);
+
+    $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'PSB']);
+
+    Auth::guard('staff_pin')->login($waiter);
+    Auth::shouldUse('staff_pin');
+    session(['kiosk_device_id' => $device->id]);
+
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->assertSee('Healthy Stock Beer')
+        ->assertSee('Low Stock Beer')
+        ->assertSee('Low') // the discrete low-stock badge is fine
+        ->assertDontSee('173') // but never the raw healthy count
+        ->assertDontSee('Bar:'); // and never the old "Bar: N" label at all
+});
+
+it('shows a disabled, non-tappable SOLD OUT card and rejects the order server-side if attempted anyway', function () {
+    $admin = User::factory()->create();
+    $deviceService = new KioskDeviceService();
+    ['code' => $code] = $deviceService->generateRegistrationCode($admin);
+    ['device' => $device] = $deviceService->registerDevice($code, 'Bar Kiosk 1');
+
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $soldOut = Product::create(['name' => 'Sold Out Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    $bar = WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'is_active' => 1]);
+    InventoryItem::create(['product_id' => $soldOut->id, 'warehouse_id' => $bar->id, 'quantity' => 0]);
+
+    $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'PSB']);
+
+    Auth::guard('staff_pin')->login($waiter);
+    Auth::shouldUse('staff_pin');
+    session(['kiosk_device_id' => $device->id]);
+
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->assertSee('Sold out')
+        ->assertDontSee("addProductToCart({$soldOut->id},"); // no click handler attached at all
+
+    // Even a direct call bypassing the disabled UI must still be rejected —
+    // the card being non-tappable is a UX nicety, not the actual guard.
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->call('checkout', [
+            $soldOut->id => ['name' => $soldOut->name, 'price' => $soldOut->price, 'quantity' => 1],
+        ]);
+
+    expect(\App\Models\Order::count())->toBe(0);
+    expect(\App\Models\OrderItem::count())->toBe(0);
+});
+
+it('wires Clear to a client-only action that cannot touch already-sent Existing Items', function () {
+    $admin = User::factory()->create();
+    $deviceService = new KioskDeviceService();
+    ['code' => $code] = $deviceService->generateRegistrationCode($admin);
+    ['device' => $device] = $deviceService->registerDevice($code, 'Bar Kiosk 1');
+
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    ['beer' => $beer, 'table' => $table] = seedRedesignFixtures();
+
+    \App\Models\Order::create([
+        'order_number' => 'ORD-CLEAR-TEST',
+        'table_id' => $table->id,
+        'user_id' => $waiter->id,
+        'status' => 'pending',
+        'destination' => 'bar',
+        'total_amount' => 500,
+    ])->items()->create([
+        'product_id' => $beer->id,
+        'product_name' => $beer->name,
+        'item_type' => 'product',
+        'quantity' => 1,
+        'unit_price' => 500,
+        'subtotal' => 500,
+    ]);
+
+    Auth::guard('staff_pin')->login($waiter);
+    Auth::shouldUse('staff_pin');
+    session(['kiosk_device_id' => $device->id]);
+
+    // clearNewItems() only ever mutates the Alpine `cart` object (unsent
+    // items) — it has no wire:click/$wire.call, so there is no server round
+    // trip for it to reach $existingItems through in the first place. This
+    // is the part of the guarantee that can be verified without executing
+    // Alpine JS in a Pest test; the rest is enforced by code review.
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->assertSee('Existing Items')
+        ->assertSee($beer->name)
+        ->assertSee('clearNewItems()')
+        ->assertDontSee('wire:click="clearNewItems');
 });

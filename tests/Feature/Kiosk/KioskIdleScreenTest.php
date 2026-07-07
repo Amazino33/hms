@@ -78,6 +78,61 @@ it('does not show a name on an available table with no active order', function (
         ->assertDontSee('Sifon');
 });
 
+it('prints a table bill straight from the table grid with no PIN login at all', function () {
+    ['token' => $token] = registerKioskAndGetToken();
+    $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    $waiter = User::factory()->create(['name' => 'Sifon']);
+    $category = \App\Models\Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $beer = \App\Models\Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+
+    $order = \App\Models\Order::create([
+        'order_number' => 'ORD-1',
+        'table_id' => $table->id,
+        'user_id' => $waiter->id,
+        'status' => 'pending',
+        'destination' => 'bar',
+        'total_amount' => 1000,
+    ]);
+    $order->items()->create([
+        'product_id' => $beer->id,
+        'product_name' => $beer->name,
+        'item_type' => 'product',
+        'quantity' => 2,
+        'unit_price' => 500,
+        'subtotal' => 1000,
+    ]);
+
+    $this->withUnencryptedCookie(EnsureValidKioskDevice::COOKIE_NAME, $token);
+
+    // Deliberately no Auth::guard('staff_pin')->login() anywhere in this
+    // test — printing a bill must not require the PIN pad at all.
+    Livewire::test('kiosk-idle-screen')
+        ->call('printTableBill', $table->id)
+        ->assertDispatched('print-bill', function ($name, $params) use ($table) {
+            // Livewire round-trips dispatch payloads through JSON, so a
+            // whole-number float (1000.0) comes back as PHP int 1000 — loose
+            // comparison on the total, not strict.
+            return $params[0]['tableName'] === $table->name
+                && $params[0]['total'] == 1000
+                && $params[0]['cashier'] === 'Sifon'
+                && $params[0]['items'][0]['name'] === 'Beer'
+                && $params[0]['items'][0]['quantity'] === 2;
+        });
+
+    expect(Auth::guard('staff_pin')->check())->toBeFalse();
+});
+
+it('warns instead of printing when a table has nothing to print', function () {
+    ['token' => $token] = registerKioskAndGetToken();
+    $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);
+
+    $this->withUnencryptedCookie(EnsureValidKioskDevice::COOKIE_NAME, $token);
+
+    Livewire::test('kiosk-idle-screen')
+        ->call('printTableBill', $table->id)
+        ->assertNotDispatched('print-bill');
+});
+
 it('shows an error and does not log in on a wrong pin', function () {
     ['token' => $token] = registerKioskAndGetToken();
     $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);

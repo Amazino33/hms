@@ -2,9 +2,11 @@
 
 use Livewire\Component;
 use App\Models\Table;
+use App\Models\Order;
 use App\Services\PinAuthService;
 use App\Exceptions\PinLockedException;
 use Illuminate\Support\Facades\Auth;
+use Filament\Notifications\Notification;
 
 new class extends Component {
     public ?int $selectedTableId = null;
@@ -15,6 +17,48 @@ new class extends Component {
     public function getTablesProperty()
     {
         return Table::with('latestActiveOrder.user:id,name')->orderBy('name')->get();
+    }
+
+    /**
+     * Lets a waiter hand a customer their (unpaid) bill straight from the
+     * table grid — no PIN needed, since this only reads and prints, it
+     * never touches the order. Access to /kiosk at all already requires a
+     * registered device cookie (EnsureValidKioskDevice), which is the
+     * actual security boundary here.
+     */
+    public function printTableBill(int $tableId): void
+    {
+        $table = Table::find($tableId);
+
+        if (!$table) {
+            return;
+        }
+
+        $orders = Order::where('table_id', $tableId)
+            ->whereNotIn('status', ['paid', 'cancelled'])
+            ->with(['items', 'user'])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            Notification::make()->title('No items to print')->warning()->send();
+            return;
+        }
+
+        $items = $orders->flatMap->items->map(fn ($item) => [
+            'name' => $item->product_name,
+            'price' => (float) $item->unit_price,
+            'quantity' => $item->quantity,
+        ])->values()->all();
+
+        $total = collect($items)->sum(fn ($i) => $i['price'] * $i['quantity']);
+
+        $this->dispatch('print-bill', [
+            'tableName' => $table->name,
+            'items' => $items,
+            'total' => $total,
+            'date' => now()->format('M j, Y g:i A'),
+            'cashier' => $orders->first()->user?->name ?? 'Kiosk',
+        ]);
     }
 
     public function selectTable(int $tableId, string $tableName): void
@@ -96,20 +140,40 @@ new class extends Component {
     }
 }; ?>
 
-<div class="min-h-screen bg-gray-900 p-6">
+<div class="min-h-screen bg-gray-900 p-6" @print-bill.window="printPOSBill($event.detail[0] ?? $event.detail)">
     <h1 class="text-2xl font-bold text-white mb-6">Select a Table</h1>
 
     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
         @foreach ($this->tables as $table)
-            <button wire:click="selectTable({{ $table->id }}, '{{ $table->name }}')"
-                class="aspect-square rounded-xl flex flex-col items-center justify-center font-bold text-lg
-                    {{ $table->status === 'available' ? 'bg-green-600 text-white' : 'bg-amber-600 text-white' }}">
-                {{ $table->name }}
-                <span class="text-xs font-normal mt-1">{{ ucfirst($table->status) }}</span>
-                @if ($table->latestActiveOrder?->user)
-                    <span class="text-[10px] font-normal opacity-80 mt-0.5">{{ $table->latestActiveOrder->user->name }}</span>
-                @endif
-            </button>
+            <div class="relative" x-data="{ showMenu: false }">
+                <button wire:click="selectTable({{ $table->id }}, '{{ $table->name }}')"
+                    class="w-full aspect-square rounded-xl flex flex-col items-center justify-center font-bold text-lg
+                        {{ $table->status === 'available' ? 'bg-green-600 text-white' : 'bg-amber-600 text-white' }}">
+                    {{ $table->name }}
+                    <span class="text-xs font-normal mt-1">{{ ucfirst($table->status) }}</span>
+                    @if ($table->latestActiveOrder?->user)
+                        <span class="text-[10px] font-normal opacity-80 mt-0.5">{{ $table->latestActiveOrder->user->name }}</span>
+                    @endif
+                </button>
+
+                {{-- Menu button + Print Bill: reachable without ever logging
+                     in via PIN, since printing only reads the order — the
+                     registered-device cookie required to reach /kiosk at
+                     all is the actual security boundary here. --}}
+                <button type="button" @click.stop="showMenu = !showMenu"
+                    class="absolute top-1 right-1 w-8 h-8 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 text-white text-lg leading-none touch-manipulation">
+                    &#8942;
+                </button>
+
+                <div x-show="showMenu" x-cloak @click.outside="showMenu = false"
+                    class="absolute top-10 right-1 z-20 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden w-36">
+                    <button type="button" @click="showMenu = false"
+                        wire:click="printTableBill({{ $table->id }})"
+                        class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 touch-manipulation">
+                        &#128424;&#65039; Print Bill
+                    </button>
+                </div>
+            </div>
         @endforeach
     </div>
 
