@@ -1026,7 +1026,17 @@ new class extends Component {
 };
 ?>
 
-<div class="h-screen overflow-hidden bg-gray-50 dark:bg-gray-900" x-data="posCart()" x-init="
+@php
+    // Only the physical kiosk touchscreen (1920x1080) gets the fixed
+    // app-shell + touch-first redesign below. Staff-phone (trusted device,
+    // narrow viewport) and the admin Filament Sales page keep the original
+    // layout untouched — they're a different shape of screen and the admin
+    // page is embedded inside Filament's own panel chrome, which a
+    // full-viewport shell would fight with.
+    $isKioskDevice = (bool) session('kiosk_device_id');
+@endphp
+
+<div class="{{ $isKioskDevice ? 'h-dvh w-screen overflow-hidden flex flex-col' : 'min-h-screen' }} bg-gray-50 dark:bg-gray-900" x-data="posCart()" x-init="
          existingTotal = {{ (int) $existingTotal }};
          existingCount = {{ count($existingItems) }};
          $watch('$wire.existingTotal', v => existingTotal = v);
@@ -1034,7 +1044,7 @@ new class extends Component {
      " @print-bill.window="printPOSBill($event.detail[0] ?? $event.detail)"
     @order-cancelled.window="cart = {}; showCart = false">
     <div wire:poll.10s="loadCurrentShift"
-        class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+        class="shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 @if(session('kiosk_device_id') || session('trusted_device_user_id'))
@@ -1073,6 +1083,7 @@ new class extends Component {
         </div>
     </div>
 
+    @unless($isKioskDevice)
     <div class="hidden lg:block">
         <div class="grid grid-cols-12 gap-4 h-[calc(100vh-8rem)]">
             <div
@@ -1623,6 +1634,304 @@ new class extends Component {
             </div>
         </div>
     </div>
+    @endunless
+
+    @if($isKioskDevice)
+        @php
+            $canAddToCartKiosk = auth()->user()->currentShift() && $selectedTableId;
+            $groupedKioskTables = $this->tables->groupBy('location');
+            $selectedKioskTableName = $selectedTableId === 'takeaway'
+                ? 'Take Away'
+                : ($selectedTableId ? ($this->tables->find($selectedTableId)?->name ?? 'Table') : null);
+        @endphp
+
+        <div class="flex-1 min-h-0 flex">
+            {{-- LEFT: PRODUCT ZONE --}}
+            <div class="flex-1 min-h-0 flex flex-col">
+                <div
+                    class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                    <div class="flex-1 flex items-center gap-2 overflow-x-auto">
+                        <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', null) }"
+                            class="shrink-0 h-14 px-8 rounded-full text-lg font-bold whitespace-nowrap transition-colors touch-manipulation {{ !$activeCategoryId ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 cursor-not-allowed') }}"
+                            {{ auth()->user()->currentShift() ? '' : 'disabled' }}>All</button>
+                        @foreach($categories as $category)
+                            <button
+                                @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
+                                class="shrink-0 h-14 px-8 rounded-full text-lg font-bold whitespace-nowrap transition-colors touch-manipulation {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 cursor-not-allowed') }}"
+                                {{ auth()->user()->currentShift() ? '' : 'disabled' }}>{{ $category->name }}</button>
+                        @endforeach
+                    </div>
+                    <div class="relative shrink-0 w-72">
+                        <input type="text" wire:model.live.debounce.300ms="search"
+                            placeholder="Search or scan barcode..."
+                            class="w-full h-14 pl-4 pr-10 text-lg border border-gray-300 dark:border-gray-600 rounded-xl {{ auth()->user()->currentShift() ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed' }}"
+                            {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
+                        @if($search)
+                            <button @click="if($wire.currentShift) { $wire.call('clearSearch') }"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 touch-manipulation">
+                                <span class="text-2xl leading-none">&times;</span>
+                            </button>
+                        @endif
+                    </div>
+                </div>
+
+                <div @if($deferProducts) wire:init="loadProducts" @endif
+                    class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3 content-start relative">
+                    @if(!auth()->user()->currentShift())
+                        <div
+                            class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                            <div
+                                class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Start shift to add items</p>
+                            </div>
+                        </div>
+                    @elseif(!$selectedTableId)
+                        <div
+                            class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                            <div
+                                class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 text-center border border-gray-200 dark:border-gray-700 max-w-xs">
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Select a table to start
+                                    adding items</p>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($products->isEmpty())
+                        @for($i = 0; $i < 8; $i++)
+                            <div
+                                class="animate-pulse bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl h-40">
+                            </div>
+                        @endfor
+                    @endif
+
+                    @foreach($products as $product)
+                        @php $kioskSoldOut = ($product->available_stock ?? 0) <= 0; @endphp
+                        <div @if($canAddToCartKiosk)
+                            @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float) $product->price }}, {{ (int) ($product->available_stock ?? 0) }})"
+                            @endif
+                            class="relative select-none {{ $canAddToCartKiosk && !$kioskSoldOut ? 'cursor-pointer active:scale-[0.97] active:brightness-125 hover:border-amber-500' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-40 touch-manipulation">
+                            <div class="font-semibold text-gray-800 dark:text-gray-200 line-clamp-2 text-lg">
+                                {{ $product->name }}</div>
+                            <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-2xl tabular-nums mt-1">
+                                ₦{{ number_format($product->price) }}</div>
+                            @if($kioskSoldOut)
+                                <span
+                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Sold
+                                    out</span>
+                            @else
+                                <span class="mt-1 text-xs text-gray-400 dark:text-gray-500">Bar:
+                                    {{ $product->available_stock ?? 0 }}</span>
+                            @endif
+                            <span x-show="cart['{{ $product->id }}']"
+                                x-text="'×' + (cart['{{ $product->id }}']?.qty ?? '')"
+                                class="absolute top-1.5 right-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center"></span>
+                        </div>
+                    @endforeach
+                    @foreach($menuItems as $menuItem)
+                        @php $kioskStock = $menuItem->available_stock; $kioskMenuSoldOut = $kioskStock !== null && $kioskStock <= 0; @endphp
+                        <div @if(auth()->user()->currentShift() && $selectedTableId)
+                            @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float) $menuItem->sale_price }}, {{ $kioskStock === null ? 'null' : $kioskStock }})"
+                            @endif
+                            class="relative select-none {{ auth()->user()->currentShift() && $selectedTableId && !$kioskMenuSoldOut ? 'cursor-pointer active:scale-[0.97] active:brightness-125 hover:border-amber-500' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all h-40 touch-manipulation">
+                            <div class="font-semibold text-gray-800 dark:text-gray-200 line-clamp-2 text-lg">
+                                {{ $menuItem->name }}</div>
+                            <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-2xl tabular-nums mt-1">
+                                ₦{{ number_format($menuItem->sale_price) }}</div>
+                            @if($kioskMenuSoldOut)
+                                <span
+                                    class="mt-1 text-[11px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Sold
+                                    out</span>
+                            @else
+                                <span class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                    {{ $kioskStock === null ? 'Menu item' : $kioskStock . ' left' }}</span>
+                            @endif
+                            <span x-show="cart['menu_{{ $menuItem->id }}']"
+                                x-text="'×' + (cart['menu_{{ $menuItem->id }}']?.qty ?? '')"
+                                class="absolute top-1.5 right-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center"></span>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+
+            {{-- RIGHT: ORDER PANEL --}}
+            <div class="w-[440px] shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                <button type="button" @click="showTablePicker = true"
+                    class="shrink-0 h-16 px-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 touch-manipulation {{ !$selectedTableId ? 'animate-pulse bg-amber-50 dark:bg-amber-900/20' : '' }}">
+                    <span
+                        class="flex items-center gap-2 text-lg font-bold {{ $selectedTableId ? 'text-gray-900 dark:text-white' : 'text-amber-600 dark:text-amber-400' }}">
+                        🪑 {{ $selectedKioskTableName ?? 'Select table…' }}
+                    </span>
+                    <span class="text-gray-400 text-xl">▸</span>
+                </button>
+
+                <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-2 relative">
+                    @if(!auth()->user()->currentShift())
+                        <div
+                            class="absolute inset-0 bg-gray-900/20 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+                            <p
+                                class="text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 border border-gray-200 dark:border-gray-700">
+                                Start shift to add items</p>
+                        </div>
+                    @endif
+
+                    @if(!empty($existingItems))
+                        <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-1">Existing Items</h4>
+                        @foreach($existingItems as $id => $item)
+                            <div
+                                class="flex items-center justify-between gap-2 min-h-[72px] border-b border-gray-200 dark:border-gray-700 pb-2 opacity-75">
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-bold text-sm text-gray-800 dark:text-gray-200 truncate">
+                                        {{ $item['name'] }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                                        ₦{{ number_format($item['price']) }} each</div>
+                                </div>
+                                <div class="font-mono font-bold text-gray-700 dark:text-gray-300 tabular-nums">
+                                    ₦{{ number_format($item['price'] * $item['quantity']) }}</div>
+                                <button wire:click="openReturnModal('{{ $id }}')"
+                                    class="h-12 px-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold touch-manipulation">
+                                    Return</button>
+                            </div>
+                        @endforeach
+                    @endif
+
+                    <h4 class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-1 mt-3" x-show="cartCount > 0">
+                        New Items</h4>
+                    <template x-for="(item, key) in cart" :key="key">
+                        <div class="flex items-center justify-between gap-2 min-h-[72px] border-b border-gray-200 dark:border-gray-700 pb-2"
+                            x-effect="key === lastAddedKey && $nextTick(() => $el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))">
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-gray-800 dark:text-gray-200 truncate" x-text="item.name">
+                                </div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">₦<span
+                                        x-text="Number(item.price).toLocaleString()"></span> each</div>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <button @click="decrementCartItem(key)"
+                                    class="h-12 w-12 rounded-lg border border-gray-300 dark:border-gray-600 text-xl font-bold touch-manipulation active:bg-gray-100 dark:active:bg-gray-700">−</button>
+                                <span class="w-8 text-center text-xl font-bold tabular-nums" x-text="item.qty"></span>
+                                <button @click="incrementCartItem(key)"
+                                    class="h-12 w-12 rounded-lg border border-gray-300 dark:border-gray-600 text-xl font-bold touch-manipulation active:bg-gray-100 dark:active:bg-gray-700">+</button>
+                            </div>
+                            <div class="font-mono font-bold text-gray-700 dark:text-gray-300 tabular-nums w-20 text-right"
+                                x-text="'₦' + (item.price * item.qty).toLocaleString()"></div>
+                            <button @click="removeFromCart(key)"
+                                class="h-12 w-12 flex items-center justify-center text-red-500 touch-manipulation">
+                                <span class="text-xl">✕</span>
+                            </button>
+                        </div>
+                    </template>
+
+                    <div x-show="cartCount === 0 && {{ count($existingItems) }} === 0"
+                        class="text-center py-10 text-gray-500 dark:text-gray-400">
+                        <div class="text-4xl mb-2">🛒</div>
+                        <div class="font-medium">No items yet</div>
+                        <div class="text-sm">Tap a product to start the order.</div>
+                    </div>
+                </div>
+
+                <div x-show="undoStack" x-cloak x-transition
+                    class="shrink-0 mx-4 mb-2 px-4 py-3 rounded-xl bg-gray-800 text-white flex items-center justify-between gap-3">
+                    <span class="text-sm" x-text="undoStack ? 'Removed ' + undoStack.item.name : ''"></span>
+                    <button @click="undoRemove()"
+                        class="text-amber-400 font-bold text-sm shrink-0 h-10 px-3 touch-manipulation">Undo</button>
+                </div>
+
+                <div class="shrink-0 p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex justify-between items-baseline mb-3">
+                        <span class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase">Total <span
+                                x-show="cartCount + existingCount > 0"
+                                x-text="'· ' + (cartCount + existingCount) + ' items'"></span></span>
+                        <span class="text-3xl font-bold tabular-nums text-amber-500"
+                            x-text="'₦' + total.toLocaleString()"></span>
+                    </div>
+
+                    <button @if(auth()->user()->currentShift()) @click="sendToKitchen()" @endif
+                        :disabled="isLoading || cartCount === 0 || !$wire.selectedTableId"
+                        :class="(isLoading || cartCount === 0 || !$wire.selectedTableId) ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'"
+                        class="w-full h-16 rounded-xl text-white text-xl font-semibold touch-manipulation transition-colors">
+                        <span x-text="isLoading ? 'Sending…' : 'Place Order'"></span>
+                    </button>
+                    <p class="text-xs text-center text-gray-500 dark:text-gray-400 mt-1" x-show="!$wire.selectedTableId">
+                        Select a table to continue</p>
+                    <p class="text-xs text-center text-gray-500 dark:text-gray-400 mt-1"
+                        x-show="$wire.selectedTableId && cartCount === 0">Tap a product to add items</p>
+
+                    <div class="grid grid-cols-2 gap-3 mt-3">
+                        <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
+                            class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} h-14 rounded-xl text-white text-lg font-semibold touch-manipulation transition-colors">
+                            Pay
+                        </button>
+                        <button @if(auth()->user()->currentShift()) @click="$wire.call('cancelOrder')" @endif
+                            class="{{ auth()->user()->currentShift() ? 'border-2 border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer' : 'border-2 border-gray-300 text-gray-400 cursor-not-allowed' }} h-14 rounded-xl text-lg font-semibold touch-manipulation transition-colors">
+                            Cancel
+                        </button>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Mark Paid</div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button wire:click="markPaidFast('cash')" wire:loading.attr="disabled"
+                                wire:target="markPaidFast"
+                                class="h-12 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                Cash</button>
+                            <button wire:click="markPaidFast('pos')" wire:loading.attr="disabled"
+                                wire:target="markPaidFast"
+                                class="h-12 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                POS</button>
+                            <button wire:click="markPaidFast('transfer')" wire:loading.attr="disabled"
+                                wire:target="markPaidFast"
+                                class="h-12 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                Transfer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Full-screen table picker overlay --}}
+        <div x-show="showTablePicker" x-cloak
+            x-effect="if ($wire.selectedTableId && $wire.selectedTableId == pendingTableId) { showTablePicker = false; pendingTableId = null }"
+            class="fixed inset-0 z-[70] bg-gray-900/80 backdrop-blur-sm flex flex-col">
+            <div class="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-700">
+                <h2 class="text-2xl font-bold text-white">Select a Table</h2>
+                <button @click="showTablePicker = false"
+                    class="w-14 h-14 flex items-center justify-center rounded-full bg-gray-800 text-white text-2xl touch-manipulation">✕</button>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6">
+                <button type="button" wire:click="$set('selectedTableId', 'takeaway')" @click="pendingTableId = 'takeaway'"
+                    class="w-full min-h-[88px] mb-6 rounded-xl text-xl font-bold border-2 touch-manipulation {{ $selectedTableId === 'takeaway' ? 'border-amber-500 bg-amber-500 text-white' : 'border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' }}">
+                    Take Away
+                </button>
+
+                @foreach($groupedKioskTables as $kioskLocation => $tablesInKioskLocation)
+                    <div class="mb-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-gray-400 mb-3">
+                            {{ $kioskLocation ?: 'Other' }}</h3>
+                        <div class="grid grid-cols-4 gap-3">
+                            @foreach($tablesInKioskLocation as $table)
+                                @php
+                                    $kioskHasActiveOrder = $table->orders->isNotEmpty();
+                                    $kioskIsOccupied = $table->status === 'occupied' && $kioskHasActiveOrder;
+                                    $kioskIsSelected = (string) $selectedTableId === (string) $table->id;
+                                @endphp
+                                <button type="button" wire:click="$set('selectedTableId', {{ $table->id }})"
+                                    @click="pendingTableId = {{ $table->id }}"
+                                    class="min-h-[88px] rounded-xl p-3 text-lg font-bold border-2 touch-manipulation transition-colors {{ $kioskIsSelected
+                                        ? 'border-amber-500 bg-amber-500 text-white'
+                                        : ($kioskIsOccupied
+                                            ? 'border-red-400 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                            : 'border-green-400 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300') }}">
+                                    {{ $table->name }}
+                                    <div class="text-xs font-normal opacity-80 mt-1">
+                                        {{ $kioskIsOccupied ? 'Occupied' : 'Free' }}</div>
+                                </button>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
 
     <div x-show="showPaymentModal" x-cloak
         class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1872,6 +2181,13 @@ new class extends Component {
                 splitPosAmount: 0,
                 isLoading: false,
 
+                // Kiosk-only UI state (table picker overlay + cart row undo)
+                showTablePicker: false,
+                pendingTableId: null,
+                lastAddedKey: null,
+                undoStack: null,
+                undoTimer: null,
+
                 get cartCount() {
                     return Object.keys(this.cart).length;
                 },
@@ -1905,8 +2221,9 @@ new class extends Component {
                     if (this.cart[key]) {
                         this.cart[key].qty++;
                     } else {
-                        this.cart[key] = { name, price, qty: 1, type: 'product' };
+                        this.cart[key] = { name, price, qty: 1, type: 'product', stock: availableStock };
                     }
+                    this.lastAddedKey = key;
                 },
 
                 /**
@@ -1936,18 +2253,62 @@ new class extends Component {
                                     qty: 1,
                                     type: 'menu_item',
                                     menu_item_id: id,
+                                    stock: availableStock,
                                 };
                             }
+                            this.lastAddedKey = key;
                         }
                     } finally {
                         this.isLoading = false;
                     }
                 },
 
+                /**
+                 * Decrement/increment for the kiosk cart row +/- stepper. Stock
+                 * is the same render-time snapshot captured when the item was
+                 * first added — same staleness tradeoff as addProductToCart;
+                 * the server re-checks for real on checkout regardless.
+                 */
+                decrementCartItem(key) {
+                    if (!this.cart[key]) return;
+                    if (this.cart[key].qty <= 1) {
+                        this.removeFromCart(key);
+                        return;
+                    }
+                    this.cart[key].qty--;
+                },
+
+                incrementCartItem(key) {
+                    const item = this.cart[key];
+                    if (!item) return;
+                    if (item.stock !== null && item.stock !== undefined && item.qty >= item.stock) {
+                        alert('Out of stock: only ' + item.stock + ' available.');
+                        return;
+                    }
+                    item.qty++;
+                },
+
+                /**
+                 * Removing a line keeps a 4s undo window instead of a confirm
+                 * dialog — faster and less annoying on a bar floor, and the
+                 * item never left the server (it's still just Alpine state).
+                 */
                 removeFromCart(key) {
+                    if (this.cart[key]) {
+                        this.undoStack = { key, item: { ...this.cart[key] } };
+                        clearTimeout(this.undoTimer);
+                        this.undoTimer = setTimeout(() => { this.undoStack = null; }, 4000);
+                    }
                     const updated = { ...this.cart };
                     delete updated[key];
                     this.cart = updated;
+                },
+
+                undoRemove() {
+                    if (!this.undoStack) return;
+                    this.cart = { ...this.cart, [this.undoStack.key]: this.undoStack.item };
+                    clearTimeout(this.undoTimer);
+                    this.undoStack = null;
                 },
 
                 openPaymentModal() {
