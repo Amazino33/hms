@@ -1026,7 +1026,7 @@ new class extends Component {
 };
 ?>
 
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900" x-data="posCart()" x-init="
+<div class="h-screen overflow-hidden bg-gray-50 dark:bg-gray-900" x-data="posCart()" x-init="
          existingTotal = {{ (int) $existingTotal }};
          existingCount = {{ count($existingItems) }};
          $watch('$wire.existingTotal', v => existingTotal = v);
@@ -1059,6 +1059,12 @@ new class extends Component {
             <div class="flex items-center gap-3">
                 @if(auth()->user()->currentShift())
                     <button wire:click="openCashDropModal" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white">💵 Drop Cash</button>
+                @endif
+                @if(session('kiosk_device_id') || session('trusted_device_user_id'))
+                    <button @click="$wire.dispatch('lock-requested')"
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-gray-700 text-white flex items-center gap-1 touch-manipulation">
+                        🔒 Lock
+                    </button>
                 @endif
                 <div class="text-xs text-gray-500 dark:text-gray-400">
                     {{ now()->format('M j, Y g:i A') }}

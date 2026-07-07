@@ -14,6 +14,11 @@
          "you must start a shift" rejection looked like the Order button
          did nothing at all. --}}
     @filamentStyles
+    {{-- The kiosk order screen has several modals (guest, cancel, return,
+         cash drop) at z-[60], above Filament's default z-50 notification
+         layer — without this, a notification fired while any of those
+         modals is open renders invisibly behind it. --}}
+    <style>.fi-no { z-index: 9999 !important; }</style>
 </head>
 <body class="bg-gray-900">
     @yield('content')

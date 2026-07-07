@@ -3,6 +3,9 @@
 use Livewire\Component;
 use Livewire\Attributes\On;
 use Illuminate\Support\Facades\Auth;
+use Filament\Notifications\Livewire\Notifications;
+use Filament\Support\Enums\Alignment;
+use Filament\Support\Enums\VerticalAlignment;
 
 new class extends Component {
     public const INACTIVITY_TIMEOUT_SECONDS = 75;
@@ -12,6 +15,12 @@ new class extends Component {
     public function mount($table): void
     {
         $this->table = $table;
+
+        // Top-right is easy to miss on a kiosk touchscreen the waiter isn't
+        // staring at edge-on — top-center sits right above the product grid,
+        // where their eyes already are.
+        Notifications::alignment(Alignment::Center);
+        Notifications::verticalAlignment(VerticalAlignment::Start);
     }
 
     /**
@@ -20,6 +29,18 @@ new class extends Component {
      */
     #[On('order-completed')]
     public function onOrderCompleted(): void
+    {
+        $this->returnToTableGrid();
+    }
+
+    /**
+     * Manual "Lock" button on the order screen — same effect as the
+     * inactivity timeout firing early, for a waiter stepping away on
+     * purpose (e.g. handing the kiosk to a customer) instead of waiting
+     * out the 75s timer.
+     */
+    #[On('lock-requested')]
+    public function onLockRequested(): void
     {
         $this->returnToTableGrid();
     }
