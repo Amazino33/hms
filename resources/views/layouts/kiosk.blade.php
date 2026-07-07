@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>@yield('title', 'Kiosk')</title>
     @vite(['resources/css/app.css'])
-    @livewireStyles
     {{-- Notification::make()->send() toasts are Filament's, not a generic
          Livewire one — without this, <livewire:notifications /> renders
          but its Alpine component (notificationComponent) is never
@@ -20,7 +19,12 @@
     @yield('content')
 
     <livewire:notifications />
-    @livewireScripts
+    {{-- @filamentScripts(withCore: true) already bundles and boots
+         Livewire's core JS — Filament's own panel layout never also calls
+         @livewireScripts alongside it. Having both loaded Livewire twice,
+         and the second init stomped on the first, breaking Filament's
+         notification component with "e is not a function" the moment it
+         tried to render a toast. --}}
     @filamentScripts(withCore: true)
 </body>
 </html>
