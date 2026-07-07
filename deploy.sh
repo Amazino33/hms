@@ -50,22 +50,30 @@ php artisan migrate --force
 
 echo ""
 echo "==> [6/8] Ensuring roles and new permissions exist (additive only)..."
+# Previously hardcoded to StaffDebt permissions only — every new Shield
+# resource since then (StockAdjustment, KioskDevice, ...) silently never
+# reached production because this step never granted them. Now reads the
+# SAME role/permission map ShieldSeeder.php uses (single source of truth,
+# updated automatically whenever `php artisan shield:generate` regenerates
+# it), applied via givePermissionTo (never syncPermissions) so nothing
+# configured live via the Shield UI — including roles not in this list at
+# all, like custom ones added directly in production — is ever touched.
 php artisan tinker --execute="
-foreach (['super_admin','admin','manager','waiter','chef','bartender','storekeeper','porter'] as \$name) {
-    \Spatie\Permission\Models\Role::firstOrCreate(['name' => \$name, 'guard_name' => 'web']);
+foreach (\Database\Seeders\ShieldSeeder::getRolesWithPermissions() as \$entry) {
+    \$role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => \$entry['name'], 'guard_name' => \$entry['guard_name']]);
+
+    if (empty(\$entry['permissions'])) {
+        continue;
+    }
+
+    \$permissionModels = collect(\$entry['permissions'])
+        ->map(fn (\$name) => \Spatie\Permission\Models\Permission::firstOrCreate(['name' => \$name, 'guard_name' => \$entry['guard_name']]))
+        ->all();
+
+    \$role->givePermissionTo(\$permissionModels);
 }
 
-foreach (['ViewAny','View','Create','Update','Delete','Restore','ForceDelete','ForceDeleteAny','RestoreAny','Replicate','Reorder'] as \$action) {
-    \Spatie\Permission\Models\Permission::firstOrCreate(['name' => \$action.':StaffDebt', 'guard_name' => 'web']);
-}
-
-\$perms = \Spatie\Permission\Models\Permission::where('name', 'like', '%:StaffDebt')->pluck('name')->all();
-foreach (['super_admin', 'admin', 'manager'] as \$roleName) {
-    \$role = \Spatie\Permission\Models\Role::where('name', \$roleName)->first();
-    if (\$role) { \$role->givePermissionTo(\$perms); }
-}
-
-echo 'Roles and StaffDebt permissions ensured.' . PHP_EOL;
+echo 'Roles and Shield permissions ensured additively.' . PHP_EOL;
 "
 php artisan db:seed --class=PagePermissionsSeeder --force
 

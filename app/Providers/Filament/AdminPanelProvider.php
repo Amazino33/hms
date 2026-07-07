@@ -38,6 +38,18 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => '#E5353A',
             ])
+            ->userMenuItems([
+                // The Kiosk PIN settings page lives outside the Filament
+                // panel's own route/navigation structure (it's a plain Volt
+                // settings page shared with Profile/Password/Appearance),
+                // so without this the panel's user menu has no way to reach
+                // it at all — every staff member would need to be told a
+                // URL nobody could otherwise discover.
+                'pin' => \Filament\Navigation\MenuItem::make()
+                    ->label('Kiosk PIN')
+                    ->icon('heroicon-o-key')
+                    ->url(fn () => route('pin.edit')),
+            ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
