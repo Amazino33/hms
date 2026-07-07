@@ -137,9 +137,33 @@ class User extends Authenticatable implements FilamentUser
         }
 
         return $this->shifts()->create([
+            'type' => $this->shiftTypeFromRole(),
             'started_at' => now(),
             'status' => 'active',
         ]);
+    }
+
+    /**
+     * The generic "Start Shift" control (topbar ShiftManager) never asks
+     * which role someone is clocking in as — without this, every shift
+     * silently fell back to the shifts table's default ('waiter'), even
+     * for an actual bartender/chef. That meant OrderSplitter's bar/kitchen
+     * order guard (which checks for an active bartender/chef-typed shift,
+     * not just any shift) could never be satisfied through the normal
+     * clock-in flow — bartenders and chefs would clock in, but every bar
+     * or kitchen order would still be rejected as if nobody was on duty.
+     */
+    private function shiftTypeFromRole(): string
+    {
+        if ($this->hasRole('bartender')) {
+            return 'bartender';
+        }
+
+        if ($this->hasRole('chef')) {
+            return 'chef';
+        }
+
+        return 'waiter';
     }
 
     /**
