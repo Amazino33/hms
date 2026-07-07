@@ -1,6 +1,12 @@
-const CACHE_NAME = 'hms-v2.3';
-const STATIC_CACHE = 'hms-static-v2.3';
-const DYNAMIC_CACHE = 'hms-dynamic-v2.3';
+// Bumping this version is what actually busts stale cached JS/CSS in every
+// visitor's browser — the activate handler below only deletes caches whose
+// NAME differs from these constants, so a content change alone (without a
+// version bump) leaves old cached assets served forever via cache-first,
+// even after a fresh deploy. This was the real cause of a "notifications.js
+// throws e is not a function" mismatch after the kiosk/staff layout fix.
+const CACHE_NAME = 'hms-v2.4';
+const STATIC_CACHE = 'hms-static-v2.4';
+const DYNAMIC_CACHE = 'hms-dynamic-v2.4';
 
 const STATIC_ASSETS = [
     '/offline.html',
