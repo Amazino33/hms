@@ -327,17 +327,17 @@ new class extends Component {
         Notification::make()->title('Guest Added')->success()->send();
     }
 
-    public function processPayment(array $cartItems, float $paidAmount, string $paymentMethod, ?int $guestId = null, array $splitPayments = [])
+    public function processPayment(array $cartItems, float $paidAmount, string $paymentMethod, ?int $guestId = null, array $splitPayments = []): bool
     {
         // Check if user has an active shift
         if (!auth()->user()?->currentShift()) {
             Notification::make()->title('No Active Shift')->body('You must start a shift before processing payments.')->danger()->send();
-            return;
+            return false;
         }
 
         if (!auth()->check()) {
             Notification::make()->title('Authentication Required')->danger()->send();
-            return;
+            return false;
         }
 
         // STRICT RULE 1: Prevent paying for items that haven't been sent to the kitchen yet
@@ -347,7 +347,7 @@ new class extends Component {
                 ->body('You must send new items to the kitchen by clicking "Order" before processing payment.')
                 ->warning()
                 ->send();
-            return;
+            return false;
         }
 
         $total = collect($this->existingItems)->sum(fn($i) => $i['price'] * $i['quantity'])
@@ -355,7 +355,7 @@ new class extends Component {
 
         if ($total <= 0) {
             Notification::make()->title('Cart is empty')->warning()->send();
-            return;
+            return false;
         }
 
         // Validate split payment if applicable
@@ -367,19 +367,19 @@ new class extends Component {
                     ->body("Cash (₦" . number_format($splitPayments['cash'] ?? 0) . ") + POS (₦" . number_format($splitPayments['pos'] ?? 0) . ") cannot exceed Total (₦" . number_format($total) . ")")
                     ->danger()
                     ->send();
-                return;
+                return false;
             }
             $paidAmount = $splitTotal;
         }
 
         if ($paidAmount < $total && empty($guestId)) {
             Notification::make()->title('Select a Guest for Debt')->warning()->send();
-            return;
+            return false;
         }
 
         if (!$this->selectedTableId) {
             Notification::make()->title('Please select a table or Take Away')->warning()->send();
-            return;
+            return false;
         }
 
         $isTakeaway = $this->selectedTableId === 'takeaway';
@@ -400,7 +400,7 @@ new class extends Component {
                 ->body('Payment blocked. The kitchen or bar has not approved this order yet.')
                 ->danger()
                 ->send();
-            return;
+            return false;
         }
 
         // STRICT RULE 3: For dine-in tables, prevent paying before the waiter
@@ -413,7 +413,7 @@ new class extends Component {
                 ->body('Confirm you have carried the order to the table before processing payment.')
                 ->danger()
                 ->send();
-            return;
+            return false;
         }
 
         // Restore old stock & delete previous orders only when a table is involved
@@ -477,7 +477,7 @@ new class extends Component {
         } catch (\Exception $e) {
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
                 Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
-                return;
+                return false;
             }
             throw $e;
         }
@@ -526,19 +526,21 @@ new class extends Component {
         Cache::forget('menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
 
         $this->dispatch('order-completed');
+
+        return true;
     }
 
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
     // Shift enforcement (waiter, and bartender/chef for bar/kitchen
     // destinations) lives entirely in OrderSplitter now — this is the only
     // choke point, so it can't be bypassed by any other entry point either.
-    public function checkout(array $cartItems, string $action = 'update')
+    public function checkout(array $cartItems, string $action = 'update'): bool
     {
         if (empty($cartItems))
-            return;
+            return false;
         if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
             Notification::make()->title('Please select a table to send orders to the kitchen')->warning()->send();
-            return;
+            return false;
         }
         $tableId = $this->selectedTableId;
 
@@ -568,11 +570,11 @@ new class extends Component {
         } catch (\Exception $e) {
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
                 Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
-                return;
+                return false;
             }
             if (str_contains($e->getMessage(), 'shift') || str_contains($e->getMessage(), 'session')) {
                 Notification::make()->title('No Active Shift')->body($e->getMessage())->danger()->send();
-                return;
+                return false;
             }
             throw $e;
         }
@@ -607,6 +609,8 @@ new class extends Component {
         // kiosk's wrapper component listens for this to auto-logout back to
         // the table grid after one order interaction.
         $this->dispatch('order-completed');
+
+        return true;
     }
 
     /**
@@ -1961,8 +1965,9 @@ new class extends Component {
                     if (this.isLoading) return;
                     this.isLoading = true;
                     try {
+                        let paid;
                         if (this.paymentType === 'split') {
-                            await this.$wire.processPayment(
+                            paid = await this.$wire.processPayment(
                                 this.cart,
                                 this.splitCashAmount + this.splitPosAmount,
                                 'split',
@@ -1970,7 +1975,7 @@ new class extends Component {
                                 { cash: this.splitCashAmount, pos: this.splitPosAmount }
                             );
                         } else {
-                            await this.$wire.processPayment(
+                            paid = await this.$wire.processPayment(
                                 this.cart,
                                 parseFloat(this.paidAmount || 0),
                                 this.paymentMethod,
@@ -1978,6 +1983,12 @@ new class extends Component {
                                 {}
                             );
                         }
+                        // Server rejected the payment (e.g. order not yet served,
+                        // still cooking, missing debt guest) — the notification
+                        // already explains why. Keep the modal open so the
+                        // waiter can see it and fix the input instead of being
+                        // silently bounced back as if it worked.
+                        if (!paid) return;
                         // Wire updated server state — sync Alpine directly (no dispatch needed)
                         this.cart = {};
                         this.showPaymentModal = false;
@@ -1997,7 +2008,12 @@ new class extends Component {
                     if (this.isLoading || this.cartCount === 0) return;
                     this.isLoading = true;
                     try {
-                        await this.$wire.checkout(this.cart);
+                        const sent = await this.$wire.checkout(this.cart);
+                        // Blocked server-side (e.g. no table selected, no active
+                        // shift) — the notification already explains why. Leave
+                        // the cart and cart view alone instead of clearing it as
+                        // if the order actually went through.
+                        if (!sent) return;
                         // Sync existingTotal from wire after server merges cart into existingItems
                         this.existingTotal = this.$wire.existingTotal;
                         this.cart = {};
