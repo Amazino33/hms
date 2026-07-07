@@ -31,4 +31,9 @@ class Category extends Model
     {
         return $this->hasMany(Product::class);
     }
+
+    public function menuItems()
+    {
+        return $this->hasMany(MenuItem::class);
+    }
 }

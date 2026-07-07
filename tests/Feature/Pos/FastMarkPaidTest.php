@@ -88,20 +88,44 @@ it('pays off every served order at the table in one action, e.g. a split bar+kit
     expect(OrderPayment::where('order_id', $kitchenOrder->id)->sum('amount'))->toEqual(700.0);
 });
 
-it('refuses to mark paid while there are unsent cart items', function () {
+/**
+ * Regression test for a real production bug: a served order's own items
+ * always populate $existingItems (it's built from every order in
+ * pending/preparing/ready/served status, not just unsent ones), so a
+ * previous guard here — `if (!empty($this->existingItems)) { ...block... }`
+ * — rejected every single realistic Mark Paid attempt, since a served
+ * order with actual items is exactly the normal case, not an edge case.
+ * The guard was removed entirely: there is no server-visible signal for
+ * "the client's local cart still has unsent items" here anyway (this
+ * method takes no cart argument), so the client-side gating (Mark Paid
+ * only shown once the kiosk's own cart is empty) is what actually
+ * enforces that, same as it always effectively had to.
+ */
+it('marks paid even though the served order (correctly) already populated existingItems', function () {
     $waiter = User::factory()->create();
     Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
 
     $order = seedFastMarkPaidOrder($waiter, 'served', 1000);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $beer = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    $order->items()->create([
+        'product_id' => $beer->id,
+        'product_name' => $beer->name,
+        'item_type' => 'product',
+        'quantity' => 2,
+        'unit_price' => 500,
+        'subtotal' => 1000,
+    ]);
 
     Livewire::actingAs($waiter)
         ->test('pos')
         ->set('selectedTableId', (string) $order->table_id)
-        ->set('existingItems', ['99' => ['name' => 'Extra Beer', 'price' => 500, 'quantity' => 1, 'type' => 'product']])
-        ->call('markPaidFast', 'cash');
+        ->assertSet('existingItems', fn ($items) => !empty($items)) // sanity: this is the realistic, populated state
+        ->call('markPaidFast', 'cash')
+        ->assertDispatched('order-completed');
 
-    expect($order->fresh()->status)->toBe('served');
-    expect(OrderPayment::where('order_id', $order->id)->exists())->toBeFalse();
+    expect($order->fresh()->status)->toBe('paid');
+    expect(OrderPayment::where('order_id', $order->id)->exists())->toBeTrue();
 });
 
 it('refuses to mark paid while an order at the table is still cooking or not yet confirmed served', function () {

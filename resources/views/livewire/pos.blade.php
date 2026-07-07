@@ -206,7 +206,12 @@ new class extends Component {
         }
 
         $this->categories = Cache::remember('categories', 3600, function () {
-            return Category::has('products')->get();
+            // has('products') alone hid any category whose items are all
+            // cooked-to-order MenuItems (e.g. Food) rather than simple
+            // sellable Products (e.g. Drinks) — such a category never
+            // appeared as a filter tab even though its items show under
+            // "All".
+            return Category::has('products')->orHas('menuItems')->get();
         });
         $this->activeCategoryId = $this->categories->first()?->id;
 
@@ -618,9 +623,8 @@ new class extends Component {
      * order's own outstanding balance — never anything the client sends —
      * so there is no path from this action to a wrong or short payment
      * amount being recorded. Only applies to orders already confirmed
-     * served with nothing new/unsent still in the cart; anything still
-     * cooking or not yet carried to the table goes through the standard
-     * flow instead, same as it always has.
+     * served; anything still cooking or not yet carried to the table goes
+     * through the standard flow instead, via the checks below.
      */
     public function markPaidFast(string $method)
     {
@@ -635,11 +639,6 @@ new class extends Component {
 
         if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
             Notification::make()->title('Please select a table')->warning()->send();
-            return;
-        }
-
-        if (!empty($this->existingItems)) {
-            Notification::make()->title('Unsent Items')->body('Send new items to the kitchen first, then use Mark Paid.')->warning()->send();
             return;
         }
 
