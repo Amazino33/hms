@@ -37,8 +37,8 @@
                     <thead class="bg-gray-50 dark:bg-gray-800">
                         <tr>
                             <th class="text-left px-4 py-2">Item</th>
-                            <th class="text-left px-4 py-2">Sub-location entries</th>
-                            <th class="text-left px-4 py-2">Add count</th>
+                            <th class="text-left px-4 py-2">Sub-location counts (live total)</th>
+                            <th class="text-left px-4 py-2"></th>
                             <th class="text-left px-4 py-2">Total counted so far</th>
                         </tr>
                     </thead>
@@ -47,16 +47,28 @@
                             <tr wire:key="counting-row-{{ $item->id }}">
                                 <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ $item->itemName() }}</td>
                                 <td class="px-4 py-2">
-                                    @foreach($item->subCounts as $sub)
-                                        <div class="text-xs text-gray-500">{{ $sub->sub_location }}: {{ $sub->quantity }}</div>
-                                    @endforeach
+                                    <div class="flex gap-2" x-data="{
+                                        get total() {
+                                            return Object.values($wire.subLocationInputs[{{ $item->id }}] ?? {})
+                                                .reduce((sum, v) => sum + (parseFloat(v) || 0), 0)
+                                        }
+                                    }">
+                                        @foreach($item->subCounts as $sub)
+                                            <div class="flex flex-col items-center">
+                                                <label class="text-[10px] uppercase text-gray-500">{{ $sub->sub_location }}</label>
+                                                <input type="number" step="0.01" inputmode="decimal" placeholder="0"
+                                                    wire:model="subLocationInputs.{{ $item->id }}.{{ $sub->sub_location }}"
+                                                    class="border rounded px-2 py-1 w-16 text-xs dark:bg-gray-800 dark:border-gray-600">
+                                            </div>
+                                        @endforeach
+                                        <div class="flex flex-col items-center justify-end">
+                                            <span class="text-[10px] uppercase text-gray-500">Total</span>
+                                            <span class="font-mono font-bold text-sm" x-text="total"></span>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="px-4 py-2">
-                                    <div class="flex gap-2">
-                                        <input type="text" wire:model="subLocationInputs.{{ $item->id }}.location" placeholder="Sub-location" class="border rounded px-2 py-1 w-28 text-xs dark:bg-gray-800 dark:border-gray-600">
-                                        <input type="number" step="0.01" wire:model="subLocationInputs.{{ $item->id }}.qty" placeholder="Qty" class="border rounded px-2 py-1 w-20 text-xs dark:bg-gray-800 dark:border-gray-600">
-                                        <button wire:click="recordCount({{ $item->id }})" class="px-2 py-1 bg-primary-500 text-white rounded text-xs font-bold">Save</button>
-                                    </div>
+                                    <button wire:click="recordCount({{ $item->id }})" class="px-2 py-1 bg-primary-500 text-white rounded text-xs font-bold">Save</button>
                                 </td>
                                 <td class="px-4 py-2 font-mono font-bold">{{ $item->counted_quantity ?? '—' }}</td>
                             </tr>

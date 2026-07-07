@@ -153,6 +153,32 @@
         </div>
 
         <div class="lg:col-span-1 space-y-6 w-full">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-amber-300 dark:border-amber-700 overflow-hidden">
+                <div class="p-4 border-b border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 flex items-center gap-2">
+                    <x-heroicon-o-cube class="w-5 h-5 text-amber-600"/>
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">Restock Fridge</h3>
+                </div>
+                <div class="p-4 max-h-[320px] overflow-y-auto space-y-2">
+                    @forelse($fridgeRestockList as $row)
+                        <div wire:key="fridge-restock-{{ $row['product']->id }}" class="flex justify-between items-center p-3 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-800/30">
+                            <div>
+                                <div class="text-sm font-bold text-gray-900 dark:text-white">{{ $row['product']->name }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    est. {{ rtrim(rtrim(number_format($row['estimate'], 1), '0'), '.') }} cold, par {{ rtrim(rtrim(number_format($row['par'], 1), '0'), '.') }}
+                                </div>
+                            </div>
+                            <button wire:click="markRestocked({{ $row['product']->id }})" class="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-xs font-bold whitespace-nowrap">
+                                Restocked
+                            </button>
+                        </div>
+                    @empty
+                        <div class="text-center py-6 text-gray-400 dark:text-gray-500 text-sm font-medium">
+                            Nothing below par
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex items-center gap-2">
                     <x-heroicon-o-clipboard-document-list class="w-5 h-5 text-gray-500"/>

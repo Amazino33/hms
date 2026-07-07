@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\CashDrop;
 use App\Models\Order;
 use App\Models\OrderPayment;
 use App\Models\Shift;
 use App\Models\StaffDebt;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class ShiftAccountingService
 {
@@ -46,6 +48,9 @@ class ShiftAccountingService
      * on a shortfall — opens a staff debt for the difference. A surplus is
      * recorded but never generates a (negative) debt.
      */
+    /**
+     * @throws \Exception
+     */
     public function applyShiftSettlement(
         Shift $shift,
         User $supervisor,
@@ -53,39 +58,58 @@ class ShiftAccountingService
         float $confirmedPos,
         ?string $notes = null,
     ): ?StaffDebt {
-        $expectedCash = $this->expectedCashRemittance($shift);
-        $expectedPos = $this->expectedPosTotal($shift);
-        $variance = round($confirmedCash - $expectedCash, 2);
+        return DB::transaction(function () use ($shift, $supervisor, $confirmedCash, $confirmedPos, $notes) {
+            // Locked and re-checked inside the transaction — the Filament
+            // action's ->visible() check only hides the button on the
+            // NEXT page load, it doesn't stop a double-click or two
+            // supervisors reviewing the same shift within milliseconds
+            // from both submitting. Without this, both requests could
+            // independently compute the same shortfall and both create a
+            // StaffDebt — charging the waiter twice for one real shortfall.
+            $shift = Shift::query()->lockForUpdate()->findOrFail($shift->id);
 
-        $shift->update([
-            'supervisor_confirmed_cash' => $confirmedCash,
-            'supervisor_confirmed_pos' => $confirmedPos,
-            'expected_cash' => $expectedCash,
-            'expected_pos' => $expectedPos,
-            'cash_variance' => $variance,
-            'surplus_amount' => $variance > 0 ? $variance : 0,
-            'settlement_notes' => $notes,
-            'settled_at' => now(),
-            'status' => 'closed',
-        ]);
+            if ($shift->status !== 'pending_supervisor') {
+                throw new \Exception('This shift has already been settled.');
+            }
 
-        if ($variance < -0.01) {
-            return StaffDebt::create([
-                'user_id' => $shift->user_id,
-                'shift_id' => $shift->id,
-                'amount' => abs($variance),
-                'reason' => 'shift_shortfall',
-                'status' => 'open',
-                'created_by' => $supervisor->id,
+            $expectedCash = $this->expectedCashRemittance($shift);
+            $expectedPos = $this->expectedPosTotal($shift);
+            $variance = round($confirmedCash - $expectedCash, 2);
+
+            $shift->update([
+                'supervisor_confirmed_cash' => $confirmedCash,
+                'supervisor_confirmed_pos' => $confirmedPos,
+                'expected_cash' => $expectedCash,
+                'expected_pos' => $expectedPos,
+                'cash_variance' => $variance,
+                'surplus_amount' => $variance > 0 ? $variance : 0,
+                'settlement_notes' => $notes,
+                'settled_at' => now(),
+                'status' => 'closed',
             ]);
-        }
 
-        return null;
+            if ($variance < -0.01) {
+                return StaffDebt::create([
+                    'user_id' => $shift->user_id,
+                    'shift_id' => $shift->id,
+                    'amount' => abs($variance),
+                    'reason' => 'shift_shortfall',
+                    'status' => 'open',
+                    'created_by' => $supervisor->id,
+                ]);
+            }
+
+            return null;
+        });
     }
 
     /**
-     * Cash actually collected during this shift — the amount the waiter is
-     * physically holding and must remit. Cancelled orders never contribute.
+     * Cash the waiter is still expected to physically hand over at
+     * settlement — cash-method payments collected during the shift, minus
+     * any cash drops already confirmed by whoever received them mid-shift.
+     * A pending (unconfirmed) drop does NOT reduce this — only a confirmed
+     * one, since the waiter's own declaration alone isn't proof the cash
+     * actually changed hands. Cancelled orders never contribute.
      *
      * 'split' payments don't decompose cash/pos at the payment-row level
      * (a single row holds the combined amount), so for those we fall back
@@ -94,13 +118,26 @@ class ShiftAccountingService
      */
     public function expectedCashRemittance(Shift $shift): float
     {
-        return (float) $this->shiftPayments($shift)->sum(function (OrderPayment $payment) {
+        $cashCollected = (float) $this->shiftPayments($shift)->sum(function (OrderPayment $payment) {
             return match ($payment->method) {
                 'cash' => (float) $payment->amount,
                 'split' => (float) ($payment->order->paid_cash ?? 0),
                 default => 0.0,
             };
         });
+
+        return max(0, $cashCollected - $this->confirmedDropsTotal($shift));
+    }
+
+    /**
+     * Sum of cash drops confirmed by their named receiver during this
+     * shift — pending/unconfirmed declarations are worth nothing here.
+     */
+    public function confirmedDropsTotal(Shift $shift): float
+    {
+        return (float) CashDrop::where('shift_id', $shift->id)
+            ->where('status', 'confirmed')
+            ->sum('confirmed_amount');
     }
 
     /**
@@ -129,6 +166,22 @@ class ShiftAccountingService
         return Order::where('shift_id', $shift->id)
             ->whereNotIn('status', ['paid', 'cancelled', 'returned'])
             ->whereColumn('amount_paid', '<', 'total_amount')
+            ->with('items')
+            ->get();
+    }
+
+    /**
+     * Return tickets this waiter opened during this shift that no bartender/
+     * chef has confirmed or rejected yet. Left unresolved, these are exactly
+     * the kind of thing the whole confirmed-returns feature exists to catch
+     * — a waiter can't just walk away from a claimed return that never
+     * actually got confirmed.
+     */
+    public function pendingReturns(Shift $shift): Collection
+    {
+        return Order::where('shift_id', $shift->id)
+            ->where('is_return', true)
+            ->where('status', 'pending')
             ->with('items')
             ->get();
     }

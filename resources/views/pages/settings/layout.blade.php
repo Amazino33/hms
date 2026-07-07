@@ -5,6 +5,7 @@
             <flux:navlist aria-label="{{ __('Settings') }}">
                 <flux:navlist.item :href="route('profile.edit')" wire:navigate>{{ __('Profile') }}</flux:navlist.item>
                 <flux:navlist.item :href="route('user-password.edit')" wire:navigate>{{ __('Password') }}</flux:navlist.item>
+                <flux:navlist.item :href="route('pin.edit')" wire:navigate>{{ __('Kiosk PIN') }}</flux:navlist.item>
                 @if (Laravel\Fortify\Features::canManageTwoFactorAuthentication())
                     <flux:navlist.item :href="route('two-factor.show')" wire:navigate>{{ __('Two-Factor Auth') }}</flux:navlist.item>
                 @endif
@@ -66,6 +67,19 @@
                     <div>
                         <div class="text-sm font-medium text-gray-900 dark:text-white">Password</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400">Change password</div>
+                    </div>
+                </a>
+
+                <a href="{{ route('pin.edit') }}" wire:navigate
+                    class="flex items-center space-x-3 p-3 rounded-lg border {{ request()->routeIs('pin.edit') ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800' }} transition-colors touch-manipulation">
+                    <div class="w-8 h-8 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center">
+                        <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-sm font-medium text-gray-900 dark:text-white">Kiosk PIN</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Set your 4-digit PIN</div>
                     </div>
                 </a>
 

@@ -70,6 +70,8 @@ class User extends Authenticatable implements FilamentUser
         'two_factor_secret',
         'two_factor_recovery_codes',
         'remember_token',
+        'pin_hash',
+        'pin_lookup_hash',
     ];
 
     /**
@@ -147,12 +149,28 @@ class User extends Authenticatable implements FilamentUser
     {
         $shift = $this->currentShift();
         if ($shift) {
+            if (in_array($shift->type, ['bartender', 'chef'], true)) {
+                $role = ucfirst($shift->type);
+                throw new \Exception(
+                    "{$role} shifts can only end through a confirmed handover count — use the Count Sessions page to hand over, not this control."
+                );
+            }
+
             $outstanding = (new ShiftAccountingService())->outstandingOrders($shift);
 
             if ($outstanding->isNotEmpty()) {
                 $count = $outstanding->count();
                 throw new \Exception(
                     "You have {$count} unpaid order(s) that must be paid, returned, or resolved by a supervisor before you can end your shift."
+                );
+            }
+
+            $pendingReturns = (new ShiftAccountingService())->pendingReturns($shift);
+
+            if ($pendingReturns->isNotEmpty()) {
+                $count = $pendingReturns->count();
+                throw new \Exception(
+                    "You have {$count} return(s) still awaiting bar/kitchen confirmation — they must be confirmed or rejected before you can end your shift."
                 );
             }
 
@@ -211,5 +229,11 @@ class User extends Authenticatable implements FilamentUser
         if ($this->roles()->exists()) {
             return true;
         }
+
+        // A user with zero roles must be denied cleanly, not fall through
+        // to an implicit null — this method is typed ": bool", and PHP
+        // throws a TypeError on a null return here, which (combined with
+        // APP_DEBUG) would leak a stack trace instead of a clean denial.
+        return false;
     }
 }

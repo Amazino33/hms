@@ -28,6 +28,36 @@ it('lists open count sessions on the Count Sessions page', function () {
         ->assertSee('Counting');
 });
 
+it('never ships the expected quantity to the browser while a session is still in the counting phase', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $superAdmin = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']);
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole($superAdmin);
+    $incoming = User::factory()->create();
+    $incoming->assignRole($superAdmin);
+
+    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    expect((float) $item->expected_quantity_at_open)->toEqual(24.0);
+
+    $component = Livewire::actingAs($outgoing)
+        ->test(CountSessionDetail::class, ['session_id' => $session->id]);
+
+    // Blind counting is the control this test protects: the expected
+    // quantity must be genuinely absent from the client-side payload, not
+    // merely unprinted by the Blade template — a curious counter reading
+    // view-source or the wire:snapshot attribute must not be able to see
+    // it. Assert against the raw serialized snapshot data, not the HTML.
+    $rawSnapshotData = json_encode($component->getData());
+
+    expect($rawSnapshotData)->not->toContain('expected_quantity_at_open');
+    expect($rawSnapshotData)->not->toContain('adjusted_expected_quantity');
+});
+
 it('walks a full bar handover session end to end through the detail page', function () {
     $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
@@ -47,8 +77,7 @@ it('walks a full bar handover session end to end through the detail page', funct
 
     $component = Livewire::actingAs($outgoing)
         ->test(CountSessionDetail::class, ['session_id' => $session->id])
-        ->set("subLocationInputs.{$item->id}.location", 'Fridge')
-        ->set("subLocationInputs.{$item->id}.qty", 20)
+        ->set("subLocationInputs.{$item->id}.Fridge", 20)
         ->call('recordCount', $item->id)
         ->call('confirmOutgoing');
 

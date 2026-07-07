@@ -132,10 +132,12 @@ class StockAdjustmentResource extends Resource
                     ->color('success')
                     ->icon('heroicon-o-check-circle')
                     ->requiresConfirmation()
-                    ->visible(fn (StockAdjustment $record) => $record->isPending() && $record->requested_by !== auth()->id())
+                    ->visible(fn (StockAdjustment $record) => $record->isPending()
+                        && $record->requested_by !== auth()->id()
+                        && auth()->user()->can('update', $record))
                     ->action(function (StockAdjustment $record) {
                         try {
-                            (new StockAdjustmentService())->approve($record, auth()->id());
+                            (new StockAdjustmentService())->approve($record, auth()->user());
 
                             Notification::make()->title('Adjustment approved')->success()->send();
                         } catch (\Exception $e) {
@@ -150,10 +152,12 @@ class StockAdjustmentResource extends Resource
                     ->form([
                         Textarea::make('rejection_reason')->required()->label('Reason for rejection'),
                     ])
-                    ->visible(fn (StockAdjustment $record) => $record->isPending() && $record->requested_by !== auth()->id())
+                    ->visible(fn (StockAdjustment $record) => $record->isPending()
+                        && $record->requested_by !== auth()->id()
+                        && auth()->user()->can('update', $record))
                     ->action(function (StockAdjustment $record, array $data) {
                         try {
-                            (new StockAdjustmentService())->reject($record, auth()->id(), $data['rejection_reason']);
+                            (new StockAdjustmentService())->reject($record, auth()->user(), $data['rejection_reason']);
 
                             Notification::make()->title('Adjustment rejected')->success()->send();
                         } catch (\Exception $e) {

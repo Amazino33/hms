@@ -31,16 +31,38 @@ class OrderSplitter
         $created = [];
 
         DB::transaction(function () use ($cart, $tableId, $userId, $options, &$created) {
-            // Normalize cart so each item includes its id and type
+            // Normalize cart so each item includes its id and type. The
+            // client-supplied 'price' and 'quantity' are NEVER trusted here
+            // — 'price' is overwritten with the product/menu item's actual
+            // current price, and 'quantity' is clamped to a positive
+            // integer, before any total/inventory math ever sees them. A
+            // Livewire method argument (unlike a public property) carries
+            // no checksum, so anything sent as 'price' in the request body
+            // must be treated as attacker-controlled.
             $prepared = collect($cart)->map(function ($item, $key) {
                 $item['key'] = $key;
                 if (str_starts_with($key, 'menu_')) {
                     $item['type'] = 'menu_item';
                     $item['menu_item_id'] = (int) str_replace('menu_', '', $key);
+
+                    $menuItem = MenuItem::find($item['menu_item_id']);
+                    if (!$menuItem) {
+                        throw new \Exception("Menu item not found: {$item['name']}");
+                    }
+                    $item['price'] = (float) $menuItem->sale_price;
                 } else {
                     $item['type'] = 'product';
                     $item['product_id'] = (int) $key;
+
+                    $product = Product::find($item['product_id']);
+                    if (!$product) {
+                        throw new \Exception("Product not found: {$item['name']}");
+                    }
+                    $item['price'] = (float) $product->price;
                 }
+
+                $item['quantity'] = max(1, (int) ($item['quantity'] ?? 1));
+
                 return $item;
             });
 
@@ -104,6 +126,7 @@ class OrderSplitter
                     'processed_by_user_id' => $options['processed_by_user_id'] ?? null,
                     'guest_id' => $options['guest_id'] ?? null,
                     'destination' => $destination,
+                    'kiosk_device_id' => $options['kiosk_device_id'] ?? null,
                 ]);
 
                 foreach ($items as $item) {

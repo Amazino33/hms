@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Table;
 use App\Models\Order;
+use App\Services\PermissionService;
 use Filament\Pages\Page;
 use Illuminate\Http\Request;
 use BackedEnum;
@@ -19,6 +20,14 @@ class TableDetail extends Page
     protected static ?string $title = 'Table Details';
 
     protected static ?string $slug = 'table-detail';
+
+    public static function canAccess(): bool
+    {
+        // Had no gate at all before — shouldRegisterNavigation only hides
+        // the nav link, not the route itself. Gated the same as FloorPlan,
+        // since this page is always reached from there.
+        return PermissionService::canAccessPage(self::class);
+    }
 
     public $table;
     public $order;

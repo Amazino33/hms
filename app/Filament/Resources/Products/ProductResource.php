@@ -58,6 +58,16 @@ class ProductResource extends Resource
                     ->default(0),
                 Toggle::make('is_active')->default(true),
             ])->columns(2),
+
+            Section::make('Fridge Restock Alert')
+                ->description('Optional — leave blank if this product isn\'t bar-fridge stock.')
+                ->schema([
+                    TextInput::make('fridge_par')
+                        ->label('Fridge par level')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('When the estimated cold stock falls below this, it appears on the bartender\'s restock list.'),
+                ]),
         ]);
     }
 

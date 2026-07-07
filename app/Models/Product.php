@@ -19,7 +19,7 @@ class Product extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'sku', 'price', 'cost_price', 'category_id', 'is_active'])
+            ->logOnly(['name', 'sku', 'price', 'cost_price', 'category_id', 'is_active', 'fridge_par'])
             ->logOnlyDirty()
             ->useLogName('product')
             ->dontLogEmptyChanges();

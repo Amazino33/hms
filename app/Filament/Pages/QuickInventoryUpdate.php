@@ -17,6 +17,7 @@ use App\Services\PermissionService;
 use BackedEnum;
 use UnitEnum;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\DB;
 
 class QuickInventoryUpdate extends Page implements HasTable
 {
@@ -99,6 +100,17 @@ class QuickInventoryUpdate extends Page implements HasTable
                     }),
             ])
             ->actions([
+                // Deliberately NOT routed through StockAdjustmentService/its
+                // four-eyes approval — this records goods receipt (new stock
+                // arriving from a supplier), a different action from an
+                // adjustment (damage/loss/theft/count-correction on stock
+                // that's already on the books). The Stock Adjustment reason
+                // list has no "purchase" reason for exactly this reason: an
+                // accepted, intentional exception to the "every mutation is
+                // reviewed" rule, not a gap that was missed. It still logs
+                // an InventoryTransaction (type: purchase) for full audit
+                // trail, so the movement itself is never invisible — only
+                // unapproved.
                 Action::make('add_stock')
                     ->label('Add Stock')
                     ->icon('heroicon-m-plus-circle')
@@ -143,31 +155,38 @@ class QuickInventoryUpdate extends Page implements HasTable
                             return;
                         }
 
-                        // Update inventory
-                        $inventory = $record->inventory()
-                            ->where('warehouse_id', $warehouse->id)
-                            ->first();
+                        // Locked inside a transaction — two concurrent
+                        // "Add Stock" submissions for the same product and
+                        // warehouse used to be a classic lost-update race:
+                        // both could read the same starting quantity and
+                        // one increment would silently vanish, understating
+                        // real stock after a goods receipt.
+                        DB::transaction(function () use ($record, $warehouse, $data) {
+                            $inventory = $record->inventory()
+                                ->where('warehouse_id', $warehouse->id)
+                                ->lockForUpdate()
+                                ->first();
 
-                        if ($inventory) {
-                            $inventory->quantity += $data['quantity'];
-                            $inventory->save();
-                        } else {
-                            $record->inventory()->create([
+                            if ($inventory) {
+                                $inventory->increment('quantity', $data['quantity']);
+                            } else {
+                                $record->inventory()->create([
+                                    'warehouse_id' => $warehouse->id,
+                                    'quantity' => $data['quantity'],
+                                ]);
+                            }
+
+                            // Log the transaction
+                            \App\Models\InventoryTransaction::create([
+                                'product_id' => $record->id,
                                 'warehouse_id' => $warehouse->id,
+                                'type' => 'purchase',
                                 'quantity' => $data['quantity'],
+                                'reference' => $data['reference'] . '_' . $data['reference_number'],
+                                'cost_per_unit' => $data['cost_per_unit'],
+                                'user_id' => auth()->id(),
                             ]);
-                        }
-
-                        // Log the transaction
-                        \App\Models\InventoryTransaction::create([
-                            'product_id' => $record->id,
-                            'warehouse_id' => $warehouse->id,
-                            'type' => 'purchase',
-                            'quantity' => $data['quantity'],
-                            'reference' => $data['reference'] . '_' . $data['reference_number'],
-                            'cost_per_unit' => $data['cost_per_unit'],
-                            'user_id' => auth()->id(),
-                        ]);
+                        });
 
                         Notification::make()
                             ->success()

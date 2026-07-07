@@ -55,6 +55,11 @@ class Order extends Model
         return $this->belongsTo(Shift::class);
     }
 
+    public function kioskDevice()
+    {
+        return $this->belongsTo(KioskDevice::class);
+    }
+
     public function processedByUser()
     {
         return $this->belongsTo(User::class, 'processed_by_user_id');

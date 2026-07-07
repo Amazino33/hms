@@ -23,6 +23,7 @@ new class extends Component {
     public $existingTotal = 0; // sum of existingItems, synced to Alpine
     public $search = '';
     public $deferProducts = true; // defer loading heavy product data until after initial render
+    public $lastPolledShiftId = null; // tracks whether wire:poll's tick actually needs to re-render anything
 
     // Payment Properties (guest/debt remain server-side)
     public $selectedGuestId = null;
@@ -42,6 +43,12 @@ new class extends Component {
     public $returnReason = '';
     public $returnQuantity = 1;
     public $maxReturnQuantity = 1;
+
+    // Cash Drop Properties
+    public $showCashDropModal = false;
+    public $cashDropReceiverId = null;
+    public $cashDropAmount = 0;
+    public $cashDropNote = '';
 
     // Computed Property for Tables
     public function getTablesProperty()
@@ -125,12 +132,56 @@ new class extends Component {
 
     public function loadCurrentShift()
     {
-        // This method exists to enable polling for shift status updates
-        // The actual shift data is accessed via auth()->user()->currentShift() in the view
+        // This method exists to enable polling for shift status updates —
+        // the actual shift data is read live from auth()->user()->currentShift()
+        // in the view. Every 10s tick used to force a full re-render of this
+        // whole (large) component regardless of whether anything changed,
+        // competing with real clicks for server time. Skip the render on
+        // every tick except the rare one where the shift actually started,
+        // ended, or changed — that's the only case the poll exists to catch.
+        $currentShiftId = auth()->user()?->currentShift()?->id;
+
+        if ($currentShiftId === $this->lastPolledShiftId) {
+            $this->skipRender();
+        }
+
+        $this->lastPolledShiftId = $currentShiftId;
+    }
+
+    /**
+     * Runs before every request (initial mount AND every subsequent
+     * Livewire update/poll) — unlike mount(), which only fires once. A
+     * kiosk/staff PIN session can be logged out from a different browser
+     * tab sharing the same session (e.g. that tab's order completed and
+     * triggered the auto-logout), while this tab's wire:poll keeps ticking
+     * every 10s. Without this check, the next poll or click here would
+     * hard-crash on auth()->user()->currentShift() throughout the view
+     * instead of bouncing back to the PIN pad.
+     */
+    public function boot(): void
+    {
+        $isKioskOrStaffSession = session('kiosk_device_id') || session('trusted_device_user_id');
+
+        if ($isKioskOrStaffSession && !auth()->guard('staff_pin')->check()) {
+            $routeName = session('kiosk_device_id') ? 'kiosk.home' : 'staff.home';
+            $this->redirect(route($routeName), navigate: false);
+            $this->skipRender();
+        }
     }
 
     public function mount($table_id = null)
     {
+        // Kiosk/staff-phone sessions mount this component fresh on every
+        // single PIN login (one login = one interaction, then auto-logout),
+        // unlike the admin sales page where one mount lives for a whole
+        // shift. Deferring the first product load only pays off when the
+        // extra wire:init round-trip is amortized over many interactions —
+        // on a kiosk it just adds a visible delay to every order, so skip
+        // the defer there and render products in the same initial response.
+        if (session('kiosk_device_id') || session('trusted_device_user_id')) {
+            $this->deferProducts = false;
+        }
+
         $this->categories = Cache::remember('categories', 3600, function () {
             return Category::has('products')->get();
         });
@@ -154,13 +205,21 @@ new class extends Component {
     }
 
     /**
-     * Validate whether an item can be added to the local Alpine cart.
-     * Does NOT mutate Livewire state — so Livewire skips DOM diffing on success.
+     * Validate whether an item can be added to the local Alpine cart. Never
+     * mutates Livewire state — the cart itself lives entirely in Alpine —
+     * so skipRender() is always safe here: there is nothing in the template
+     * that depends on this call's result besides the returned array itself,
+     * and dispatched notifications still reach the browser regardless of
+     * whether the HTML gets re-rendered. Skipping the ~1500-line component's
+     * full re-render/diff on every single tap is the actual point of this
+     * method existing separately from a normal reactive property update.
      * Returns ['ok' => true, 'item' => [...]] or ['ok' => false].
      */
     public function validateAndAddToCart(int $itemId, string $itemType, int $currentQty = 0): array
     {
-        if (!auth()->user()->currentShift()) {
+        $this->skipRender();
+
+        if (!auth()->user()?->currentShift()) {
             Notification::make()->title('No Active Shift')->body('You must start a shift before adding items to cart.')->danger()->send();
             return ['ok' => false];
         }
@@ -248,7 +307,7 @@ new class extends Component {
     public function processPayment(array $cartItems, float $paidAmount, string $paymentMethod, ?int $guestId = null, array $splitPayments = [])
     {
         // Check if user has an active shift
-        if (!auth()->user()->currentShift()) {
+        if (!auth()->user()?->currentShift()) {
             Notification::make()->title('No Active Shift')->body('You must start a shift before processing payments.')->danger()->send();
             return;
         }
@@ -390,6 +449,7 @@ new class extends Component {
                 'shift_id' => \App\Models\User::find($waiterUserId)?->currentShift()?->id,
                 'paid_cash' => $splitPayments['cash'] ?? ($paymentMethod === 'cash' ? $paidAmount : 0),
                 'paid_pos' => $splitPayments['pos'] ?? ($paymentMethod !== 'cash' ? $paidAmount : 0),
+                'kiosk_device_id' => session('kiosk_device_id'),
             ]);
         } catch (\Exception $e) {
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
@@ -441,6 +501,8 @@ new class extends Component {
 
         Cache::forget('products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
         Cache::forget('menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
+
+        $this->dispatch('order-completed');
     }
 
     // --- STANDARD CHECKOUT (Send to Kitchen) ---
@@ -477,7 +539,8 @@ new class extends Component {
             $splitter->handle($normalized, $tableId, auth()->id(), [
                 'status' => 'pending',
                 'payment_method' => 'cash',
-                'shift_id' => auth()->user()->currentShift()?->id,
+                'shift_id' => auth()->user()?->currentShift()?->id,
+                'kiosk_device_id' => session('kiosk_device_id'),
             ]);
         } catch (\Exception $e) {
             if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
@@ -516,12 +579,119 @@ new class extends Component {
         Cache::forget('menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search);
 
         Notification::make()->title('Order Updated')->success()->send();
+
+        // Harmless no-op outside the kiosk (nothing listens there); the
+        // kiosk's wrapper component listens for this to auto-logout back to
+        // the table grid after one order interaction.
+        $this->dispatch('order-completed');
+    }
+
+    /**
+     * Two taps, no typing: pick a method, done. The amount is always the
+     * order's own outstanding balance — never anything the client sends —
+     * so there is no path from this action to a wrong or short payment
+     * amount being recorded. Only applies to orders already confirmed
+     * served with nothing new/unsent still in the cart; anything still
+     * cooking or not yet carried to the table goes through the standard
+     * flow instead, same as it always has.
+     */
+    public function markPaidFast(string $method)
+    {
+        if (!auth()->user()?->currentShift()) {
+            Notification::make()->title('No Active Shift')->body('You must start a shift before processing payments.')->danger()->send();
+            return;
+        }
+
+        if (!in_array($method, ['cash', 'pos', 'transfer'], true)) {
+            return;
+        }
+
+        if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
+            Notification::make()->title('Please select a table')->warning()->send();
+            return;
+        }
+
+        if (!empty($this->existingItems)) {
+            Notification::make()->title('Unsent Items')->body('Send new items to the kitchen first, then use Mark Paid.')->warning()->send();
+            return;
+        }
+
+        $tableId = $this->selectedTableId;
+
+        $unprocessedExists = Order::where('table_id', $tableId)
+            ->whereIn('status', ['pending', 'preparing', 'ready'])
+            ->exists();
+
+        if ($unprocessedExists) {
+            Notification::make()->title('Not Ready')->body('Some items are still cooking, or not yet confirmed served.')->danger()->send();
+            return;
+        }
+
+        $servedOrders = Order::where('table_id', $tableId)->where('status', 'served')->get();
+
+        if ($servedOrders->isEmpty()) {
+            Notification::make()->title('Nothing to Pay')->warning()->send();
+            return;
+        }
+
+        $shiftId = auth()->user()?->currentShift()?->id;
+        $totalPaid = 0;
+
+        $orderIds = $servedOrders->pluck('id')->all();
+
+        DB::transaction(function () use ($orderIds, $method, $shiftId, &$totalPaid) {
+            // Re-fetched and locked inside the transaction, re-checking
+            // status='served' on the locked copy — $servedOrders above was
+            // read before the transaction started, so without this a
+            // double-tap or two devices open on the same table could both
+            // see the same outstanding balance and both record a payment
+            // for it, double-counting revenue and overstating what the
+            // waiter is expected to remit at settlement.
+            $orders = Order::whereIn('id', $orderIds)
+                ->where('status', 'served')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($orders as $order) {
+                $outstanding = round(max(0, (float) $order->total_amount - (float) $order->amount_paid), 2);
+
+                if ($outstanding > 0) {
+                    OrderPayment::create([
+                        'order_id' => $order->id,
+                        'amount' => $outstanding,
+                        'method' => $method,
+                        'user_id' => auth()->id(),
+                        'shift_id' => $shiftId,
+                        'paid_at' => now(),
+                    ]);
+
+                    $totalPaid += $outstanding;
+                }
+
+                $order->update([
+                    'amount_paid' => $order->total_amount,
+                    'status' => 'paid',
+                ]);
+            }
+        });
+
+        \App\Models\Table::find($tableId)->update(['status' => 'available']);
+
+        Notification::make()->title('Paid: ₦' . number_format($totalPaid))->success()->send();
+
+        $this->existingItems = [];
+        $this->existingTotal = 0;
+        $this->currentOrderId = null;
+        $this->selectedTableId = null;
+        $this->selectedGuestId = null;
+
+        $this->dispatch('order-completed');
     }
 
     public function cancelOrder()
     {
         // Check if user has an active shift
-        if (!auth()->user()->currentShift()) {
+        if (!auth()->user()?->currentShift()) {
             Notification::make()->title('No Active Shift')->body('You must start a shift before canceling orders.')->danger()->send();
             return;
         }
@@ -647,7 +817,7 @@ new class extends Component {
             'items' => array_values($allItems),
             'total' => $total,
             'date' => now()->format('M j, Y g:i A'),
-            'cashier' => auth()->user()->name,
+            'cashier' => auth()->user()?->name,
         ]);
     }
 
@@ -661,9 +831,7 @@ new class extends Component {
             ];
         }
 
-        $cacheKey = 'products_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search;
-
-        $products = Cache::remember($cacheKey, 1800, function () {
+        $buildProducts = function () {
             $query = Product::where('is_active', true)
                 ->with(['inventory.warehouse', 'category']);
 
@@ -682,12 +850,9 @@ new class extends Component {
             }
 
             return $products;
-        });
+        };
 
-        // Get menu items
-        $menuItemsCacheKey = 'menu_items_' . ($this->activeCategoryId ?? 'all') . '_' . $this->search;
-        // Reduced cache time to 5 seconds to ensure ingredient stock is fresh
-        $menuItems = Cache::remember($menuItemsCacheKey, 5, function () {
+        $buildMenuItems = function () {
             $query = \App\Models\MenuItem::where('available_for_sale', true)
                 ->with(['recipes.ingredient']);
 
@@ -697,7 +862,24 @@ new class extends Component {
                 $query->where('category_id', $this->activeCategoryId);
 
             return $query->limit(100)->get();
-        });
+        };
+
+        // A live search creates a distinct cache key on every keystroke
+        // ("b", "bu", "bur"...), which is never reused — caching it just
+        // fills the (database-backed) cache table with dead rows while
+        // still hitting the DB fresh every time anyway. Only cache the
+        // category-browsing case, which genuinely gets reused.
+        if (!empty($this->search)) {
+            $products = $buildProducts();
+            $menuItems = $buildMenuItems();
+        } else {
+            $cacheKey = 'products_' . ($this->activeCategoryId ?? 'all');
+            $products = Cache::remember($cacheKey, 1800, $buildProducts);
+
+            // Reduced cache time to 5 seconds to ensure ingredient stock is fresh
+            $menuItemsCacheKey = 'menu_items_' . ($this->activeCategoryId ?? 'all');
+            $menuItems = Cache::remember($menuItemsCacheKey, 5, $buildMenuItems);
+        }
 
         return [
             'products' => $products,
@@ -748,91 +930,71 @@ new class extends Component {
             }
         }
 
-        DB::transaction(function () use ($itemData, $destination) {
-            // 1. Create Return Order Ticket for KDS / Bar
-            $order = Order::create([
-                'order_number' => 'RET-' . time(),
-                'table_id' => $this->selectedTableId === 'takeaway' ? null : $this->selectedTableId,
-                'user_id' => auth()->id(),
-                'status' => 'pending',
-                'destination' => $destination,
-                'total_amount' => 0,
-                'is_return' => true,
-            ]);
-
-            OrderItem::create([
-                'order_id' => $order->id,
-                'product_id' => $itemData['type'] === 'product' ? $itemData['product_id'] : null,
-                'menu_item_id' => $itemData['type'] === 'menu_item' ? $itemData['menu_item_id'] : null,
-                'product_name' => $itemData['name'],
-                'item_type' => $itemData['type'],
-                'quantity' => $this->returnQuantity,
-                'unit_price' => $itemData['price'],
-                'subtotal' => 0,
-                'return_reason' => $this->returnReason,
-            ]);
-
-            // 2. Deduct the returned quantity from the customer's active orders
-            $qtyToReturn = $this->returnQuantity;
-            $tableId = $this->selectedTableId === 'takeaway' ? null : $this->selectedTableId;
-
-            $activeOrders = Order::where('table_id', $tableId)
-                ->where('is_return', false)
-                ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
-                ->with('items')
-                ->get();
-
-            $touchedOrderIds = [];
-
-            foreach ($activeOrders as $activeOrder) {
-                foreach ($activeOrder->items as $item) {
-                    if ($qtyToReturn <= 0)
-                        break;
-
-                    // Match product or menu item
-                    $isMatch = false;
-                    if ($itemData['type'] === 'product' && $item->product_id == $itemData['product_id'])
-                        $isMatch = true;
-                    if ($itemData['type'] === 'menu_item' && $item->menu_item_id == $itemData['menu_item_id'])
-                        $isMatch = true;
-
-                    if ($isMatch) {
-                        $deductAmount = min($item->quantity, $qtyToReturn);
-                        $newQty = $item->quantity - $deductAmount;
-
-                        if ($newQty > 0) {
-                            $item->update([
-                                'quantity' => $newQty,
-                                'subtotal' => $newQty * $item->unit_price
-                            ]);
-                        } else {
-                            $item->delete(); // Remove row entirely if returning all
-                        }
-
-                        $qtyToReturn -= $deductAmount;
-                        $touchedOrderIds[$activeOrder->id] = true;
-                    }
-                }
-            }
-
-            // Keep the order's stored total in sync with what its items now
-            // add up to — otherwise total_amount goes stale after a return
-            // and every "outstanding balance" calculation built on it is wrong.
-            foreach (array_keys($touchedOrderIds) as $touchedOrderId) {
-                $newTotal = OrderItem::where('order_id', $touchedOrderId)->sum('subtotal');
-                Order::where('id', $touchedOrderId)->update(['total_amount' => $newTotal]);
-            }
-        });
-
-        // 3. Refresh the POS view to reflect the lowered quantities
-        if ($this->selectedTableId) {
-            $this->updatedSelectedTableId($this->selectedTableId);
-        }
+        // Create the return ticket only. The guest's bill is NOT touched
+        // here — that only happens once the on-duty bartender/chef confirms
+        // physically receiving the item back (ReturnConfirmationService).
+        // This is the fix for the classic void-and-pocket scam: previously
+        // the bill dropped the instant this button was pressed, whether or
+        // not the drink/dish ever actually came back.
+        Order::create([
+            'order_number' => 'RET-' . time(),
+            'table_id' => $this->selectedTableId === 'takeaway' ? null : $this->selectedTableId,
+            'user_id' => auth()->id(),
+            'shift_id' => auth()->user()?->currentShift()?->id,
+            'status' => 'pending',
+            'destination' => $destination,
+            'total_amount' => 0,
+            'is_return' => true,
+        ])->items()->create([
+            'product_id' => $itemData['type'] === 'product' ? $itemData['product_id'] : null,
+            'menu_item_id' => $itemData['type'] === 'menu_item' ? $itemData['menu_item_id'] : null,
+            'product_name' => $itemData['name'],
+            'item_type' => $itemData['type'],
+            'quantity' => $this->returnQuantity,
+            'unit_price' => $itemData['price'],
+            'subtotal' => 0,
+            'return_reason' => $this->returnReason,
+        ]);
 
         $this->showReturnModal = false;
         $this->returnReason = '';
         $this->returnQuantity = 1;
-        Notification::make()->title('Return Request Sent')->success()->send();
+        Notification::make()->title('Return Request Sent')->body('Awaiting bar/kitchen confirmation before the bill changes.')->success()->send();
+    }
+
+    public function getCashDropReceiversProperty()
+    {
+        return \App\Models\User::whereHas('roles', fn ($q) => $q->whereIn('name', ['manager', 'admin', 'super_admin']))->get();
+    }
+
+    public function openCashDropModal(): void
+    {
+        $this->cashDropReceiverId = null;
+        $this->cashDropAmount = 0;
+        $this->cashDropNote = '';
+        $this->showCashDropModal = true;
+    }
+
+    /**
+     * Declares only — nothing about this waiter's expected remittance
+     * changes until the named receiver confirms it from their own login.
+     */
+    public function declareCashDrop(): void
+    {
+        $this->validate([
+            'cashDropReceiverId' => 'required|integer',
+            'cashDropAmount' => 'required|numeric|min:0.01',
+        ]);
+
+        try {
+            $receiver = \App\Models\User::findOrFail($this->cashDropReceiverId);
+            (new \App\Services\CashDropService())->declare(auth()->user(), $receiver, (float) $this->cashDropAmount, $this->cashDropNote ?: null);
+
+            $this->showCashDropModal = false;
+            Notification::make()->title('Cash Drop Declared')->body("Awaiting {$receiver->name}'s confirmation.")->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could Not Declare Drop')->body($e->getMessage())->danger()->send();
+        }
     }
 };
 ?>
@@ -864,8 +1026,13 @@ new class extends Component {
                     </div>
                 @endif
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">
-                {{ now()->format('M j, Y g:i A') }}
+            <div class="flex items-center gap-3">
+                @if(auth()->user()->currentShift())
+                    <button wire:click="openCashDropModal" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white">💵 Drop Cash</button>
+                @endif
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ now()->format('M j, Y g:i A') }}
+                </div>
             </div>
         </div>
     </div>
@@ -890,7 +1057,7 @@ new class extends Component {
                             {{ auth()->user()->currentShift() ? '' : 'disabled' }}>{{ $category->name }}</button>
                     @endforeach
                 </div>
-                <div wire:init="loadProducts"
+                <div @if($deferProducts) wire:init="loadProducts" @endif
                     class="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 content-start relative">
                     @if(!auth()->user()->currentShift())
                         <div
@@ -1091,6 +1258,19 @@ new class extends Component {
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span
                                 class="text-sm lg:text-base">Cancel</span></button>
                     </div>
+
+                    {{-- Fast mark-paid: no amount typed, order's own outstanding total, two taps. --}}
+                    <div class="mt-3">
+                        <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Mark Paid</div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button wire:click="markPaidFast('cash')"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">Cash</button>
+                            <button wire:click="markPaidFast('pos')"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">POS</button>
+                            <button wire:click="markPaidFast('transfer')"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">Transfer</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1176,7 +1356,10 @@ new class extends Component {
                 </div>
             @endif
             @php $canAddToCartMobile = auth()->user()->currentShift() && $selectedTableId; @endphp
-            <div wire:init="loadProducts" class="grid grid-cols-2 gap-3">
+            {{-- Desktop grid above already carries wire:init="loadProducts" —
+                 both grids are always in the DOM regardless of viewport (CSS
+                 only toggles visibility), so only one needs to fire it. --}}
+            <div class="grid grid-cols-2 gap-3">
                 @if($products->isEmpty())
                     @for($i = 0; $i < 8; $i++)
                         <div
@@ -1387,6 +1570,18 @@ new class extends Component {
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                             Cancel
                         </button>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Mark Paid</div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button wire:click="markPaidFast('cash')"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">Cash</button>
+                            <button wire:click="markPaidFast('pos')"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">POS</button>
+                            <button wire:click="markPaidFast('transfer')"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">Transfer</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1940,6 +2135,42 @@ new class extends Component {
                     <button wire:click="submitReturnRequest"
                         class="px-4 py-3 font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 touch-manipulation flex items-center justify-center gap-2">Confirm
                         Return</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if($showCashDropModal)
+        <div class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div class="bg-emerald-50 dark:bg-emerald-900/20 p-4 border-b border-emerald-100 dark:border-emerald-800 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-400">💵 Drop Cash</h3>
+                    <button @click="$wire.set('showCashDropModal', false)" class="text-gray-400 hover:text-emerald-500 p-2"><span class="text-2xl">&times;</span></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Handing Cash To</label>
+                        <select wire:model="cashDropReceiverId" class="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600">
+                            <option value="">Select…</option>
+                            @foreach($this->cashDropReceivers as $receiver)
+                                <option value="{{ $receiver->id }}">{{ $receiver->name }}</option>
+                            @endforeach
+                        </select>
+                        @error('cashDropReceiverId') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Amount</label>
+                        <input type="number" wire:model="cashDropAmount" min="0.01" step="0.01" class="w-full p-3 text-lg border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600">
+                        @error('cashDropAmount') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Note (optional)</label>
+                        <textarea wire:model="cashDropNote" class="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3">
+                    <button @click="$wire.set('showCashDropModal', false)" class="px-4 py-3 font-bold text-gray-700 bg-gray-100 rounded-lg">Cancel</button>
+                    <button wire:click="declareCashDrop" class="px-4 py-3 font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">Declare Drop</button>
                 </div>
             </div>
         </div>

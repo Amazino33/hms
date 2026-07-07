@@ -52,6 +52,22 @@ class WarehouseResource extends Resource
                 ->maxLength(255)
                 ->placeholder('e.g., Basement, Rooftop Bar'),
 
+            TextInput::make('sub_location_labels.0')
+                ->label('Sub-location 1 label')
+                ->maxLength(50)
+                ->placeholder('Defaults to Fridge (Bar) / Shelf A (others)')
+                ->helperText('These 3 labels are what counters see as the fixed sub-locations during a count session at this warehouse. Leave all 3 blank to use the defaults.'),
+
+            TextInput::make('sub_location_labels.1')
+                ->label('Sub-location 2 label')
+                ->maxLength(50)
+                ->placeholder('Defaults to Floor (Bar) / Shelf B (others)'),
+
+            TextInput::make('sub_location_labels.2')
+                ->label('Sub-location 3 label')
+                ->maxLength(50)
+                ->placeholder('Defaults to Shelf (Bar) / Shelf C (others)'),
+
             Toggle::make('is_active')
                 ->label('Active Warehouse')
                 ->default(true),

@@ -96,3 +96,54 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/admin/floor-plan/popular-items', [FloorPlanController::class, 'getPopularItems']);
     Route::post('/admin/floor-plan/add-item', [FloorPlanController::class, 'addItemToOrder']);
 });
+
+use App\Http\Controllers\KioskRegistrationController;
+
+// Kiosk registration — deliberately outside the 'auth' group. The physical
+// device isn't registered yet at this point, so there is no user session to
+// require; the registration CODE itself is the gate (short-lived, single-use).
+Route::get('/kiosk/register', [KioskRegistrationController::class, 'showForm'])->name('kiosk.register');
+Route::post('/kiosk/register', [KioskRegistrationController::class, 'register'])
+    ->middleware('throttle:10,1')
+    ->name('kiosk.register.submit');
+
+// Everything past this point requires a valid, non-revoked device token.
+Route::middleware(['kiosk.device'])->group(function () {
+    // Idle screen: table grid + PIN pad. No staff identity yet — anyone can
+    // see the grid, but nothing about any order, and tapping a table only
+    // opens the PIN pad, not an order.
+    Route::get('/kiosk', fn () => view('kiosk.idle'))->name('kiosk.home');
+
+    // Reaching an actual order requires both the device token AND a staff_pin
+    // identity — this is the only place the reused `pos` component is mounted
+    // in the kiosk context.
+    Route::middleware(['staff_pin.auth'])->group(function () {
+        Route::get('/kiosk/order/{table}', fn ($table) => view('kiosk.order', ['table' => $table]))->name('kiosk.order');
+    });
+});
+
+use App\Http\Controllers\StaffLoginController;
+
+// Personal-phone equivalent of kiosk registration — one full password login
+// establishes trust for this specific device+user, deliberately never
+// touching the 'web' guard used by the Filament admin panel.
+Route::get('/staff/login', [StaffLoginController::class, 'showForm'])->name('staff.login');
+Route::post('/staff/login', [StaffLoginController::class, 'login'])
+    // Same named limiter Fortify's own admin login uses (5/min, keyed by
+    // email+IP) — this route also validates a real account password
+    // (Auth::guard('web')->validate()), so it needs the exact same
+    // brute-force protection, not just guard isolation.
+    ->middleware('throttle:login')
+    ->name('staff.login.submit');
+
+// Same idle-screen/order-wrapper components as the kiosk, reused as-is —
+// the only difference is trusted.device (bound to one person) instead of
+// kiosk.device (shared), and the PIN is further constrained to that one
+// person inside kiosk-idle-screen itself.
+Route::middleware(['trusted.device'])->group(function () {
+    Route::get('/staff', fn () => view('kiosk.idle'))->name('staff.home');
+
+    Route::middleware(['staff_pin.auth'])->group(function () {
+        Route::get('/staff/order/{table}', fn ($table) => view('kiosk.order', ['table' => $table]))->name('staff.order');
+    });
+});

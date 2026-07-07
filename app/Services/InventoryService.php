@@ -9,6 +9,7 @@ use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
 use App\Models\IngredientInventoryItem;
 use App\Models\IngredientTransaction;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class InventoryService
@@ -235,9 +236,18 @@ class InventoryService
 
         $warehouseId = self::getKitchenWarehouseId();
 
+        // One query for every recipe ingredient's stock instead of one
+        // query per ingredient — this runs on every single menu-item tap,
+        // so an N+1 here is paid on every click, not just once.
+        $ingredientIds = $menuItem->recipes->pluck('ingredient_id')->all();
+        $stockByIngredientId = IngredientInventoryItem::query()
+            ->where('warehouse_id', $warehouseId)
+            ->whereIn('ingredient_id', $ingredientIds)
+            ->pluck('quantity', 'ingredient_id');
+
         foreach ($menuItem->recipes as $recipe) {
             $requiredQuantity = $recipe->quantity_needed * $quantity;
-            $available = self::getIngredientStock($recipe->ingredient_id, $warehouseId);
+            $available = (float) ($stockByIngredientId[$recipe->ingredient_id] ?? 0);
 
             if ($available < $requiredQuantity) {
                 $insufficient[] = [
@@ -319,22 +329,30 @@ class InventoryService
     }
 
     /**
-     * Get the bar warehouse ID (first consumer warehouse)
+     * Get the bar warehouse ID (first consumer warehouse). Cached — this is
+     * called once per product in the POS grid's render loop plus again on
+     * every menu-item tap, and which warehouse is "the bar" essentially
+     * never changes between requests.
      */
     public static function getBarWarehouseId(): int
     {
-        return \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first()?->id ?? 4;
+        return Cache::remember('inventory_service:bar_warehouse_id', 3600, function () {
+            return \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first()?->id ?? 4;
+        });
     }
 
     /**
-     * Get the kitchen warehouse ID (second consumer warehouse)
+     * Get the kitchen warehouse ID (second consumer warehouse). Cached for
+     * the same reason as getBarWarehouseId().
      */
     public static function getKitchenWarehouseId(): int
     {
-        $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
-        if ($consumerWarehouses->count() > 1) {
-            return $consumerWarehouses[1]->id; // Second consumer warehouse
-        }
-        return $consumerWarehouses->first()?->id ?? 5;
+        return Cache::remember('inventory_service:kitchen_warehouse_id', 3600, function () {
+            $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
+            if ($consumerWarehouses->count() > 1) {
+                return $consumerWarehouses[1]->id; // Second consumer warehouse
+            }
+            return $consumerWarehouses->first()?->id ?? 5;
+        });
     }
 }

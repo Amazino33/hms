@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use Filament\Pages\Page;
 use App\Models\OrderPayment;
 use App\Models\Order;
+use App\Services\PermissionService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -21,6 +22,16 @@ class DailyReport extends Page implements HasForms
     protected static ?string $navigationLabel = 'End of Day Record';
     protected static ?int $navigationSort = 2; // Show near the top
     protected string $view = 'filament.pages.daily-report';
+
+    public static function canAccess(): bool
+    {
+        // This page shows total cash collected, outstanding debt, and
+        // per-staff cash performance — every OTHER page in this app is
+        // deny-by-default via PagePermission; this one had no gate at all,
+        // meaning any authenticated waiter/porter/bartender/chef could
+        // browse straight to it.
+        return PermissionService::canAccessPage(self::class);
+    }
 
     public ?array $data = [];
 

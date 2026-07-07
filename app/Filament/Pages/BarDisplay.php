@@ -8,7 +8,11 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Services\PermissionService;
+use App\Services\ReturnConfirmationService;
+use App\Services\FridgeStockEstimateService;
 use App\Models\Order;
+use App\Models\Product;
+use App\Models\WareHouse;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -60,7 +64,35 @@ class BarDisplay extends Page
             }),
             'recentHistory' => $recentHistory,
             'itemsSold' => $itemsSold,
+            'fridgeRestockList' => (new FridgeStockEstimateService())->belowParProducts($this->barWarehouse()),
         ];
+    }
+
+    /**
+     * Same hardcoded-fallback convention used everywhere else in this app
+     * (OrderSplitter::getBarWarehouseId(), etc.) — id 4 must exist in every
+     * environment; this is a safety net, not the primary lookup mechanism.
+     */
+    private function barWarehouse(): WareHouse
+    {
+        return WareHouse::find(4) ?? WareHouse::where('type', 'consumer')->orderBy('id')->firstOrFail();
+    }
+
+    /**
+     * One-tap "topped up to par" — no quantity entered, no InventoryTransaction.
+     * Purely resets this product's fridge ESTIMATE; guidance only, never a
+     * guard, so it fails soft with a notification rather than a hard error.
+     */
+    public function markRestocked(int $productId): void
+    {
+        try {
+            $product = Product::findOrFail($productId);
+            (new FridgeStockEstimateService())->markRestockedToPar($product, $this->barWarehouse(), auth()->id());
+
+            Notification::make()->title("{$product->name} marked restocked to par")->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not mark restocked')->body($e->getMessage())->danger()->send();
+        }
     }
 
     public function markAsReady($orderId)
@@ -98,42 +130,53 @@ class BarDisplay extends Page
         }
     }
 
+    /**
+     * Confirming this IS the return — before this, the guest's bill has not
+     * changed at all. Only the on-duty bartender's own login can do this
+     * (checked against their active, non-stale bartender shift), which is
+     * what closes the void-and-pocket loophole: nobody can adjust a bill
+     * just by clicking a return button themselves.
+     */
     public function confirmAndRestock($returnOrderId) {
         try {
-            DB::transaction(function () use ($returnOrderId) {
-                // Fetch the specific return order and its items
-                $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
+            $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
+            (new ReturnConfirmationService())->confirm($returnOrder, auth()->user());
 
-                // Prevent double clicking by checking if it's already processed
-                if ($returnOrder->status === 'returned') {
-                    throw new \Exception('This return has already been processed.');
-                }
-
-                // Restocking (products + menu-item ingredients) and its
-                // InventoryTransaction/IngredientTransaction records are
-                // handled centrally by OrderObserver on this status change —
-                // there is no separate mutation path here.
-                $returnOrder->update(['status' => 'returned']);
-            });
-
-            // 👇 BUST THE CACHE: Forces the UI to refresh instantly
             Cache::forget('bar_display:active_orders');
             Cache::forget('bar_display:recent_history');
 
-            // 👇 USE FILAMENT NOTIFICATION: Replaces standard session flash
             Notification::make()
-                ->title('Restocked Successfully')
-                ->body('Return processed and inventory updated.')
+                ->title('Return Confirmed')
+                ->body('Bill adjusted and inventory restocked.')
                 ->success()
                 ->send();
 
         } catch (\Exception $e) {
-            // 👇 USE FILAMENT NOTIFICATION FOR ERRORS
             Notification::make()
-                ->title('Restock Failed')
+                ->title('Could Not Confirm Return')
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
+        }
+    }
+
+    /**
+     * The item never actually came back — closes the ticket without
+     * touching the guest's bill or stock at all (both were already
+     * untouched pending this decision).
+     */
+    public function rejectReturn($returnOrderId, string $reason = 'Item was not returned to the bar')
+    {
+        try {
+            $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
+            (new ReturnConfirmationService())->reject($returnOrder, auth()->user(), $reason);
+
+            Cache::forget('bar_display:active_orders');
+            Cache::forget('bar_display:recent_history');
+
+            Notification::make()->title('Return Rejected')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could Not Reject Return')->body($e->getMessage())->danger()->send();
         }
     }
 

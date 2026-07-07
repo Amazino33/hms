@@ -213,6 +213,16 @@ class UserResource extends Resource
                     ->label('Edit')
                     ->icon(Heroicon::PencilSquare)
                     ->url(fn(User $record): string => EditUser::getUrl(['record' => $record])),
+                Action::make('forceResetPin')
+                    ->label('Force Reset PIN')
+                    ->icon('heroicon-o-key')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalDescription('Clears their kiosk PIN entirely — you never see or choose it, they must set a brand new one next time.')
+                    ->action(function (User $record) {
+                        (new \App\Services\PinAuthService())->forceReset($record, auth()->user());
+                        \Filament\Notifications\Notification::make()->title('PIN reset')->body("{$record->name} must set a new PIN next time.")->success()->send();
+                    }),
                 Action::make('delete')
                     ->label('Delete')
                     ->icon(Heroicon::Trash)

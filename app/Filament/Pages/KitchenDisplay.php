@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Services\PermissionService;
+use App\Services\ReturnConfirmationService;
 use App\Models\Order;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -98,42 +99,50 @@ class KitchenDisplay extends Page
         }
     }
 
+    /**
+     * Confirming this IS the return — before this, the guest's bill has not
+     * changed at all. Only the on-duty chef's own login can do this (checked
+     * against their active, non-stale chef shift).
+     */
     public function confirmAndRestock($returnOrderId) {
         try {
-            DB::transaction(function () use ($returnOrderId) {
-                // Fetch the specific return order and its items
-                $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
+            $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
+            (new ReturnConfirmationService())->confirm($returnOrder, auth()->user());
 
-                // Prevent double clicking by checking if it's already processed
-                if ($returnOrder->status === 'returned') {
-                    throw new \Exception('This return has already been processed.');
-                }
-
-                // Restocking (products + menu-item ingredients) and its
-                // InventoryTransaction/IngredientTransaction records are
-                // handled centrally by OrderObserver on this status change —
-                // there is no separate mutation path here.
-                $returnOrder->update(['status' => 'returned']);
-            });
-
-            // 👇 BUST THE CACHE: Forces the UI to refresh instantly
             Cache::forget('kitchen_display:active_orders');
             Cache::forget('kitchen_display:recent_history');
 
-            // 👇 USE FILAMENT NOTIFICATION: Replaces standard session flash
             Notification::make()
-                ->title('Restocked Successfully')
-                ->body('Return processed and inventory updated.')
+                ->title('Return Confirmed')
+                ->body('Bill adjusted and inventory restocked.')
                 ->success()
                 ->send();
 
         } catch (\Exception $e) {
-            // 👇 USE FILAMENT NOTIFICATION FOR ERRORS
             Notification::make()
-                ->title('Restock Failed')
+                ->title('Could Not Confirm Return')
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
+        }
+    }
+
+    /**
+     * The item never actually came back — closes the ticket without
+     * touching the guest's bill or stock at all.
+     */
+    public function rejectReturn($returnOrderId, string $reason = 'Item was not returned to the kitchen')
+    {
+        try {
+            $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
+            (new ReturnConfirmationService())->reject($returnOrder, auth()->user(), $reason);
+
+            Cache::forget('kitchen_display:active_orders');
+            Cache::forget('kitchen_display:recent_history');
+
+            Notification::make()->title('Return Rejected')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could Not Reject Return')->body($e->getMessage())->danger()->send();
         }
     }
 

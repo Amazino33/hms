@@ -7,6 +7,7 @@ use App\Models\IngredientTransaction;
 use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
 use App\Models\StockAdjustment;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class StockAdjustmentService
@@ -36,19 +37,28 @@ class StockAdjustmentService
      *
      * Four-eyes is enforced here unconditionally: the reviewer can never be
      * the requester, regardless of role — there is no direct-apply exception
-     * for managers or super_admin.
+     * for managers or super_admin. On top of that, the reviewer must
+     * actually hold the Update:StockAdjustment permission (manager+) —
+     * "not the requester" alone previously let any peer with ViewAny
+     * (bartender, storekeeper, chef) approve a colleague's request.
      *
      * @throws \Exception
      */
-    public function approve(StockAdjustment $adjustment, int $reviewedByUserId): StockAdjustment
+    public function approve(StockAdjustment $adjustment, User $reviewer): StockAdjustment
     {
         if (!$adjustment->isPending()) {
             throw new \Exception('Only pending adjustments can be approved.');
         }
 
-        if ($adjustment->requested_by === $reviewedByUserId) {
+        if ($adjustment->requested_by === $reviewer->id) {
             throw new \Exception('A stock adjustment cannot be approved by the same person who requested it.');
         }
+
+        if ($reviewer->cannot('update', $adjustment)) {
+            throw new \Exception('You do not have permission to approve stock adjustments.');
+        }
+
+        $reviewedByUserId = $reviewer->id;
 
         return DB::transaction(function () use ($adjustment, $reviewedByUserId) {
             if ($adjustment->item_type === 'product') {
@@ -70,19 +80,27 @@ class StockAdjustmentService
     /**
      * Reject a pending adjustment. No stock movement ever happens for a
      * rejected request. Four-eyes applies here too — a requester cannot
-     * reject (i.e. review) their own request.
+     * reject (i.e. review) their own request — and, as with approve(), the
+     * reviewer must hold Update:StockAdjustment (manager+), not merely be
+     * someone other than the requester.
      *
      * @throws \Exception
      */
-    public function reject(StockAdjustment $adjustment, int $reviewedByUserId, string $rejectionReason): StockAdjustment
+    public function reject(StockAdjustment $adjustment, User $reviewer, string $rejectionReason): StockAdjustment
     {
         if (!$adjustment->isPending()) {
             throw new \Exception('Only pending adjustments can be rejected.');
         }
 
-        if ($adjustment->requested_by === $reviewedByUserId) {
+        if ($adjustment->requested_by === $reviewer->id) {
             throw new \Exception('A stock adjustment cannot be reviewed by the same person who requested it.');
         }
+
+        if ($reviewer->cannot('update', $adjustment)) {
+            throw new \Exception('You do not have permission to review stock adjustments.');
+        }
+
+        $reviewedByUserId = $reviewer->id;
 
         $adjustment->update([
             'status' => 'rejected',

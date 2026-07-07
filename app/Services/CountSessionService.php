@@ -13,6 +13,7 @@ use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\Shift;
 use App\Models\StaffDebt;
+use App\Models\WareHouse;
 use Illuminate\Support\Facades\DB;
 
 class CountSessionService
@@ -62,25 +63,32 @@ class CountSessionService
                 'notes' => $notes,
             ]);
 
+            // Snapshotted at open time, not resolved live from the warehouse
+            // each time — a label edited mid-count must not reshuffle an
+            // already-open session's slots.
+            $subLocationLabels = WareHouse::findOrFail($warehouseId)->subLocationLabels();
+
             if ($type === 'kitchen_handover') {
                 $rows = IngredientInventoryItem::where('warehouse_id', $warehouseId)->get();
                 foreach ($rows as $row) {
-                    CountSessionItem::create([
+                    $item = CountSessionItem::create([
                         'count_session_id' => $session->id,
                         'item_type' => 'ingredient',
                         'ingredient_id' => $row->ingredient_id,
                         'expected_quantity_at_open' => $row->quantity,
                     ]);
+                    $this->seedSubLocationSlots($item, $subLocationLabels);
                 }
             } else {
                 $rows = InventoryItem::where('warehouse_id', $warehouseId)->get();
                 foreach ($rows as $row) {
-                    CountSessionItem::create([
+                    $item = CountSessionItem::create([
                         'count_session_id' => $session->id,
                         'item_type' => 'product',
                         'product_id' => $row->product_id,
                         'expected_quantity_at_open' => $row->quantity,
                     ]);
+                    $this->seedSubLocationSlots($item, $subLocationLabels);
                 }
             }
 
@@ -89,20 +97,48 @@ class CountSessionService
     }
 
     /**
-     * Record (or overwrite) the counted quantity for one sub-location of an
-     * item. Blind by construction — this never reads or returns
-     * expected_quantity_at_open.
+     * Every item gets exactly the warehouse's 3 fixed sub-location slots,
+     * pre-created at zero — counting only ever updates these rows, it never
+     * creates new arbitrary sub-locations.
      */
-    public function recordCount(CountSessionItem $item, string $subLocation, float $quantity): CountSessionItem
+    private function seedSubLocationSlots(CountSessionItem $item, array $labels): void
+    {
+        foreach ($labels as $label) {
+            CountSessionSubCount::create([
+                'count_session_item_id' => $item->id,
+                'sub_location' => $label,
+                'quantity' => 0,
+            ]);
+        }
+    }
+
+    /**
+     * Record (or overwrite) the counted quantities for an item's fixed
+     * sub-location slots. Blind by construction — this never reads or
+     * returns expected_quantity_at_open. Blank/omitted quantities count as
+     * zero. Only the 3 slots seeded at session-open time for this item can
+     * be written — an unrecognized sub-location name is rejected rather
+     * than silently creating a new, unbounded entry.
+     *
+     * @param array<string, float|string|null> $quantitiesBySubLocation
+     */
+    public function recordCount(CountSessionItem $item, array $quantitiesBySubLocation): CountSessionItem
     {
         if (!$item->session->isDraft()) {
             throw new \Exception('Counts can only be recorded while the session is still open.');
         }
 
-        CountSessionSubCount::updateOrCreate(
-            ['count_session_item_id' => $item->id, 'sub_location' => $subLocation],
-            ['quantity' => $quantity]
-        );
+        $validLocations = $item->subCounts()->pluck('sub_location')->all();
+
+        foreach ($quantitiesBySubLocation as $subLocation => $quantity) {
+            if (!in_array($subLocation, $validLocations, true)) {
+                throw new \Exception("'{$subLocation}' is not a valid sub-location for this item.");
+            }
+
+            CountSessionSubCount::where('count_session_item_id', $item->id)
+                ->where('sub_location', $subLocation)
+                ->update(['quantity' => $quantity === null || $quantity === '' ? 0 : (float) $quantity]);
+        }
 
         $item->update([
             'counted_quantity' => $item->subCounts()->sum('quantity'),

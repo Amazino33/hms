@@ -66,6 +66,33 @@ it('hides the approve/reject actions from the requester on their own request', f
         ->assertTableActionHidden('reject', $adjustment);
 });
 
+it('hides the approve/reject actions from a peer who lacks Update:StockAdjustment, even though they are not the requester', function () {
+    $this->seed(ShieldSeeder::class);
+    $requester = User::factory()->create();
+    $requester->assignRole('bartender');
+    $peer = User::factory()->create();
+    $peer->assignRole('storekeeper'); // has ViewAny/Create but not Update
+    $warehouse = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $warehouse->id, 'quantity' => 20]);
+
+    $adjustment = StockAdjustment::create([
+        'item_type' => 'product',
+        'product_id' => $product->id,
+        'warehouse_id' => $warehouse->id,
+        'quantity_change' => -3,
+        'reason' => 'damage',
+        'status' => 'pending',
+        'requested_by' => $requester->id,
+    ]);
+
+    Livewire::actingAs($peer)
+        ->test(ListStockAdjustments::class)
+        ->assertTableActionHidden('approve', $adjustment)
+        ->assertTableActionHidden('reject', $adjustment);
+});
+
 it('allows a different user to approve the request, mutating stock and logging a transaction', function () {
     $this->seed(ShieldSeeder::class);
     $requester = User::factory()->create();

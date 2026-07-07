@@ -104,13 +104,18 @@ class ShiftManagementTable
                         ];
                     })
                     ->action(function (Shift $record, array $data): void {
-                        $debt = (new ShiftAccountingService())->applyShiftSettlement(
-                            $record,
-                            auth()->user(),
-                            (float) $data['supervisor_confirmed_cash'],
-                            (float) $data['supervisor_confirmed_pos'],
-                            $data['settlement_notes'] ?? null,
-                        );
+                        try {
+                            $debt = (new ShiftAccountingService())->applyShiftSettlement(
+                                $record,
+                                auth()->user(),
+                                (float) $data['supervisor_confirmed_cash'],
+                                (float) $data['supervisor_confirmed_pos'],
+                                $data['settlement_notes'] ?? null,
+                            );
+                        } catch (\Exception $e) {
+                            Notification::make()->title('Could not close shift')->body($e->getMessage())->danger()->send();
+                            return;
+                        }
 
                         if ($debt) {
                             Notification::make()

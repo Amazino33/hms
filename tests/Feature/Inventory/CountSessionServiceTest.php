@@ -28,11 +28,72 @@ it('snapshots expected quantity at open and does not require it to record a coun
     expect((float) $item->expected_quantity_at_open)->toEqual(24.0);
     expect($item->counted_quantity)->toBeNull();
 
-    $item = $service->recordCount($item, 'Fridge 1', 10);
-    $item = $service->recordCount($item, 'Fridge 2', 9);
+    $item = $service->recordCount($item, ['Fridge' => 10]);
+    $item = $service->recordCount($item, ['Floor' => 9]);
 
     expect((float) $item->counted_quantity)->toEqual(19.0);
-    expect($item->subCounts()->count())->toBe(2);
+    // Every item always gets exactly the warehouse's 3 fixed slots — Bar's
+    // Fridge/Floor/Shelf — pre-seeded at session-open, not created ad hoc.
+    expect($item->subCounts()->count())->toBe(3);
+});
+
+it('rejects a sub-location that is not one of the warehouse fixed 3 slots', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $outgoing = User::factory()->create();
+    $incoming = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+
+    expect(fn () => $service->recordCount($item, ['Basement' => 5]))->toThrow(Exception::class);
+});
+
+it('treats a blank/omitted sub-location quantity as zero, not an error', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $outgoing = User::factory()->create();
+    $incoming = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+
+    $item = $service->recordCount($item, ['Fridge' => 15, 'Floor' => '', 'Shelf' => null]);
+
+    expect((float) $item->counted_quantity)->toEqual(15.0);
+});
+
+it('uses a warehouse own configured labels instead of the Fridge/Floor/Shelf default when set', function () {
+    $bar = WareHouse::create([
+        'name' => 'Bar',
+        'type' => 'consumer',
+        'sub_location_labels' => ['Cooler', 'Back Room', 'Display Case'],
+    ]);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $outgoing = User::factory()->create();
+    $incoming = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+
+    expect($item->subCounts()->pluck('sub_location')->sort()->values()->all())
+        ->toBe(['Back Room', 'Cooler', 'Display Case']);
+
+    expect(fn () => $service->recordCount($item, ['Fridge' => 5]))->toThrow(Exception::class);
+    $service->recordCount($item, ['Cooler' => 5]);
+    expect((float) $item->fresh()->counted_quantity)->toEqual(5.0);
 });
 
 it('blocks submission for review until both outgoing and incoming confirm a handover', function () {
@@ -46,7 +107,7 @@ it('blocks submission for review until both outgoing and incoming confirm a hand
 
     $service = new CountSessionService();
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
-    $service->recordCount($session->items()->first(), 'Fridge', 19);
+    $service->recordCount($session->items()->first(), ['Fridge' => 19]);
 
     expect(fn () => $service->submitForReview($session))->toThrow(Exception::class);
 
@@ -95,7 +156,7 @@ it('computes variance against live stock, not the stale snapshot, when sales hap
     // Live stock is now 20 — that is the correct "adjusted expected", not 24.
 
     $item = $session->items()->first();
-    $service->recordCount($item, 'Fridge', 18); // physically counted 18
+    $service->recordCount($item, ['Fridge' => 18]); // physically counted 18
 
     $service->confirmOutgoing($session, $outgoing->id);
     $service->confirmIncoming($session, $incoming->id);
@@ -119,7 +180,7 @@ it('true-ups stock to the counted figure without charging anyone', function () {
     $service = new CountSessionService();
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
-    $service->recordCount($item, 'Fridge', 20);
+    $service->recordCount($item, ['Fridge' => 20]);
     $service->confirmOutgoing($session, $outgoing->id);
     $service->confirmIncoming($session, $incoming->id);
     $session = $service->submitForReview($session->fresh());
@@ -144,7 +205,7 @@ it('charges the outgoing custodian at selling price for an accountability decisi
     $service = new CountSessionService();
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
-    $service->recordCount($item, 'Fridge', 20); // 4 short of 24
+    $service->recordCount($item, ['Fridge' => 20]); // 4 short of 24
     $service->confirmOutgoing($session, $outgoing->id);
     $service->confirmIncoming($session, $incoming->id);
     $session = $service->submitForReview($session->fresh());
@@ -176,7 +237,7 @@ it('charges ingredient shortfalls at last purchase price, not selling price', fu
     $service = new CountSessionService();
     $session = $service->openSession('kitchen_handover', $kitchen->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->where('ingredient_id', $ingredient->id)->first();
-    $service->recordCount($item, 'Shelf', 8); // 2kg short of 10
+    $service->recordCount($item, ['Shelf A' => 8]); // 2kg short of 10
 
     $service->confirmOutgoing($session, $outgoing->id);
     $service->confirmIncoming($session, $incoming->id);
@@ -201,7 +262,7 @@ it('leaves stock untouched when a variance is ignored', function () {
     $service = new CountSessionService();
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
-    $service->recordCount($item, 'Fridge', 23);
+    $service->recordCount($item, ['Fridge' => 23]);
     $service->confirmOutgoing($session, $outgoing->id);
     $service->confirmIncoming($session, $incoming->id);
     $session = $service->submitForReview($session->fresh());
@@ -225,7 +286,7 @@ it('refuses to finalize a session while any variance is still undecided', functi
     $service = new CountSessionService();
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
-    $service->recordCount($item, 'Fridge', 20);
+    $service->recordCount($item, ['Fridge' => 20]);
     $service->confirmOutgoing($session, $outgoing->id);
     $service->confirmIncoming($session, $incoming->id);
     $session = $service->submitForReview($session->fresh());
@@ -255,7 +316,7 @@ it('supports a single-person main store stocktake without dual confirmation', fu
     expect($session->accountableUserId())->toBe($storekeeper->id);
 
     $item = $session->items()->first();
-    $service->recordCount($item, 'Main Floor', 100);
+    $service->recordCount($item, ['Shelf A' => 100]);
 
     // No confirmations required for a stocktake.
     $session = $service->submitForReview($session->fresh());

@@ -40,6 +40,16 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Kiosk/staff-PIN identity. Deliberately a completely separate
+        // session guard from 'web' — Filament's panels are configured to
+        // authenticate against 'web' only, so a staff_pin session structurally
+        // cannot open any Filament panel route, not just by convention but
+        // because Filament never even looks at this guard.
+        'staff_pin' => [
+            'driver' => 'session',
+            'provider' => 'users',
+        ],
     ],
 
     /*

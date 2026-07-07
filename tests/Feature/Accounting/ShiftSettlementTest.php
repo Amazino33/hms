@@ -94,6 +94,30 @@ it('creates a shortfall debt when confirmed cash is below expected', function ()
     expect((float) $shift->surplus_amount)->toBe(0.0);
 });
 
+it('refuses to settle the same shift twice, closing the double-charge race', function () {
+    $shift = Shift::create(['user_id' => $this->waiter->id, 'started_at' => now(), 'status' => 'pending_supervisor']);
+    $order = Order::create([
+        'order_number' => 'ORD-TWICE-' . uniqid(),
+        'shift_id' => $shift->id, 'user_id' => $this->waiter->id,
+        'status' => 'paid', 'total_amount' => 5000, 'amount_paid' => 5000, 'paid_cash' => 5000,
+    ]);
+    \App\Models\OrderPayment::create([
+        'order_id' => $order->id, 'user_id' => $this->waiter->id, 'shift_id' => $shift->id,
+        'amount' => 5000, 'method' => 'cash', 'paid_at' => now(),
+    ]);
+
+    $debt = $this->service->applyShiftSettlement($shift, $this->supervisor, 4500.0, 0);
+    expect($debt)->not->toBeNull();
+
+    // Simulates a double-click / two supervisors reviewing the same shift —
+    // the second call must be rejected, not create a second StaffDebt for
+    // the same real shortfall.
+    expect(fn () => $this->service->applyShiftSettlement($shift->fresh(), $this->supervisor, 4500.0, 0))
+        ->toThrow(Exception::class);
+
+    expect(\App\Models\StaffDebt::where('shift_id', $shift->id)->count())->toBe(1);
+});
+
 it('does not create a debt when confirmed cash matches expected exactly', function () {
     $shift = Shift::create(['user_id' => $this->waiter->id, 'started_at' => now(), 'status' => 'pending_supervisor']);
     $order = Order::create([

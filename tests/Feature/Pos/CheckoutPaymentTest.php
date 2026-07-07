@@ -89,9 +89,9 @@ it('creates a partial order when a guest pays less than the total', function () 
     expect((float) $order->amount_paid)->toBe(400.0);
 });
 
-it('recalculates order total_amount after an item-level return', function () {
+it('recalculates order total_amount only once the on-duty bartender confirms the return', function () {
     $user = User::factory()->create();
-    Shift::create(['user_id' => $user->id, 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => $user->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
 
     ['beer' => $beer] = seedPosFixtures();
 
@@ -124,6 +124,16 @@ it('recalculates order total_amount after an item-level return', function () {
         ->set('returnQuantity', 1)
         ->set('returnReason', 'Guest changed mind')
         ->call('submitReturnRequest');
+
+    // Requesting the return does not touch the bill — only a confirmed
+    // on-duty bartender can do that (see ConfirmedReturnsTest).
+    $order->refresh();
+    expect((float) $order->total_amount)->toBe(2000.0);
+
+    $ticket = Order::where('is_return', true)->latest('id')->first();
+    $bartender = User::factory()->create();
+    Shift::create(['user_id' => $bartender->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
+    (new \App\Services\ReturnConfirmationService())->confirm($ticket, $bartender);
 
     $order->refresh();
 
