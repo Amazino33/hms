@@ -9,20 +9,18 @@ use Illuminate\Support\Facades\Auth;
 new class extends Component {
     public ?int $selectedTableId = null;
     public string $selectedTableName = '';
-    public string $pin = '';
     public ?string $errorMessage = null;
     public ?int $lockedUntilTimestamp = null;
 
     public function getTablesProperty()
     {
-        return Table::orderBy('name')->get();
+        return Table::with('latestActiveOrder.user:id,name')->orderBy('name')->get();
     }
 
     public function selectTable(int $tableId, string $tableName): void
     {
         $this->selectedTableId = $tableId;
         $this->selectedTableName = $tableName;
-        $this->pin = '';
         $this->errorMessage = null;
         $this->lockedUntilTimestamp = null;
     }
@@ -30,26 +28,7 @@ new class extends Component {
     public function closePinPad(): void
     {
         $this->selectedTableId = null;
-        $this->pin = '';
         $this->errorMessage = null;
-    }
-
-    public function pressDigit(string $digit): void
-    {
-        if (strlen($this->pin) >= PinAuthService::PIN_LENGTH) {
-            return;
-        }
-
-        $this->pin .= $digit;
-
-        if (strlen($this->pin) === PinAuthService::PIN_LENGTH) {
-            $this->submitPin();
-        }
-    }
-
-    public function backspace(): void
-    {
-        $this->pin = substr($this->pin, 0, -1);
     }
 
     /**
@@ -73,22 +52,30 @@ new class extends Component {
         return 'unscoped:' . request()->ip();
     }
 
-    public function submitPin(): void
+    /**
+     * The PIN itself is a plain method argument, not a synced public
+     * property — digit taps are handled entirely client-side in Alpine
+     * (see the template) and this is called exactly once, with the
+     * complete 4-digit PIN, when the 4th digit lands. Previously every
+     * single digit tap round-tripped to the server via pressDigit(),
+     * making the pad feel sluggish on a real network — now there's
+     * exactly one server call per login attempt, matching the same
+     * client-first pattern used for the POS cart.
+     */
+    public function submitPin(string $pin): void
     {
         $service = new PinAuthService();
 
         try {
-            $user = $service->attempt($this->pin, $this->throttleKey());
+            $user = $service->attempt($pin, $this->throttleKey());
         } catch (PinLockedException $e) {
             $this->lockedUntilTimestamp = $e->lockedUntilTimestamp;
             $this->errorMessage = $e->getMessage();
-            $this->pin = '';
             return;
         }
 
         if (!$user) {
             $this->errorMessage = 'Incorrect PIN.';
-            $this->pin = '';
             return;
         }
 
@@ -99,7 +86,6 @@ new class extends Component {
         $trustedUserId = session('trusted_device_user_id');
         if ($trustedUserId && (int) $trustedUserId !== $user->id) {
             $this->errorMessage = 'This PIN does not belong to this device\'s owner.';
-            $this->pin = '';
             return;
         }
 
@@ -120,20 +106,42 @@ new class extends Component {
                     {{ $table->status === 'available' ? 'bg-green-600 text-white' : 'bg-amber-600 text-white' }}">
                 {{ $table->name }}
                 <span class="text-xs font-normal mt-1">{{ ucfirst($table->status) }}</span>
+                @if ($table->latestActiveOrder?->user)
+                    <span class="text-[10px] font-normal opacity-80 mt-0.5">{{ $table->latestActiveOrder->user->name }}</span>
+                @endif
             </button>
         @endforeach
     </div>
 
     @if ($selectedTableId)
-        <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" wire:click.self="closePinPad">
+        <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" wire:click.self="closePinPad"
+            x-data="{
+                pin: '',
+                submitting: false,
+                digit(d) {
+                    if (this.submitting || this.pin.length >= 4) return
+                    this.pin += d
+                    if (this.pin.length === 4) {
+                        this.submitting = true
+                        $wire.submitPin(this.pin).then(() => {
+                            this.pin = ''
+                            this.submitting = false
+                        })
+                    }
+                },
+                backspace() {
+                    if (this.submitting) return
+                    this.pin = this.pin.slice(0, -1)
+                },
+            }">
             <div class="bg-white rounded-2xl p-6 w-full max-w-xs">
                 <h2 class="text-lg font-bold text-gray-900 mb-1">{{ $selectedTableName }}</h2>
                 <p class="text-sm text-gray-500 mb-4">Enter your 4-digit PIN</p>
 
                 <div class="flex justify-center gap-2 mb-4">
-                    @for ($i = 0; $i < 4; $i++)
-                        <div class="w-4 h-4 rounded-full border-2 border-gray-400 {{ $i < strlen($pin) ? 'bg-gray-800' : '' }}"></div>
-                    @endfor
+                    <template x-for="i in 4" :key="i">
+                        <div class="w-4 h-4 rounded-full border-2 border-gray-400" :class="i <= pin.length ? 'bg-gray-800' : ''"></div>
+                    </template>
                 </div>
 
                 @if ($errorMessage)
@@ -142,11 +150,11 @@ new class extends Component {
 
                 <div class="grid grid-cols-3 gap-3">
                     @foreach (['1','2','3','4','5','6','7','8','9'] as $digit)
-                        <button wire:click="pressDigit('{{ $digit }}')" class="py-4 bg-gray-100 rounded-lg text-xl font-bold">{{ $digit }}</button>
+                        <button @click="digit('{{ $digit }}')" class="py-4 bg-gray-100 rounded-lg text-xl font-bold">{{ $digit }}</button>
                     @endforeach
                     <button wire:click="closePinPad" class="py-4 bg-gray-200 rounded-lg text-sm font-bold">Cancel</button>
-                    <button wire:click="pressDigit('0')" class="py-4 bg-gray-100 rounded-lg text-xl font-bold">0</button>
-                    <button wire:click="backspace" class="py-4 bg-gray-200 rounded-lg text-sm font-bold">&larr;</button>
+                    <button @click="digit('0')" class="py-4 bg-gray-100 rounded-lg text-xl font-bold">0</button>
+                    <button @click="backspace" class="py-4 bg-gray-200 rounded-lg text-sm font-bold">&larr;</button>
                 </div>
             </div>
         </div>

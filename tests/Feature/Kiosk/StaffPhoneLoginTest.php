@@ -94,10 +94,7 @@ it('unlocks with the trusted device owner\'s own PIN and lands on the staff orde
 
     Livewire::test('kiosk-idle-screen')
         ->call('selectTable', $table->id, $table->name)
-        ->call('pressDigit', '5')
-        ->call('pressDigit', '7')
-        ->call('pressDigit', '3')
-        ->call('pressDigit', '9')
+        ->call('submitPin', '5739')
         ->assertRedirect(route('staff.order', ['table' => $table->id]));
 
     expect(Auth::guard('staff_pin')->id())->toBe($user->id);
@@ -117,10 +114,7 @@ it('refuses a correct PIN belonging to someone other than this trusted device\'s
 
     Livewire::test('kiosk-idle-screen')
         ->call('selectTable', $table->id, $table->name)
-        ->call('pressDigit', '5')
-        ->call('pressDigit', '7')
-        ->call('pressDigit', '3')
-        ->call('pressDigit', '9')
+        ->call('submitPin', '5739')
         ->assertSet('errorMessage', 'This PIN does not belong to this device\'s owner.');
 
     expect(Auth::guard('staff_pin')->check())->toBeFalse();

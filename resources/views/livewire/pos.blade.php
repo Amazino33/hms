@@ -1033,6 +1033,9 @@ new class extends Component {
         class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3">
+                @if(session('kiosk_device_id') || session('trusted_device_user_id'))
+                    <span class="text-sm font-bold text-gray-800 dark:text-gray-100">Hi {{ auth()->user()->name }}</span>
+                @endif
                 @if(auth()->user()->currentShift())
                     <div class="flex items-center space-x-2">
                         <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>

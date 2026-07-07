@@ -94,6 +94,30 @@ it('still resolves auth()->id() to the PIN-identified waiter during checkout eve
     expect($order->user_id)->toBe($waiter->id);
 });
 
+it('greets the PIN-identified waiter by name on the kiosk order page', function () {
+    $waiter = User::factory()->create(['name' => 'Sifon']);
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+    $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);
+
+    Auth::guard('staff_pin')->login($waiter);
+    Auth::shouldUse('staff_pin');
+    session(['kiosk_device_id' => 1]);
+
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->assertSee('Hi Sifon');
+});
+
+it('does not show the kiosk greeting on the regular admin sales page', function () {
+    $waiter = User::factory()->create(['name' => 'Sifon']);
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+    $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);
+
+    $this->actingAs($waiter);
+
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->assertDontSee('Hi Sifon');
+});
+
 it('does not stamp a kiosk_device_id when there is no kiosk device in the request context', function () {
     $waiter = User::factory()->create();
     Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);

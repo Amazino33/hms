@@ -41,14 +41,41 @@ it('logs the waiter in via staff_pin and redirects to the order screen on a corr
 
     Livewire::test('kiosk-idle-screen')
         ->call('selectTable', $table->id, $table->name)
-        ->call('pressDigit', '5')
-        ->call('pressDigit', '7')
-        ->call('pressDigit', '3')
-        ->call('pressDigit', '9')
+        ->call('submitPin', '5739')
         ->assertRedirect(route('kiosk.order', ['table' => $table->id]));
 
     expect(Auth::guard('staff_pin')->check())->toBeTrue();
     expect(Auth::guard('staff_pin')->id())->toBe($waiter->id);
+});
+
+it('shows the name of whoever is handling an occupied table on the table grid', function () {
+    ['token' => $token] = registerKioskAndGetToken();
+    $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    $waiter = User::factory()->create(['name' => 'Sifon']);
+
+    \App\Models\Order::create([
+        'order_number' => 'ORD-1',
+        'table_id' => $table->id,
+        'user_id' => $waiter->id,
+        'status' => 'pending',
+        'destination' => 'kitchen',
+        'total_amount' => 0,
+    ]);
+
+    $this->withUnencryptedCookie(EnsureValidKioskDevice::COOKIE_NAME, $token)
+        ->get('/kiosk')
+        ->assertStatus(200)
+        ->assertSee('Sifon');
+});
+
+it('does not show a name on an available table with no active order', function () {
+    ['token' => $token] = registerKioskAndGetToken();
+    TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);
+
+    $this->withUnencryptedCookie(EnsureValidKioskDevice::COOKIE_NAME, $token)
+        ->get('/kiosk')
+        ->assertStatus(200)
+        ->assertDontSee('Sifon');
 });
 
 it('shows an error and does not log in on a wrong pin', function () {
@@ -61,10 +88,7 @@ it('shows an error and does not log in on a wrong pin', function () {
 
     Livewire::test('kiosk-idle-screen')
         ->call('selectTable', $table->id, $table->name)
-        ->call('pressDigit', '1')
-        ->call('pressDigit', '1')
-        ->call('pressDigit', '1')
-        ->call('pressDigit', '1')
+        ->call('submitPin', '1111')
         ->assertSet('errorMessage', 'Incorrect PIN.');
 
     expect(Auth::guard('staff_pin')->check())->toBeFalse();
