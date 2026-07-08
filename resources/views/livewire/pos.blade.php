@@ -60,6 +60,47 @@ new class extends Component {
         ])->get();
     }
 
+    /**
+     * Orders for the selected table that the kitchen/bar has finished
+     * preparing but nobody has yet confirmed were actually carried to the
+     * table. Mark Paid (and the full payment modal) refuse to run at all
+     * while any of these exist — this is the thing to fix when payment
+     * "does nothing": confirm these first.
+     */
+    public function getReadyOrdersProperty()
+    {
+        if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
+            return collect();
+        }
+
+        return Order::where('table_id', $this->selectedTableId)
+            ->where('status', 'ready')
+            ->get();
+    }
+
+    public function confirmServed(int $orderId): void
+    {
+        $order = Order::find($orderId);
+
+        if (!$order) {
+            Notification::make()->title('Order not found')->danger()->send();
+            return;
+        }
+
+        try {
+            (new \App\Services\ServedConfirmationService())->confirm($order, auth()->user());
+        } catch (\Exception $e) {
+            Notification::make()->title('Could Not Confirm')->body($e->getMessage())->danger()->send();
+            return;
+        }
+
+        Notification::make()->title('Order marked as served')->success()->send();
+
+        // Refresh existingItems/existingTotal so the cart panel reflects
+        // the order's new status immediately.
+        $this->updatedSelectedTableId($this->selectedTableId);
+    }
+
     public function clearSearch()
     {
         $this->search = '';
@@ -1787,6 +1828,20 @@ new class extends Component {
                             <p
                                 class="text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 border border-gray-200 dark:border-gray-700">
                                 Start shift to add items</p>
+                        </div>
+                    @endif
+
+                    @if($this->readyOrders->isNotEmpty())
+                        <div class="rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-900/20 p-3 mb-2">
+                            <div class="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-2">
+                                Ready — confirm it's at the table before you can be paid
+                            </div>
+                            @foreach($this->readyOrders as $readyOrder)
+                                <button wire:click="confirmServed({{ $readyOrder->id }})"
+                                    class="w-full h-14 mb-2 last:mb-0 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold touch-manipulation">
+                                    Confirm Served — {{ ucfirst($readyOrder->destination) }} Order
+                                </button>
+                            @endforeach
                         </div>
                     @endif
 

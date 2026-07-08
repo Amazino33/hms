@@ -128,6 +128,92 @@ it('shows the Cash/POS/Transfer buttons immediately for an outstanding order, no
         ->assertDontSeeHtml('x-show="showMarkPaidMethods"');
 });
 
+/**
+ * Regression coverage for a real gap: the only place that could move an
+ * order from 'ready' to 'served' — required before Mark Paid or Pay will
+ * do anything at all — was an admin-only Filament page (TableDetail),
+ * completely unreachable from the kiosk. A waiter using only the kiosk
+ * had no way to ever get an order into a payable state, so payment
+ * looked broken even though nothing was actually failing — it was
+ * correctly blocked by a check nobody had a way to satisfy.
+ */
+it('shows a Confirm Served banner on the kiosk for a ready order, and confirming it unlocks Mark Paid', function () {
+    $admin = User::factory()->create();
+    $deviceService = new KioskDeviceService();
+    ['code' => $code] = $deviceService->generateRegistrationCode($admin);
+    ['device' => $device] = $deviceService->registerDevice($code, 'Bar Kiosk 1');
+
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
+
+    ['beer' => $beer, 'table' => $table] = seedRedesignFixtures();
+
+    $order = \App\Models\Order::create([
+        'order_number' => 'ORD-READY-1',
+        'table_id' => $table->id,
+        'user_id' => $waiter->id,
+        'status' => 'ready',
+        'destination' => 'bar',
+        'total_amount' => 500,
+    ]);
+    $order->items()->create([
+        'product_id' => $beer->id,
+        'product_name' => $beer->name,
+        'item_type' => 'product',
+        'quantity' => 1,
+        'unit_price' => 500,
+        'subtotal' => 500,
+    ]);
+
+    Auth::guard('staff_pin')->login($waiter);
+    Auth::shouldUse('staff_pin');
+    session(['kiosk_device_id' => $device->id]);
+
+    $component = Livewire::test('pos', ['table_id' => $table->id])
+        ->assertSee('Confirm Served')
+        ->assertSee('Bar Order');
+
+    // Before confirmation: Mark Paid must not be reachable at all (the
+    // footer shows "Outstanding" only once existingCount > 0 — a ready
+    // order still counts as an existing item, so the button is visible,
+    // but the actual server-side action must still refuse to pay it).
+    $component->call('markPaidFast', 'cash');
+    expect($order->fresh()->status)->toBe('ready');
+    expect(\App\Models\OrderPayment::count())->toBe(0);
+
+    $component->call('confirmServed', $order->id)
+        ->assertDontSee('Confirm Served');
+
+    expect($order->fresh()->status)->toBe('served');
+    expect($order->fresh()->served_at)->not->toBeNull();
+
+    $component->call('markPaidFast', 'cash');
+
+    expect($order->fresh()->status)->toBe('paid');
+    expect(\App\Models\OrderPayment::count())->toBe(1);
+    expect($table->fresh()->status)->toBe('available');
+});
+
+it('does not show the Confirm Served banner when nothing is ready', function () {
+    $admin = User::factory()->create();
+    $deviceService = new KioskDeviceService();
+    ['code' => $code] = $deviceService->generateRegistrationCode($admin);
+    ['device' => $device] = $deviceService->registerDevice($code, 'Bar Kiosk 1');
+
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    ['table' => $table] = seedRedesignFixtures();
+
+    Auth::guard('staff_pin')->login($waiter);
+    Auth::shouldUse('staff_pin');
+    session(['kiosk_device_id' => $device->id]);
+
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->assertDontSee('Confirm Served');
+});
+
 it('groups the kiosk table picker by table location', function () {
     $admin = User::factory()->create();
     $deviceService = new KioskDeviceService();

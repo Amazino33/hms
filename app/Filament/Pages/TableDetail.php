@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Table;
 use App\Models\Order;
 use App\Services\PermissionService;
+use App\Services\ServedConfirmationService;
 use Filament\Pages\Page;
 use Illuminate\Http\Request;
 use BackedEnum;
@@ -88,31 +89,16 @@ class TableDetail extends Page
             return;
         }
 
-        $isOwner = $order->user_id === auth()->id();
-        $isSupervisor = auth()->user()->hasRole(['manager', 'admin', 'super_admin']);
-
-        if (!$isOwner && !$isSupervisor) {
+        try {
+            (new ServedConfirmationService())->confirm($order, auth()->user());
+        } catch (\Exception $e) {
             \Filament\Notifications\Notification::make()
-                ->title('Not your order')
-                ->body('Only the waiter who took this order (or a supervisor) can confirm it as served.')
+                ->title('Could Not Confirm')
+                ->body($e->getMessage())
                 ->danger()
                 ->send();
             return;
         }
-
-        if ($order->status !== 'ready') {
-            \Filament\Notifications\Notification::make()
-                ->title('Order is not ready yet')
-                ->body('This order must be marked ready by the kitchen/bar before it can be confirmed served.')
-                ->warning()
-                ->send();
-            return;
-        }
-
-        $order->update([
-            'status' => 'served',
-            'served_at' => now(),
-        ]);
 
         \Filament\Notifications\Notification::make()
             ->title('Order marked as served')
