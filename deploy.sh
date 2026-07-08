@@ -83,6 +83,11 @@ php artisan config:clear
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
+# The app-level cache (e.g. each user's 1-hour-cached sidebar HTML) is a
+# separate store from the three above and none of them touch it — without
+# this, a Blade fix to a cached partial silently doesn't reach anyone with
+# an existing cache entry until it happens to expire on its own.
+php artisan cache:clear
 php artisan queue:restart
 
 echo ""
