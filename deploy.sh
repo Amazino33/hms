@@ -90,6 +90,19 @@ echo "==> [8/8] Disabling maintenance mode..."
 php artisan up
 
 echo ""
+echo "==> Clearing PHP-FPM's OPcache..."
+# This SSH session's `php` CLI has its own OPcache instance, separate from
+# the one PHP-FPM uses to actually serve web requests — config:cache/
+# route:cache/view:cache above only refresh what's on disk, they never
+# touch PHP-FPM's already-compiled bytecode. Without this, a deploy can
+# update every file and still silently keep serving old behavior on the
+# live site until PHP-FPM happens to restart on its own. Hitting this
+# route runs opcache_reset() from inside an actual web-server request.
+APP_URL_VALUE=$(php artisan tinker --execute="echo config('app.url');" 2>/dev/null | tail -1)
+OPCACHE_TOKEN=$(php artisan tinker --execute="echo hash('sha256', config('app.key'));" 2>/dev/null | tail -1)
+curl -s "${APP_URL_VALUE}/__ops/reset-opcache/${OPCACHE_TOKEN}" || echo "    (could not reach the reset endpoint — check manually)"
+
+echo ""
 echo "=================================================="
 echo " Deploy complete — $(date)"
 echo " Backup: $BACKUP_FILE"

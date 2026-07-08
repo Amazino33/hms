@@ -39,6 +39,29 @@ Route::get('/offline.html', function () {
     ]);
 })->name('pwa.offline');
 
+/**
+ * deploy.sh runs over SSH, which has its own separate OPcache instance
+ * from the one PHP-FPM uses to actually serve web requests — restarting
+ * PHP-FPM (which most shared hosting doesn't give SSH access to) is the
+ * usual fix, but this achieves the same thing by running opcache_reset()
+ * from *inside* an actual web-server-served request instead. Token is
+ * derived from APP_KEY so this works with zero extra production config,
+ * and only opcache_reset() runs — nothing sensitive is exposed.
+ */
+Route::get('/__ops/reset-opcache/{token}', function (string $token) {
+    if (!hash_equals(hash('sha256', config('app.key')), $token)) {
+        abort(404);
+    }
+
+    if (function_exists('opcache_reset')) {
+        opcache_reset();
+
+        return response('opcache reset', 200);
+    }
+
+    return response('opcache not enabled', 200);
+})->withoutMiddleware(['auth', 'web']);
+
 // Debug/diagnostic routes — never exposed outside local development.
 if (app()->environment('local')) {
     Route::get('/cron-test', function () {
