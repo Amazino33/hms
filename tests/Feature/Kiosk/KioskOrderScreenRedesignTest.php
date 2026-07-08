@@ -49,7 +49,7 @@ it('renders the touch-first kiosk shell, including Place Order, for an actual ki
     Livewire::test('pos', ['table_id' => $table->id])
         ->assertSee('Place Order')
         ->assertSee('Select a Table')
-        ->assertSee('Mark Paid');
+        ->assertSee('Outstanding');
 });
 
 it('keeps the original layout for the admin Sales page, with no kiosk-only markup', function () {
@@ -79,6 +79,53 @@ it('keeps the original mobile/desktop layout for staff-phone, which is not a kio
         ->assertDontSee('Place Order')
         ->assertDontSee('Select a Table')
         ->assertSee('Order');
+});
+
+/**
+ * Regression test: a previous version of this footer required tapping
+ * "Mark Paid" once to reveal the Cash/POS/Transfer buttons underneath it
+ * (an x-show toggle), which read as "the button does nothing" when that
+ * reveal step wasn't noticed. The methods must be immediately present in
+ * the rendered markup, not gated behind a client-side toggle a tap has to
+ * discover first.
+ */
+it('shows the Cash/POS/Transfer buttons immediately for an outstanding order, no reveal tap required', function () {
+    $admin = User::factory()->create();
+    $deviceService = new KioskDeviceService();
+    ['code' => $code] = $deviceService->generateRegistrationCode($admin);
+    ['device' => $device] = $deviceService->registerDevice($code, 'Bar Kiosk 1');
+
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    ['beer' => $beer, 'table' => $table] = seedRedesignFixtures();
+
+    \App\Models\Order::create([
+        'order_number' => 'ORD-OUTSTANDING',
+        'table_id' => $table->id,
+        'user_id' => $waiter->id,
+        'status' => 'served',
+        'destination' => 'bar',
+        'total_amount' => 500,
+    ])->items()->create([
+        'product_id' => $beer->id,
+        'product_name' => $beer->name,
+        'item_type' => 'product',
+        'quantity' => 1,
+        'unit_price' => 500,
+        'subtotal' => 500,
+    ]);
+
+    Auth::guard('staff_pin')->login($waiter);
+    Auth::shouldUse('staff_pin');
+    session(['kiosk_device_id' => $device->id]);
+
+    Livewire::test('pos', ['table_id' => $table->id])
+        ->assertSee('Outstanding')
+        ->assertSeeHtml('wire:click="markPaidFast(\'cash\')"')
+        ->assertSeeHtml('wire:click="markPaidFast(\'pos\')"')
+        ->assertSeeHtml('wire:click="markPaidFast(\'transfer\')"')
+        ->assertDontSeeHtml('x-show="showMarkPaidMethods"');
 });
 
 it('groups the kiosk table picker by table location', function () {

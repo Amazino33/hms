@@ -1852,8 +1852,7 @@ new class extends Component {
                         class="text-amber-400 font-bold text-sm shrink-0 h-10 px-3 touch-manipulation">Undo</button>
                 </div>
 
-                <div class="shrink-0 p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700"
-                    x-data="{ showMarkPaidMethods: false }" x-effect="if (cartCount > 0 || existingCount === 0) showMarkPaidMethods = false">
+                <div class="shrink-0 p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
 
                     {{-- STATE 1: unsent new items — Place Order is the only path forward --}}
                     <template x-if="cartCount > 0">
@@ -1874,25 +1873,31 @@ new class extends Component {
                         </div>
                     </template>
 
-                    {{-- STATE 2: nothing new, but existing (already-sent) items are unpaid --}}
+                    {{-- STATE 2: nothing new, but existing (already-sent) items are unpaid.
+                         One tap, no reveal step — a previous version required tapping
+                         "Mark Paid" first to reveal Cash/POS/Transfer underneath it,
+                         which read as "the button does nothing" when the reveal wasn't
+                         noticed. Show the outstanding total and the three methods
+                         together, always. --}}
                     <template x-if="cartCount === 0 && existingCount > 0">
                         <div>
-                            <button @click="showMarkPaidMethods = !showMarkPaidMethods"
-                                class="w-full h-16 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xl font-semibold touch-manipulation transition-colors">
-                                <span x-text="'Mark Paid · ₦' + existingTotal.toLocaleString()"></span>
-                            </button>
-                            <div class="grid grid-cols-3 gap-2 mt-2" x-show="showMarkPaidMethods" x-transition>
+                            <div class="text-center mb-2">
+                                <span class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase">Outstanding</span>
+                                <div class="text-3xl font-bold tabular-nums text-blue-600 dark:text-blue-400"
+                                    x-text="'₦' + existingTotal.toLocaleString()"></div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
                                 <button wire:click="markPaidFast('cash')" wire:loading.attr="disabled"
                                     wire:target="markPaidFast"
-                                    class="h-14 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                    class="h-16 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold touch-manipulation">
                                     Cash</button>
                                 <button wire:click="markPaidFast('pos')" wire:loading.attr="disabled"
                                     wire:target="markPaidFast"
-                                    class="h-14 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                    class="h-16 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold touch-manipulation">
                                     POS</button>
                                 <button wire:click="markPaidFast('transfer')" wire:loading.attr="disabled"
                                     wire:target="markPaidFast"
-                                    class="h-14 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
+                                    class="h-16 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold touch-manipulation">
                                     Transfer</button>
                             </div>
                             <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
