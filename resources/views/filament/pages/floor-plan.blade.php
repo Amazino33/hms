@@ -1,46 +1,73 @@
 <x-filament-panels::page>
     @script
     <script>
+        // Built via DOM APIs rather than win.document.write() of a full
+        // doc-type/head/body markup string \u2014 that string used to contain
+        // its own literal closing body and html tags, and something in
+        // the response pipeline (Livewire's own script/asset injection
+        // scans rendered HTML for the real page's closing body tag to
+        // insert into) matched THAT occurrence instead, splicing a script
+        // tag into the middle of this one and breaking it \u2014 this page's
+        // wire:poll.1s made it especially exposed. Avoiding that literal
+        // tag text entirely removes the hazard regardless of the exact
+        // injection mechanism.
         window.printPOSBill = function (d) {
             const win = window.open('', '_blank', 'width=440,height=680,scrollbars=yes,resizable=yes');
             if (!win) { alert('Please allow pop-ups to print the bill.'); return; }
+
             const rows = (d.items || []).map(i =>
                 `<tr><td style="padding:3px 6px;">${i.name}</td><td style="text-align:center;padding:3px 6px;">${i.quantity}</td><td style="text-align:right;padding:3px 6px;">&#8358;${Number(i.price * i.quantity).toLocaleString()}</td></tr>`
             ).join('');
-            win.document.write(
-                '<!DOCTYPE html><html><head><title>Unpaid Bill \u2013 ' + d.tableName + '</title>' +
-                '<style>' +
-                '* { margin:0; padding:0; box-sizing:border-box; }' +
-                "body { font-family: 'Courier New', monospace; font-size:13px; width:80mm; padding:10px; color:#000; }" +
-                'h1 { text-align:center; font-size:16px; letter-spacing:2px; margin-bottom:2px; }' +
-                '.sub { text-align:center; font-size:11px; margin-bottom:4px; }' +
-                '.dashed { border-top:1px dashed #000; margin:6px 0; }' +
-                '.meta { font-size:12px; margin-bottom:2px; }' +
-                'table { width:100%; border-collapse:collapse; }' +
-                'th { text-align:left; font-size:11px; border-bottom:1px solid #000; padding:2px 6px; }' +
-                '.total-row { font-size:15px; font-weight:bold; text-align:right; margin-top:8px; }' +
-                '.footer { text-align:center; font-size:10px; margin-top:10px; color:#555; }' +
-                '@media print { body { width:auto; } button { display:none; } }' +
-                '</style></head><body>' +
-                (d.company && d.company.logo ? '<div style="text-align:center;margin-bottom:6px;"><img src="' + d.company.logo + '" style="max-height:60px;max-width:140px;object-fit:contain;" /></div>' : '') +
-                '<h1>' + (d.company && d.company.name ? d.company.name : 'HMS RECEIPT') + '</h1>' +
-                (d.company && d.company.address ? '<div class="sub">' + d.company.address + '</div>' : '') +
-                (d.company && d.company.phone ? '<div class="sub">' + d.company.phone + '</div>' : '') +
-                '<div class="sub">*** UNPAID BILL ***</div>' +
-                '<div class="dashed"></div>' +
-                '<div class="meta">Table : <strong>' + d.tableName + '</strong></div>' +
-                '<div class="meta">Date  : ' + d.date + '</div>' +
-                '<div class="meta">Staff : ' + d.cashier + '</div>' +
-                '<div class="dashed"></div>' +
-                '<table><thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Amount</th></tr></thead>' +
-                '<tbody>' + rows + '</tbody></table>' +
-                '<div class="dashed"></div>' +
-                '<div class="total-row">TOTAL: &#8358;' + Number(d.total).toLocaleString() + '</div>' +
-                '<div class="dashed"></div>' +
-                '<div class="footer">Thank you for dining with us!<br>This is NOT a payment receipt.</div>' +
-                '</body></html>'
-            );
-            win.document.close();
+
+            win.document.title = 'Unpaid Bill \u2013 ' + d.tableName;
+
+            const style = win.document.createElement('style');
+            style.textContent = `
+                * { margin:0; padding:0; box-sizing:border-box; }
+                body { font-family: 'Courier New', monospace; font-size:13px; width:80mm; padding:10px; color:#000; }
+                h1 { text-align:center; font-size:16px; letter-spacing:2px; margin-bottom:2px; }
+                .sub { text-align:center; font-size:11px; margin-bottom:4px; }
+                .dashed { border-top:1px dashed #000; margin:6px 0; }
+                .meta { font-size:12px; margin-bottom:2px; }
+                table { width:100%; border-collapse:collapse; }
+                th { text-align:left; font-size:11px; border-bottom:1px solid #000; padding:2px 6px; }
+                .total-row { font-size:15px; font-weight:bold; text-align:right; margin-top:8px; }
+                .footer { text-align:center; font-size:10px; margin-top:10px; color:#555; }
+                @media print {
+                    body { width:auto; }
+                    button { display:none; }
+                }
+            `;
+            win.document.head.appendChild(style);
+
+            const logoHtml = (d.company && d.company.logo)
+                ? `<div style="text-align:center;margin-bottom:6px;"><img src="${d.company.logo}" style="max-height:60px;max-width:140px;object-fit:contain;" /></div>`
+                : '';
+            const addressHtml = (d.company && d.company.address) ? `<div class="sub">${d.company.address}</div>` : '';
+            const phoneHtml = (d.company && d.company.phone) ? `<div class="sub">${d.company.phone}</div>` : '';
+            const companyName = (d.company && d.company.name) ? d.company.name : 'HMS RECEIPT';
+
+            win.document.body.innerHTML = `
+                ${logoHtml}
+                <h1>${companyName}</h1>
+                ${addressHtml}
+                ${phoneHtml}
+                <div class="sub">*** UNPAID BILL ***</div>
+                <div class="dashed"></div>
+                <div class="meta">Table : <strong>${d.tableName}</strong></div>
+                <div class="meta">Date  : ${d.date}</div>
+                <div class="meta">Staff : ${d.cashier}</div>
+                <div class="dashed"></div>
+                <table>
+                    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Amount</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div class="dashed"></div>
+                <div class="total-row">TOTAL: &#8358;${Number(d.total).toLocaleString()}</div>
+                <div class="dashed"></div>
+                <div class="footer">Thank you for dining with us!<br>This is NOT a payment receipt.</div>
+            `;
+
             win.focus();
             setTimeout(() => { win.print(); }, 600);
         };
