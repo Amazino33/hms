@@ -135,8 +135,14 @@ new class extends Component {
 
         Auth::guard('staff_pin')->login($user);
 
+        // navigate: true swaps in the order screen over AJAX instead of a
+        // full browser reload — the CSS/JS already loaded on this page
+        // stays put, so the transition after a correct PIN feels close to
+        // instant instead of a fresh page load. Safe now that pos.blade.php's
+        // own boot() re-asserts Auth::shouldUse('staff_pin') on every
+        // request rather than relying on this redirect's middleware pass.
         $routeName = session('kiosk_device_id') ? 'kiosk.order' : 'staff.order';
-        $this->redirect(route($routeName, ['table' => $this->selectedTableId]), navigate: false);
+        $this->redirect(route($routeName, ['table' => $this->selectedTableId]), navigate: true);
     }
 }; ?>
 
@@ -182,8 +188,10 @@ new class extends Component {
             x-data="{
                 pin: '',
                 submitting: false,
+                pressed: null,
                 digit(d) {
                     if (this.submitting || this.pin.length >= 4) return
+                    this.flash(d)
                     this.pin += d
                     if (this.pin.length === 4) {
                         this.submitting = true
@@ -195,16 +203,22 @@ new class extends Component {
                 },
                 backspace() {
                     if (this.submitting) return
+                    this.flash('back')
                     this.pin = this.pin.slice(0, -1)
                 },
+                flash(key) {
+                    this.pressed = key
+                    setTimeout(() => { if (this.pressed === key) this.pressed = null }, 150)
+                },
             }">
-            <div class="bg-white rounded-2xl p-6 w-full max-w-xs">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-xs relative overflow-hidden">
                 <h2 class="text-lg font-bold text-gray-900 mb-1">{{ $selectedTableName }}</h2>
                 <p class="text-sm text-gray-500 mb-4">Enter your 4-digit PIN</p>
 
-                <div class="flex justify-center gap-2 mb-4">
+                <div class="flex justify-center gap-3 mb-5">
                     <template x-for="i in 4" :key="i">
-                        <div class="w-4 h-4 rounded-full border-2 border-gray-400" :class="i <= pin.length ? 'bg-gray-800' : ''"></div>
+                        <div class="w-5 h-5 rounded-full border-2 border-gray-400 transition-all duration-150"
+                            :class="i <= pin.length ? 'bg-gray-900 border-gray-900 scale-110' : ''"></div>
                     </template>
                 </div>
 
@@ -214,11 +228,30 @@ new class extends Component {
 
                 <div class="grid grid-cols-3 gap-3">
                     @foreach (['1','2','3','4','5','6','7','8','9'] as $digit)
-                        <button @click="digit('{{ $digit }}')" class="py-4 bg-gray-100 rounded-lg text-xl font-bold">{{ $digit }}</button>
+                        <button @click="digit('{{ $digit }}')"
+                            :class="pressed === '{{ $digit }}' ? 'bg-amber-400 scale-95' : 'bg-gray-100'"
+                            class="py-4 rounded-lg text-xl font-bold transition-all duration-100 touch-manipulation">{{ $digit }}</button>
                     @endforeach
-                    <button wire:click="closePinPad" class="py-4 bg-gray-200 rounded-lg text-sm font-bold">Cancel</button>
-                    <button @click="digit('0')" class="py-4 bg-gray-100 rounded-lg text-xl font-bold">0</button>
-                    <button @click="backspace" class="py-4 bg-gray-200 rounded-lg text-sm font-bold">&larr;</button>
+                    <button wire:click="closePinPad"
+                        class="py-4 bg-gray-200 rounded-lg text-sm font-bold text-gray-600 touch-manipulation active:scale-95 transition-transform">Cancel</button>
+                    <button @click="digit('0')"
+                        :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100'"
+                        class="py-4 rounded-lg text-xl font-bold transition-all duration-100 touch-manipulation">0</button>
+                    <button @click="backspace"
+                        :class="pressed === 'back' ? 'bg-red-300 scale-95' : 'bg-red-100'"
+                        class="py-4 rounded-lg text-lg font-bold text-red-700 transition-all duration-100 touch-manipulation">&larr; Delete</button>
+                </div>
+
+                {{-- Fast, unmistakable "it registered, we're working on it" feedback
+                     the instant the 4th digit lands — covers the pad so there's no
+                     dead-looking screen while the login request is in flight. --}}
+                <div x-show="submitting" x-cloak x-transition.opacity.duration.100ms
+                    class="absolute inset-0 bg-white/95 flex flex-col items-center justify-center gap-3">
+                    <svg class="animate-spin h-10 w-10 text-amber-500" viewBox="0 0 24 24" fill="none">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    <p class="text-sm font-bold text-gray-600">Logging in…</p>
                 </div>
             </div>
         </div>

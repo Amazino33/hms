@@ -60,7 +60,10 @@ new class extends Component {
     {
         $routeName = session('kiosk_device_id') ? 'kiosk.home' : 'staff.home';
         Auth::guard('staff_pin')->logout();
-        $this->redirect(route($routeName), navigate: false);
+        // navigate: true — same fast in-app transition as the PIN login
+        // redirect; the idle screen needs no auth guard, so there's no
+        // persistence concern going the other way either.
+        $this->redirect(route($routeName), navigate: true);
     }
 }; ?>
 
