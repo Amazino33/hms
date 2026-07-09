@@ -58,6 +58,62 @@ it('never ships the expected quantity to the browser while a session is still in
     expect($rawSnapshotData)->not->toContain('adjusted_expected_quantity');
 });
 
+it('renders the one-product-at-a-time counting flow with the product name and number pad, no expected quantity anywhere in the safe item data', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Heineken', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $superAdmin = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']);
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole($superAdmin);
+    $incoming = User::factory()->create();
+    $incoming->assignRole($superAdmin);
+
+    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+
+    $component = Livewire::actingAs($outgoing)
+        ->test(CountSessionDetail::class, ['session_id' => $session->id])
+        ->assertSee('Enter')
+        ->assertSee('Previous')
+        ->assertSee('Next');
+
+    // safeCountItems() is what actually reaches the browser (via @js() in
+    // the Blade view, not a public property) — assert directly against its
+    // return value, the same blind-counting guarantee the snapshot-level
+    // test above protects, from the other angle.
+    $safeItems = $component->instance()->safeCountItems();
+    expect($safeItems)->toHaveCount(1);
+    expect($safeItems[0]['name'])->toBe('Heineken');
+    expect($safeItems[0])->not->toHaveKey('expected_quantity_at_open');
+    expect($safeItems[0])->not->toHaveKey('adjusted_expected_quantity');
+    expect(json_encode($safeItems))->not->toContain('expected');
+});
+
+it('returns no safe count items once a session has left the counting phase', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $superAdmin = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']);
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole($superAdmin);
+    $incoming = User::factory()->create();
+    $incoming->assignRole($superAdmin);
+
+    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $countService = new CountSessionService();
+    $countService->confirmOutgoing($session, $outgoing->id);
+    $countService->confirmIncoming($session, $incoming->id);
+    $countService->submitForReview($session->fresh());
+
+    $component = Livewire::actingAs($outgoing)
+        ->test(CountSessionDetail::class, ['session_id' => $session->id]);
+
+    expect($component->instance()->safeCountItems())->toBe([]);
+});
+
 it('walks a full bar handover session end to end through the detail page', function () {
     $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);

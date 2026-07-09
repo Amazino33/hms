@@ -88,6 +88,35 @@ class CountSessionDetail extends Page
         }
     }
 
+    /**
+     * The one-product-at-a-time counting flow needs its item list available
+     * client-side up front (so moving between products is instant, no
+     * round trip) — but only a safe subset: name and sub-location labels,
+     * plus whatever's already been counted (the counter's own persisted
+     * entries). Never expected_quantity_at_open / adjusted_expected_quantity
+     * — that's the same guarantee session() protects by staying
+     * #[Computed] instead of a public property; a plain PHP method call
+     * from the Blade view (not a public property) keeps this out of the
+     * wire:snapshot the same way.
+     *
+     * @return array<int, array{id: int, name: string, subLocations: array<int, string>, values: array<string, string>}>
+     */
+    public function safeCountItems(): array
+    {
+        if (!$this->session || $this->session->status !== 'counting') {
+            return [];
+        }
+
+        return $this->session->items->map(fn ($item) => [
+            'id' => $item->id,
+            'name' => $item->itemName(),
+            'subLocations' => $item->subCounts->pluck('sub_location')->all(),
+            'values' => $item->subCounts->pluck('quantity', 'sub_location')
+                ->map(fn ($q) => $q > 0 ? (string) $q : '')
+                ->all(),
+        ])->values()->all();
+    }
+
     public function getTitle(): string
     {
         return 'Count Session #' . ($this->session?->id ?? '');

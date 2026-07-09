@@ -32,52 +32,174 @@
         </div>
 
         @if($session->status === 'counting')
-            <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <table class="w-full text-sm">
-                    <thead class="bg-gray-50 dark:bg-gray-800">
-                        <tr>
-                            <th class="text-left px-4 py-2">Item</th>
-                            <th class="text-left px-4 py-2">Sub-location counts (live total)</th>
-                            <th class="text-left px-4 py-2"></th>
-                            <th class="text-left px-4 py-2">Total counted so far</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                        @foreach($session->items as $item)
-                            <tr wire:key="counting-row-{{ $item->id }}">
-                                <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ $item->itemName() }}</td>
-                                <td class="px-4 py-2">
-                                    <div class="flex gap-2" x-data="{
-                                        get total() {
-                                            return Object.values($wire.subLocationInputs[{{ $item->id }}] ?? {})
-                                                .reduce((sum, v) => sum + (parseFloat(v) || 0), 0)
-                                        }
-                                    }">
-                                        @foreach($item->subCounts as $sub)
-                                            <div class="flex flex-col items-center">
-                                                <label class="text-[10px] uppercase text-gray-500">{{ $sub->sub_location }}</label>
-                                                <input type="number" step="0.01" inputmode="decimal" placeholder="0"
-                                                    wire:model="subLocationInputs.{{ $item->id }}.{{ $sub->sub_location }}"
-                                                    class="border rounded px-2 py-1 w-16 text-xs dark:bg-gray-800 dark:border-gray-600">
-                                            </div>
-                                        @endforeach
-                                        <div class="flex flex-col items-center justify-end">
-                                            <span class="text-[10px] uppercase text-gray-500">Total</span>
-                                            <span class="font-mono font-bold text-sm" x-text="total"></span>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-4 py-2">
-                                    <button wire:click="recordCount({{ $item->id }})" class="px-2 py-1 bg-primary-500 text-white rounded text-xs font-bold">Save</button>
-                                </td>
-                                <td class="px-4 py-2 font-mono font-bold">{{ $item->counted_quantity ?? '—' }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+            <div x-data="countFlow(@js($this->safeCountItems()))" x-init="init()" class="max-w-md mx-auto">
+                <!-- Progress -->
+                <div class="flex items-center justify-between mb-3 text-sm">
+                    <span class="font-bold text-gray-500 dark:text-gray-400" x-text="progress"></span>
+                    <span class="text-gray-400" x-show="saving">Saving…</span>
+                    <span class="text-green-600 font-bold" x-show="!saving && justSaved" x-transition.opacity.duration.1000ms>Saved ✓</span>
+                </div>
+                <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full mb-5 overflow-hidden">
+                    <div class="h-full bg-primary-500 transition-all duration-200" :style="`width: ${((currentIndex + 1) / items.length) * 100}%`"></div>
+                </div>
+
+                <template x-if="!current">
+                    <div class="text-center text-gray-500 dark:text-gray-400 py-8">Nothing to count in this session.</div>
+                </template>
+
+                <template x-if="current">
+                    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+                        <!-- Product name -->
+                        <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center mb-4" x-text="current.name"></h2>
+
+                        <!-- Sub-location slots: tap to make active, big legible value -->
+                        <div class="grid gap-2 mb-4" :class="current.subLocations.length > 1 ? 'grid-cols-' + current.subLocations.length : 'grid-cols-1'">
+                            <template x-for="loc in current.subLocations" :key="loc">
+                                <button type="button" @click="selectSlot(loc)"
+                                    class="rounded-xl border-2 p-3 text-center touch-manipulation transition-colors"
+                                    :class="activeSubLocation === loc ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700'">
+                                    <div class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400" x-text="loc"></div>
+                                    <div class="text-3xl font-mono font-bold text-gray-900 dark:text-white mt-1"
+                                        x-text="current.values[loc] === '' || current.values[loc] === undefined ? '—' : current.values[loc]"></div>
+                                </button>
+                            </template>
+                        </div>
+
+                        <!-- Number pad -->
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <template x-for="d in ['1','2','3','4','5','6','7','8','9']" :key="d">
+                                <button type="button" @click="typeDigit(d)"
+                                    :class="pressed === d ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                    class="py-5 rounded-xl text-2xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">
+                                    <span x-text="d"></span>
+                                </button>
+                            </template>
+                            <button type="button" @click="typeDigit('.')"
+                                :class="pressed === '.' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                class="py-5 rounded-xl text-2xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">.</button>
+                            <button type="button" @click="typeDigit('0')"
+                                :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                class="py-5 rounded-xl text-2xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">0</button>
+                            <button type="button" @click="backspace"
+                                :class="pressed === 'back' ? 'bg-red-300' : 'bg-red-100 dark:bg-red-900/30'"
+                                class="py-5 rounded-xl text-lg font-bold text-red-700 dark:text-red-400 transition-all duration-100 touch-manipulation">&larr;</button>
+                        </div>
+
+                        <button type="button" @click="enterOnSlot"
+                            class="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold touch-manipulation mb-4">
+                            Enter
+                        </button>
+
+                        <!-- Prev / Next -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <button type="button" @click="prev" :disabled="isFirst"
+                                :class="isFirst ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'"
+                                class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation">
+                                &larr; Previous
+                            </button>
+                            <button type="button" @click="next"
+                                class="py-3 rounded-xl font-bold text-white touch-manipulation"
+                                :class="isLast ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 dark:hover:bg-gray-500'">
+                                <span x-text="isLast ? 'Finish' : 'Next →'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
             </div>
 
-            <div class="flex flex-wrap gap-2 mt-4">
+            @script
+            <script>
+                function countFlow(items) {
+                    return {
+                        items: items,
+                        currentIndex: 0,
+                        activeSubLocation: null,
+                        saving: false,
+                        justSaved: false,
+                        pressed: null,
+
+                        get current() { return this.items[this.currentIndex] ?? null },
+                        get isFirst() { return this.currentIndex === 0 },
+                        get isLast() { return this.currentIndex === this.items.length - 1 },
+                        get progress() { return this.items.length ? `Product ${this.currentIndex + 1} of ${this.items.length}` : '' },
+
+                        init() {
+                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
+                        },
+
+                        selectSlot(loc) {
+                            this.activeSubLocation = loc;
+                        },
+
+                        flash(key) {
+                            this.pressed = key;
+                            setTimeout(() => { if (this.pressed === key) this.pressed = null; }, 150);
+                        },
+
+                        typeDigit(d) {
+                            if (!this.activeSubLocation || !this.current) return;
+                            this.flash(d);
+                            const existing = (this.current.values[this.activeSubLocation] ?? '').toString();
+                            if (d === '.' && existing.includes('.')) return;
+                            this.current.values[this.activeSubLocation] = existing + d;
+                        },
+
+                        backspace() {
+                            if (!this.activeSubLocation || !this.current) return;
+                            this.flash('back');
+                            const existing = (this.current.values[this.activeSubLocation] ?? '').toString();
+                            this.current.values[this.activeSubLocation] = existing.slice(0, -1);
+                        },
+
+                        // Fire-and-forget on purpose — the counter must never
+                        // wait on the network to move to the next product.
+                        // What's already typed lives in `items` (this
+                        // component's own state) regardless of when, or
+                        // whether, the save finishes.
+                        saveCurrent() {
+                            const cur = this.current;
+                            if (!cur) return;
+                            this.saving = true;
+                            this.justSaved = false;
+                            this.$wire.set('subLocationInputs.' + cur.id, cur.values)
+                                .then(() => this.$wire.call('recordCount', cur.id))
+                                .then(() => { this.justSaved = true; })
+                                .finally(() => { this.saving = false; });
+                        },
+
+                        next() {
+                            this.saveCurrent();
+                            if (!this.isLast) {
+                                this.currentIndex++;
+                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
+                            }
+                        },
+
+                        prev() {
+                            if (!this.isFirst) {
+                                this.currentIndex--;
+                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
+                            }
+                        },
+
+                        // Enter confirms the active slot and hops to the next
+                        // slot on this same product; on the last slot it
+                        // behaves like Next.
+                        enterOnSlot() {
+                            const locs = this.current?.subLocations ?? [];
+                            const idx = locs.indexOf(this.activeSubLocation);
+                            if (idx > -1 && idx < locs.length - 1) {
+                                this.activeSubLocation = locs[idx + 1];
+                            } else {
+                                this.next();
+                            }
+                        },
+                    };
+                }
+            </script>
+            @endscript
+
+            <div class="flex flex-wrap gap-2 mt-4 max-w-md mx-auto">
                 @if($session->outgoing_user_id && !$session->confirmed_by_outgoing_at)
                     <button wire:click="confirmOutgoing" class="px-4 py-2 rounded-lg bg-amber-500 text-white font-bold text-sm">Confirm as Outgoing Custodian</button>
                 @endif
