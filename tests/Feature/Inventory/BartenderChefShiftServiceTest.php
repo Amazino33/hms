@@ -68,6 +68,29 @@ it('ends the outgoing custodian shift and starts the incoming one when a handove
     expect($incomingShift->opening_count_session_id)->toBe($session->id);
 });
 
+it('ends the outgoing custodian shift but starts no new one when a closing count is finalized', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $outgoing = User::factory()->create();
+    $witness = User::factory()->create();
+    $manager = User::factory()->create();
+
+    $openingShift = Shift::create([
+        'user_id' => $outgoing->id, 'type' => 'bartender', 'started_at' => now()->subHours(4), 'status' => 'active',
+    ]);
+
+    $countService = new CountSessionService();
+    $session = $countService->openSession(
+        'bar_handover', $bar->id, $outgoing->id, $outgoing->id, $witness->id, isClosing: true,
+    );
+    $countService->confirmOutgoing($session, $outgoing->id);
+    $countService->confirmIncoming($session, $witness->id);
+    $session = $countService->submitForReview($session->fresh());
+    $countService->finalizeReview($session->fresh(), $manager->id);
+
+    expect($openingShift->fresh()->isActive())->toBeFalse();
+    expect(Shift::where('user_id', $witness->id)->exists())->toBeFalse();
+});
+
 it('treats a shift left open past the stale threshold as not currently active', function () {
     $bartender = User::factory()->create();
     Shift::create([

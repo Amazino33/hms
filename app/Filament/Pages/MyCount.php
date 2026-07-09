@@ -42,6 +42,14 @@ class MyCount extends Page
 
     public ?int $incomingUserId = null;
 
+    /**
+     * Only meaningful when hasActiveShift() is true. False = a normal
+     * handover (incomingUserId becomes the new custodian, gets a shift).
+     * True = closing count for the end of the day — incomingUserId is just
+     * a witness confirming the count; my shift ends and nobody's starts.
+     */
+    public bool $isClosing = false;
+
     public function myRole(): ?string
     {
         foreach (self::ROLE_TYPE as $role => $type) {
@@ -136,7 +144,9 @@ class MyCount extends Page
         $isHandover = $this->hasActiveShift();
 
         if ($isHandover && !$this->incomingUserId) {
-            Notification::make()->title('Choose who you are handing over to first')->warning()->send();
+            Notification::make()->title($this->isClosing
+                ? 'Choose a second person to confirm your closing count first'
+                : 'Choose who you are handing over to first')->warning()->send();
             return;
         }
 
@@ -147,6 +157,7 @@ class MyCount extends Page
                 auth()->id(),
                 $isHandover ? auth()->id() : null,
                 $isHandover ? $this->incomingUserId : auth()->id(),
+                isClosing: $isHandover && $this->isClosing,
             );
 
             $this->redirect("/admin/count-session-detail?session_id={$session->id}");

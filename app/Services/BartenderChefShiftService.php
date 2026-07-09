@@ -61,6 +61,11 @@ class BartenderChefShiftService
      * The handover count IS the shift boundary: finalizing a bar/kitchen
      * handover session ends the outgoing custodian's shift and starts the
      * incoming custodian's shift in the same moment.
+     *
+     * A closing count (end of the business day, nobody taking over) uses
+     * the exact same session shape — same dual confirmation, same review —
+     * except the named "incoming" person is only a witness: the outgoing
+     * shift still ends here, but no new shift starts from it.
      */
     public function applyHandoverShiftBoundary(CountSession $session): void
     {
@@ -75,6 +80,10 @@ class BartenderChefShiftService
             ->ofType($type)
             ->active()
             ->update(['ended_at' => now(), 'status' => 'closed']);
+
+        if ($session->isClosing()) {
+            return;
+        }
 
         Shift::create([
             'user_id' => $session->incoming_user_id,

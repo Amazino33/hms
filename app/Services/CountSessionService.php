@@ -35,11 +35,18 @@ class CountSessionService
         ?int $outgoingUserId = null,
         ?int $incomingUserId = null,
         ?string $notes = null,
+        bool $isClosing = false,
     ): CountSession {
         $isHandover = in_array($type, ['bar_handover', 'kitchen_handover'], true);
 
+        if ($isClosing && !$isHandover) {
+            throw new \Exception('Only a bar/kitchen count can be a closing count.');
+        }
+
         if ($isHandover && !$incomingUserId) {
-            throw new \Exception('A handover count requires an incoming user.');
+            throw new \Exception($isClosing
+                ? 'A closing count requires a second person to confirm it.'
+                : 'A handover count requires an incoming user.');
         }
 
         if ($isHandover && !$outgoingUserId) {
@@ -51,7 +58,7 @@ class CountSessionService
             }
         }
 
-        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes) {
+        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing) {
             $session = CountSession::create([
                 'type' => $type,
                 'warehouse_id' => $warehouseId,
@@ -60,6 +67,7 @@ class CountSessionService
                 'opened_at' => now(),
                 'outgoing_user_id' => $outgoingUserId,
                 'incoming_user_id' => $incomingUserId,
+                'is_closing' => $isClosing,
                 'notes' => $notes,
             ]);
 

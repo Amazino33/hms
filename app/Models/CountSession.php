@@ -64,6 +64,17 @@ class CountSession extends Model
         return in_array($this->type, ['bar_handover', 'kitchen_handover'], true);
     }
 
+    /**
+     * A closing count is still a handover-type session (same dual
+     * confirmation requirement, same warehouse/role), but the "incoming"
+     * person is a witness, not a successor — the outgoing custodian's
+     * shift ends and no new shift starts from it.
+     */
+    public function isClosing(): bool
+    {
+        return (bool) $this->is_closing;
+    }
+
     public function isDraft(): bool
     {
         return $this->status === 'counting';

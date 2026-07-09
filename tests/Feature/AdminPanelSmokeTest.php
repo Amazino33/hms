@@ -25,8 +25,6 @@ it('renders index and create pages for resources touched during the audit', func
     '/admin/guests',
     '/admin/guests/create',
     '/admin/orders',
-    '/admin/production-orders',
-    '/admin/production-orders/create',
     '/admin/rooms',
     '/admin/rooms/create',
     '/admin/bookings',

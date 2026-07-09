@@ -62,7 +62,7 @@ it('requires picking an incoming custodian before starting a handover count when
 
     Livewire::actingAs($bartender)
         ->test(MyCount::class)
-        ->assertSee('Start Your Handover Count')
+        ->assertSee('Start Your Count')
         ->assertSee('Handing over to')
         ->call('startCount'); // no incomingUserId set
 
@@ -88,6 +88,30 @@ it('starts a proper handover count naming the bartender as outgoing and the pick
     $session = CountSession::where('type', 'bar_handover')->first();
     expect($session->outgoing_user_id)->toBe($bartender->id);
     expect($session->incoming_user_id)->toBe($incoming->id);
+});
+
+it('starts a closing count when the bartender picks "Close for the day" instead of a handover', function () {
+    grantMyCountPagePermissions();
+    WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'type' => 'consumer']);
+    $bartender = User::factory()->create();
+    $bartender->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+    Shift::create(['user_id' => $bartender->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
+
+    $witness = User::factory()->create();
+    $witness->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+
+    Livewire::actingAs($bartender)
+        ->test(MyCount::class)
+        ->set('isClosing', true)
+        ->assertSee('Start Closing Count')
+        ->set('incomingUserId', $witness->id)
+        ->call('startCount')
+        ->assertRedirect();
+
+    $session = CountSession::where('type', 'bar_handover')->first();
+    expect($session->outgoing_user_id)->toBe($bartender->id);
+    expect($session->incoming_user_id)->toBe($witness->id);
+    expect($session->isClosing())->toBeTrue();
 });
 
 it('offers to continue an already-open session instead of starting a second one', function () {

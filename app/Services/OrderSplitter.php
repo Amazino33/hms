@@ -11,7 +11,6 @@ use App\Models\Shift;
 use Illuminate\Support\Facades\DB;
 use App\Events\OrderCreated;
 use App\Services\InventoryService;
-use App\Services\ProductionOrderService;
 use Filament\Actions\Action;
 use Illuminate\Support\Facades\Log;
 
@@ -168,9 +167,6 @@ class OrderSplitter
 
                 // Deduct inventory for all items in this order
                 InventoryService::deductInventoryForOrderItems($order);
-
-                // Create production orders for menu items
-                ProductionOrderService::createProductionOrdersForOrder($order);
 
                 // ── Commission: now that all OrderItems exist, calculate ────────
                 if ($orderStatus === 'paid' && $order->user_id) {

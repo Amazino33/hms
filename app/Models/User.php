@@ -176,7 +176,7 @@ class User extends Authenticatable implements FilamentUser
             if (in_array($shift->type, ['bartender', 'chef'], true)) {
                 $role = ucfirst($shift->type);
                 throw new \Exception(
-                    "{$role} shifts can only end through a confirmed handover count — use the Count Sessions page to hand over, not this control."
+                    "{$role} shifts can only end through a confirmed count — use My Handover Count to hand over to someone, or to close for the day if nobody's taking over, not this control."
                 );
             }
 
