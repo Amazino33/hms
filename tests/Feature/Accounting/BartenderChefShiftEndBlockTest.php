@@ -8,26 +8,27 @@ use App\Services\CountSessionService;
 use App\Models\WareHouse;
 
 /**
- * The generic topbar "End Shift" control (User::endShift(), used by every
- * logged-in user) previously had no idea a bartender/chef shift can only
- * legitimately end via a confirmed handover count — it would happily close
- * the shift directly, completely bypassing the requirement that "the
- * handover count IS the shift boundary." This locks that gap shut.
+ * The counting-based handover flow (My Handover Count) is currently
+ * disabled — bartenders/chefs end their shift through the same generic
+ * topbar control as every other role, no count required. This can be
+ * re-tightened later by reinstating the block this file used to test.
  */
-it('refuses to end a bartender shift through the generic control, pointing to the handover flow instead', function () {
+it('allows a bartender to end their shift through the generic control while counting is disabled', function () {
     $bartender = User::factory()->create();
     Shift::create(['user_id' => $bartender->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
 
-    expect(fn () => $bartender->endShift())->toThrow(Exception::class);
-    expect($bartender->currentShift()->status)->toBe('active');
+    $ended = $bartender->endShift();
+
+    expect($ended->status)->toBe('pending_supervisor');
 });
 
-it('refuses to end a chef shift through the generic control', function () {
+it('allows a chef to end their shift through the generic control while counting is disabled', function () {
     $chef = User::factory()->create();
     Shift::create(['user_id' => $chef->id, 'type' => 'chef', 'started_at' => now(), 'status' => 'active']);
 
-    expect(fn () => $chef->endShift())->toThrow(Exception::class);
-    expect($chef->currentShift()->status)->toBe('active');
+    $ended = $chef->endShift();
+
+    expect($ended->status)->toBe('pending_supervisor');
 });
 
 it('still allows a waiter to end their shift through the generic control, unaffected by the bartender/chef block', function () {

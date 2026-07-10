@@ -173,13 +173,6 @@ class User extends Authenticatable implements FilamentUser
     {
         $shift = $this->currentShift();
         if ($shift) {
-            if (in_array($shift->type, ['bartender', 'chef'], true)) {
-                $role = ucfirst($shift->type);
-                throw new \Exception(
-                    "{$role} shifts can only end through a confirmed count — use My Handover Count to hand over to someone, or to close for the day if nobody's taking over, not this control."
-                );
-            }
-
             $outstanding = (new ShiftAccountingService())->outstandingOrders($shift);
 
             if ($outstanding->isNotEmpty()) {
