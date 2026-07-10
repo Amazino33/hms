@@ -30,11 +30,6 @@ class MyCount extends Page
     protected static ?string $title = 'My Handover Count';
     protected string $view = 'filament.pages.my-count';
 
-    // Counting is temporarily disabled — bartenders/chefs end/start shifts
-    // through the generic topbar control instead. Hidden from nav rather
-    // than removed so it's a one-line flip to bring back.
-    protected static bool $shouldRegisterNavigation = false;
-
     public static function canAccess(): bool
     {
         return PermissionService::canAccessPage(self::class);

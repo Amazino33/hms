@@ -30,10 +30,6 @@ class CountSessions extends Page implements HasTable
     protected static ?string $title = 'Count Sessions';
     protected string $view = 'filament.pages.count-sessions';
 
-    // Counting is temporarily disabled — see MyCount.php. Hidden from nav
-    // rather than removed so it's a one-line flip to bring back.
-    protected static bool $shouldRegisterNavigation = false;
-
     public static function canAccess(): bool
     {
         return PermissionService::canAccessPage(self::class);
