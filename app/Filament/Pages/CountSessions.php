@@ -107,7 +107,7 @@ class CountSessions extends Page implements HasTable
 
                         Textarea::make('notes')->label('Notes'),
                     ])
-                    ->action(function (array $data) {
+                    ->action(function (array $data, Action $action) {
                         try {
                             $session = (new CountSessionService())->openSession(
                                 $data['type'],
@@ -120,7 +120,7 @@ class CountSessions extends Page implements HasTable
 
                             Notification::make()->title('Count session opened')->success()->send();
 
-                            $this->redirect("/admin/count-session-detail?session_id={$session->id}");
+                            $action->redirect("/admin/count-session-detail?session_id={$session->id}");
                         } catch (\Exception $e) {
                             Notification::make()->title('Could not open session')->body($e->getMessage())->danger()->send();
                         }
