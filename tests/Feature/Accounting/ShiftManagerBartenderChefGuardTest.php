@@ -9,10 +9,12 @@ use Livewire\Livewire;
  * showEndShiftDeclaration() used to open the generic cash/POS declaration
  * modal for every role — a bartender/chef would fill in numbers (that mean
  * nothing to them; they don't handle cash) only to have User::endShift()
- * reject the whole thing at the final "Confirm & End" step. This catches
- * it up front instead, before the modal even opens.
+ * reject the whole thing at the final "Confirm & End" step. It now sends
+ * them straight into the counting flow instead — the actual page that
+ * lets them count what they're handing over — rather than a dead-end
+ * error pointing at it.
  */
-it('refuses to open the cash/POS declaration modal for a bartender, pointing to the handover flow instead', function () {
+it('sends a bartender straight into My Handover Count instead of opening the cash/POS declaration modal', function () {
     $bartender = User::factory()->create();
     Shift::create(['user_id' => $bartender->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
 
@@ -20,10 +22,11 @@ it('refuses to open the cash/POS declaration modal for a bartender, pointing to 
         ->test(ShiftManager::class)
         ->call('load')
         ->call('showEndShiftDeclaration')
-        ->assertSet('showDeclarationModal', false);
+        ->assertSet('showDeclarationModal', false)
+        ->assertRedirect('/admin/my-count');
 });
 
-it('refuses to open the cash/POS declaration modal for a chef', function () {
+it('sends a chef straight into My Handover Count instead of opening the cash/POS declaration modal', function () {
     $chef = User::factory()->create();
     Shift::create(['user_id' => $chef->id, 'type' => 'chef', 'started_at' => now(), 'status' => 'active']);
 
@@ -31,7 +34,8 @@ it('refuses to open the cash/POS declaration modal for a chef', function () {
         ->test(ShiftManager::class)
         ->call('load')
         ->call('showEndShiftDeclaration')
-        ->assertSet('showDeclarationModal', false);
+        ->assertSet('showDeclarationModal', false)
+        ->assertRedirect('/admin/my-count');
 });
 
 it('still opens the cash/POS declaration modal for a waiter, unaffected by the bartender/chef guard', function () {

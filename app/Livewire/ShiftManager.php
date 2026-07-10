@@ -102,19 +102,14 @@ class ShiftManager extends Component
             return;
         }
 
-        // Bartenders/chefs don't handle cash and can't end their shift here
-        // at all — User::endShift() throws for them regardless, but
-        // catching it before the cash/POS modal opens avoids making them
-        // fill in numbers first only to be told at the last step it was
-        // never going to work.
+        // Bartenders/chefs don't handle cash — there's nothing for them to
+        // declare here, and User::endShift() throws for them regardless.
+        // Send them straight into the counting flow instead of a dead-end
+        // error: that's the actual page that lets them count what they're
+        // handing over.
         if ($this->currentShift && in_array($this->currentShift->type, ['bartender', 'chef'], true)) {
-            $role = ucfirst($this->currentShift->type);
-            Notification::make()
-                ->title("{$role} shifts end through the handover count")
-                ->body('Use "My Handover Count" — not this button.')
-                ->warning()
-                ->send();
             $this->showModal = false;
+            $this->redirect('/admin/my-count');
             return;
         }
 
