@@ -79,11 +79,27 @@
                                 <div class="text-xs text-green-600 dark:text-green-400">{{ $shiftDuration }} active</div>
                             </div>
                         </div>
-                        <button @click="showDeclarationModal = true"
-                            @if($isProcessing) disabled @endif
-                            class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
-                            <span>End Shift</span>
-                        </button>
+                        {{-- Bartenders/chefs don't handle cash — there's nothing
+                             for them to declare here, and User::endShift()
+                             throws for them regardless. This button used to be
+                             pure Alpine (@click="showDeclarationModal = true"),
+                             which is exactly why two earlier attempts to gate
+                             this in PHP never actually took effect: nothing
+                             here ever called into Livewire for bartender/chef
+                             to begin with. --}}
+                        @if($currentShift && in_array($currentShift->type, ['bartender', 'chef'], true))
+                            <button wire:click="goToHandoverCount"
+                                @if($isProcessing) disabled @endif
+                                class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
+                                <span>End Shift</span>
+                            </button>
+                        @else
+                            <button @click="showDeclarationModal = true"
+                                @if($isProcessing) disabled @endif
+                                class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
+                                <span>End Shift</span>
+                            </button>
+                        @endif
                     </div>
 
                     <div class="space-y-2 text-xs">

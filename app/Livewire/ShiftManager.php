@@ -96,24 +96,18 @@ class ShiftManager extends Component
         }
     }
 
-    public function showEndShiftDeclaration()
+    /**
+     * Bartenders/chefs don't handle cash — there's nothing for them to
+     * declare on the cash/POS modal, and User::endShift() throws for them
+     * regardless. Called from the "End Shift" button's own wire:click for
+     * these two roles (the button is plain Alpine — @click="showDeclarationModal
+     * = true" — for everyone else, which is why gating this in PHP alone
+     * previously did nothing: nothing called into Livewire for bartender/
+     * chef to begin with).
+     */
+    public function goToHandoverCount()
     {
-        if (!auth()->check()) {
-            return;
-        }
-
-        // Bartenders/chefs don't handle cash — there's nothing for them to
-        // declare here, and User::endShift() throws for them regardless.
-        // Send them straight into the counting flow instead of a dead-end
-        // error: that's the actual page that lets them count what they're
-        // handing over.
-        if ($this->currentShift && in_array($this->currentShift->type, ['bartender', 'chef'], true)) {
-            $this->showModal = false;
-            $this->redirect('/admin/my-count');
-            return;
-        }
-
-        $this->showDeclarationModal = true;
+        $this->redirect('/admin/my-count');
     }
 
     public function cancelDeclaration()
