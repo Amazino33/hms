@@ -53,7 +53,7 @@ class CountSessionDetail extends Page
     #[Computed]
     public function session(): ?CountSession
     {
-        return CountSession::with(['items.subCounts', 'items.product', 'items.ingredient', 'warehouse', 'outgoingUser', 'incomingUser'])
+        return CountSession::with(['items.subCounts', 'items.product', 'items.ingredient', 'items.review', 'warehouse', 'outgoingUser', 'incomingUser', 'witnessUser'])
             ->find($this->countSessionId);
     }
 
@@ -141,13 +141,215 @@ class CountSessionDetail extends Page
         $quantities = $this->subLocationInputs[$itemId] ?? [];
 
         try {
-            (new CountSessionService())->recordCount($item, $quantities);
+            (new CountSessionService())->recordCount($item, $quantities, auth()->id());
             $this->refreshSession();
             $this->prefillSubLocationInputs();
 
             Notification::make()->title('Count recorded')->success()->send();
         } catch (\Exception $e) {
             Notification::make()->title('Could not record count')->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    /**
+     * Scoped per session + per logged-in user, so a wrong PIN typed while
+     * declaring doesn't lock out the same person trying to seal later —
+     * each PIN-entry point on this page throttles independently.
+     */
+    protected function pinThrottleKey(string $step): string
+    {
+        return "count_session:{$this->countSessionId}:{$step}:" . auth()->id();
+    }
+
+    /**
+     * The outgoing custodian's own figures, one product per page — reused
+     * as-is for the declare-confirmation summary since it's already blind
+     * (name/sub-locations/counted values only, never expected quantities).
+     */
+    public function declare(string $pin): void
+    {
+        try {
+            (new CountSessionService())->declare($this->session, $pin, $this->pinThrottleKey('declare'));
+            $this->refreshSession();
+            Notification::make()->title('Count declared')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not declare')->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    /**
+     * The incoming custodian's per-product review data: the outgoing's
+     * declared figures (not the system's expected quantity — this is what
+     * was physically counted, safe to show the person reviewing it) plus
+     * whatever review outcome already exists for it.
+     *
+     * @return array<int, array{id: int, name: string, subLocations: array<int, string>, declaredValues: array<string, string>, outcome: ?string, incomingValues: array<string, mixed>}>
+     */
+    public function safeReviewItems(): array
+    {
+        if (!$this->session || $this->session->status !== 'declared') {
+            return [];
+        }
+
+        return $this->session->items->map(fn ($item) => [
+            'id' => $item->id,
+            'name' => $item->itemName(),
+            'subLocations' => $item->subCounts->pluck('sub_location')->all(),
+            'declaredValues' => $item->subCounts->pluck('quantity', 'sub_location')
+                ->map(fn ($q) => (string) $q)->all(),
+            'outcome' => $item->review?->outcome,
+            'incomingValues' => $item->review?->incoming_quantities ?? [],
+        ])->values()->all();
+    }
+
+    public function reviewAccept(int $itemId): void
+    {
+        $item = $this->session->items->firstWhere('id', $itemId);
+
+        if (!$item) {
+            return;
+        }
+
+        try {
+            (new CountSessionService())->reviewProduct($item, auth()->id(), 'accepted');
+            $this->refreshSession();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not accept')->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    public function reviewDispute(int $itemId, array $quantities): void
+    {
+        $item = $this->session->items->firstWhere('id', $itemId);
+
+        if (!$item) {
+            return;
+        }
+
+        try {
+            (new CountSessionService())->reviewProduct($item, auth()->id(), 'disputed', $quantities);
+            $this->refreshSession();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not record dispute')->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    public function amendDeclaration(int $itemId, string $pin, array $quantities): void
+    {
+        $item = $this->session->items->firstWhere('id', $itemId);
+
+        if (!$item) {
+            return;
+        }
+
+        try {
+            (new CountSessionService())->amendDeclaration($item, $pin, $quantities, $this->pinThrottleKey('amend'));
+            $this->refreshSession();
+            Notification::make()->title('Declaration amended')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not amend')->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    public function markItemUnresolved(int $itemId): void
+    {
+        $item = $this->session->items->firstWhere('id', $itemId);
+
+        if (!$item) {
+            return;
+        }
+
+        try {
+            (new CountSessionService())->markUnresolved($item, auth()->id());
+            $this->refreshSession();
+            Notification::make()->title('Marked unresolved — a manager has been notified')->warning()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not mark unresolved')->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    public function isHandoverWithSuccessor(): bool
+    {
+        return $this->session?->isHandoverWithSuccessor() ?? false;
+    }
+
+    public function isUnwitnessedSession(): bool
+    {
+        return $this->session?->isUnwitnessed() ?? false;
+    }
+
+    /**
+     * Whether the current user is the one authorized to record counts
+     * right now — the outgoing custodian normally, or the incoming
+     * custodian on the unwitnessed path (counting solo since the outgoing
+     * is absent). Mirrors the same check CountSessionService::recordCount()
+     * enforces server-side; this is only for deciding what to render.
+     */
+    public function iAmCounter(): bool
+    {
+        $session = $this->session;
+
+        if (!$session) {
+            return false;
+        }
+
+        return $session->isUnwitnessed()
+            ? $session->incoming_user_id === auth()->id()
+            : $session->outgoing_user_id === auth()->id();
+    }
+
+    public function iAmReviewer(): bool
+    {
+        return $this->session && $this->session->incoming_user_id === auth()->id();
+    }
+
+    public function iAmOutgoing(): bool
+    {
+        return $this->session && $this->session->outgoing_user_id === auth()->id();
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\CountSessionItem>
+     */
+    public function disputedItems(): \Illuminate\Support\Collection
+    {
+        if (!$this->session) {
+            return collect();
+        }
+
+        return $this->session->items->filter(fn ($i) => $i->review?->outcome === 'disputed');
+    }
+
+    /**
+     * True once every product has an explicit review outcome (or, on the
+     * unwitnessed path, once counting is simply done — there's no review
+     * stage at all) — this is what unlocks the dual-PIN seal screen.
+     */
+    public function readyToSeal(): bool
+    {
+        $session = $this->session;
+
+        if (!$session || !$session->isHandoverWithSuccessor()) {
+            return false;
+        }
+
+        if ($session->isUnwitnessed()) {
+            return $session->isDraft();
+        }
+
+        return $session->isDeclared()
+            && !$session->items()->whereDoesntHave('review')->exists()
+            && !$session->items()->whereHas('review', fn ($q) => $q->where('outcome', 'disputed'))->exists();
+    }
+
+    public function sealAgreement(string $firstPin, string $secondPin): void
+    {
+        try {
+            (new CountSessionService())->sealAgreement($this->session, $firstPin, $secondPin, $this->pinThrottleKey('seal'));
+            $this->refreshSession();
+            Notification::make()->title('Handover sealed')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not seal')->body($e->getMessage())->danger()->send();
         }
     }
 

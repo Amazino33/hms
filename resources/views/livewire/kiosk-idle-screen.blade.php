@@ -185,62 +185,21 @@ new class extends Component {
 
     @if ($selectedTableId)
         <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" wire:click.self="closePinPad"
-            x-data="{
-                pin: '',
-                submitting: false,
-                pressed: null,
-                digit(d) {
-                    if (this.submitting || this.pin.length >= 4) return
-                    this.flash(d)
-                    this.pin += d
-                    if (this.pin.length === 4) {
-                        this.submitting = true
-                        $wire.submitPin(this.pin).then(() => {
-                            this.pin = ''
-                            this.submitting = false
-                        })
-                    }
-                },
-                backspace() {
-                    if (this.submitting) return
-                    this.flash('back')
-                    this.pin = this.pin.slice(0, -1)
-                },
-                flash(key) {
-                    this.pressed = key
-                    setTimeout(() => { if (this.pressed === key) this.pressed = null }, 150)
-                },
-            }">
+            x-data="{ submitting: false }"
+            @pin-entered="
+                submitting = true
+                $wire.submitPin($event.detail).then(() => { submitting = false })
+            ">
             <div class="bg-white rounded-2xl p-6 w-full max-w-xs relative overflow-hidden">
                 <h2 class="text-lg font-bold text-gray-900 mb-1">{{ $selectedTableName }}</h2>
                 <p class="text-sm text-gray-500 mb-4">Enter your 4-digit PIN</p>
 
-                <div class="flex justify-center gap-3 mb-5">
-                    <template x-for="i in 4" :key="i">
-                        <div class="w-5 h-5 rounded-full border-2 border-gray-400 transition-all duration-150"
-                            :class="i <= pin.length ? 'bg-gray-900 border-gray-900 scale-110' : ''"></div>
-                    </template>
-                </div>
-
-                @if ($errorMessage)
-                    <p class="text-center text-red-600 text-sm font-medium mb-3">{{ $errorMessage }}</p>
-                @endif
-
-                <div class="grid grid-cols-3 gap-3">
-                    @foreach (['1','2','3','4','5','6','7','8','9'] as $digit)
-                        <button @click="digit('{{ $digit }}')"
-                            :class="pressed === '{{ $digit }}' ? 'bg-amber-400 scale-95' : 'bg-gray-100'"
-                            class="py-4 rounded-lg text-xl font-bold transition-all duration-100 touch-manipulation">{{ $digit }}</button>
-                    @endforeach
-                    <button wire:click="closePinPad"
-                        class="py-4 bg-gray-200 rounded-lg text-sm font-bold text-gray-600 touch-manipulation active:scale-95 transition-transform">Cancel</button>
-                    <button @click="digit('0')"
-                        :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100'"
-                        class="py-4 rounded-lg text-xl font-bold transition-all duration-100 touch-manipulation">0</button>
-                    <button @click="backspace"
-                        :class="pressed === 'back' ? 'bg-red-300 scale-95' : 'bg-red-100'"
-                        class="py-4 rounded-lg text-lg font-bold text-red-700 transition-all duration-100 touch-manipulation">&larr; Delete</button>
-                </div>
+                <x-pin-keypad :error-message="$errorMessage">
+                    <x-slot:extraButton>
+                        <button wire:click="closePinPad"
+                            class="py-4 bg-gray-200 rounded-lg text-sm font-bold text-gray-600 touch-manipulation active:scale-95 transition-transform">Cancel</button>
+                    </x-slot:extraButton>
+                </x-pin-keypad>
 
                 {{-- Fast, unmistakable "it registered, we're working on it" feedback
                      the instant the 4th digit lands — covers the pad so there's no

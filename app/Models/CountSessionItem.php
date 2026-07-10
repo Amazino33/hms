@@ -48,6 +48,11 @@ class CountSessionItem extends Model
         return $this->hasMany(CountSessionSubCount::class);
     }
 
+    public function review()
+    {
+        return $this->hasOne(CountSessionItemReview::class);
+    }
+
     public function itemName(): string
     {
         return $this->item_type === 'product'

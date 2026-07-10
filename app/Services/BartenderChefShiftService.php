@@ -93,4 +93,55 @@ class BartenderChefShiftService
             'status' => 'active',
         ]);
     }
+
+    /**
+     * The other half of applyHandoverShiftBoundary(), split apart for the
+     * peer-to-peer declare/review/dispute/dual-seal flow: this ends only
+     * the outgoing custodian's shift, at declaration time rather than at
+     * final seal. From this moment until completeHandoverBoundary() runs,
+     * no bartender/chef shift is active at all — which is the entire sales
+     * freeze mechanism, since OrderSplitter already refuses a bar/kitchen
+     * order whenever activeNonStale() finds nothing for that role. No-op
+     * if the outgoing has no active shift (the unwitnessed path, where
+     * they may not be on shift at all).
+     */
+    public function beginHandoverFreeze(CountSession $session): void
+    {
+        $type = self::TYPE_FOR_HANDOVER[$session->type] ?? null;
+
+        if (!$type || !$session->outgoing_user_id) {
+            return;
+        }
+
+        Shift::query()
+            ->where('user_id', $session->outgoing_user_id)
+            ->ofType($type)
+            ->active()
+            ->update(['ended_at' => now(), 'status' => 'closed']);
+    }
+
+    /**
+     * Starts the incoming custodian's new shift, lifting the freeze
+     * beginHandoverFreeze() started. Called from
+     * CountSessionService::sealAgreement() once both PINs have sealed the
+     * agreement — the counterpart to the tail half of
+     * applyHandoverShiftBoundary() above, for sessions that went through
+     * the peer-to-peer flow instead of manager review.
+     */
+    public function completeHandoverBoundary(CountSession $session): void
+    {
+        $type = self::TYPE_FOR_HANDOVER[$session->type] ?? null;
+
+        if (!$type || !$session->incoming_user_id) {
+            return;
+        }
+
+        Shift::create([
+            'user_id' => $session->incoming_user_id,
+            'type' => $type,
+            'opening_count_session_id' => $session->id,
+            'started_at' => now(),
+            'status' => 'active',
+        ]);
+    }
 }

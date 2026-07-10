@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CountSession;
 use App\Models\CountSessionItem;
+use App\Models\CountSessionItemReview;
 use App\Models\CountSessionSubCount;
 use App\Models\Ingredient;
 use App\Models\IngredientInventoryItem;
@@ -13,7 +14,9 @@ use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\Shift;
 use App\Models\StaffDebt;
+use App\Models\User;
 use App\Models\WareHouse;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 
 class CountSessionService
@@ -36,11 +39,24 @@ class CountSessionService
         ?int $incomingUserId = null,
         ?string $notes = null,
         bool $isClosing = false,
+        ?int $witnessUserId = null,
     ): CountSession {
         $isHandover = in_array($type, ['bar_handover', 'kitchen_handover'], true);
 
         if ($isClosing && !$isHandover) {
             throw new \Exception('Only a bar/kitchen count can be a closing count.');
+        }
+
+        if ($witnessUserId && !$isHandover) {
+            throw new \Exception('Only a bar/kitchen count can have a witness.');
+        }
+
+        if ($witnessUserId && $isClosing) {
+            throw new \Exception('A closing count and an unwitnessed handover are two different things — pick one.');
+        }
+
+        if ($witnessUserId && !$outgoingUserId) {
+            throw new \Exception('An unwitnessed handover still needs to name who the absent outgoing custodian is.');
         }
 
         if ($isHandover && !$incomingUserId) {
@@ -49,7 +65,7 @@ class CountSessionService
                 : 'A handover count requires an incoming user.');
         }
 
-        if ($isHandover && !$outgoingUserId) {
+        if ($isHandover && !$outgoingUserId && !$witnessUserId) {
             // No outgoing custodian named — only legitimate if this is truly
             // the first shift of the day (no active shift of that role yet).
             $role = self::ROLE_FOR_HANDOVER[$type];
@@ -58,7 +74,7 @@ class CountSessionService
             }
         }
 
-        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing) {
+        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing, $witnessUserId) {
             $session = CountSession::create([
                 'type' => $type,
                 'warehouse_id' => $warehouseId,
@@ -67,6 +83,7 @@ class CountSessionService
                 'opened_at' => now(),
                 'outgoing_user_id' => $outgoingUserId,
                 'incoming_user_id' => $incomingUserId,
+                'witness_user_id' => $witnessUserId,
                 'is_closing' => $isClosing,
                 'notes' => $notes,
             ]);
@@ -128,12 +145,32 @@ class CountSessionService
      * be written — an unrecognized sub-location name is rejected rather
      * than silently creating a new, unbounded entry.
      *
+     * $callerUserId is optional (and, when omitted, skips the ownership
+     * check below) so every existing internal/test call site that doesn't
+     * care about peer-to-peer authorization keeps working unchanged — the
+     * real UI (CountSessionDetail) always passes auth()->id().
+     *
      * @param array<string, float|string|null> $quantitiesBySubLocation
      */
-    public function recordCount(CountSessionItem $item, array $quantitiesBySubLocation): CountSessionItem
+    public function recordCount(CountSessionItem $item, array $quantitiesBySubLocation, ?int $callerUserId = null): CountSessionItem
     {
-        if (!$item->session->isDraft()) {
+        $session = $item->session;
+
+        if (!$session->isDraft()) {
             throw new \Exception('Counts can only be recorded while the session is still open.');
+        }
+
+        if ($callerUserId !== null && $session->isHandoverWithSuccessor()) {
+            // Only the person actually doing the count may write it — the
+            // incoming custodian's turn to weigh in is the separate review
+            // phase (reviewProduct()), not this.
+            $expectedCounterId = $session->isUnwitnessed()
+                ? $session->incoming_user_id
+                : $session->outgoing_user_id;
+
+            if ($callerUserId !== $expectedCounterId) {
+                throw new \Exception('Only the person doing the count can record it.');
+            }
         }
 
         $validLocations = $item->subCounts()->pluck('sub_location')->all();
@@ -175,6 +212,297 @@ class CountSessionService
         $session->update(['confirmed_by_incoming_at' => now()]);
 
         return $session->fresh();
+    }
+
+    /**
+     * The outgoing custodian locks in their count as a declaration — from
+     * here their figures can never be edited by the incoming custodian,
+     * only amended by the outgoing themselves (amendDeclaration(), PIN-
+     * signed) during dispute resolution. Declaration itself is PIN-signed
+     * too, not just gated on the Livewire session's identity — the same
+     * rigor as the amendment and the final dual-PIN seal. This is also
+     * where the sales freeze begins: ending the outgoing's shift here (not
+     * at final seal) means no bartender/chef shift exists until
+     * sealAgreement() starts the incoming's, and OrderSplitter already
+     * refuses bar/kitchen orders whenever no such shift is active.
+     */
+    public function declare(CountSession $session, string $outgoingPin, string $throttleKey): CountSession
+    {
+        if (!$session->isHandoverWithSuccessor()) {
+            throw new \Exception('Only a handover count with a successor goes through declaration.');
+        }
+
+        if (!$session->isDraft()) {
+            throw new \Exception('This count has already been declared.');
+        }
+
+        $outgoingUser = (new PinAuthService())->attempt($outgoingPin, $throttleKey);
+
+        if (!$outgoingUser || $outgoingUser->id !== $session->outgoing_user_id) {
+            throw new \Exception('That PIN does not match the outgoing custodian.');
+        }
+
+        return DB::transaction(function () use ($session) {
+            $session->update([
+                'confirmed_by_outgoing_at' => now(),
+                'status' => 'declared',
+            ]);
+
+            (new BartenderChefShiftService())->beginHandoverFreeze($session->fresh());
+
+            return $session->fresh();
+        });
+    }
+
+    /**
+     * The incoming custodian's per-product review of a declared count:
+     * either accept the outgoing's figure outright, or dispute it by
+     * entering their own — which never overwrites the outgoing's numbers,
+     * just records both figures side by side pending resolution. Callable
+     * again to change a prior accept/dispute before the agreement is
+     * sealed.
+     *
+     * @param array<string, float|string|null>|null $incomingQuantities
+     */
+    public function reviewProduct(CountSessionItem $item, int $incomingUserId, string $outcome, ?array $incomingQuantities = null): CountSessionItemReview
+    {
+        if (!in_array($outcome, ['accepted', 'disputed'], true)) {
+            throw new \Exception('Invalid review outcome.');
+        }
+
+        $session = $item->session;
+
+        if (!$session->isHandoverWithSuccessor() || $session->isUnwitnessed()) {
+            throw new \Exception('This session has no peer review phase.');
+        }
+
+        if ($session->incoming_user_id !== $incomingUserId) {
+            throw new \Exception('Only the incoming custodian can review this count.');
+        }
+
+        if (!$session->isDeclared()) {
+            throw new \Exception('This count has not been declared yet.');
+        }
+
+        if ($outcome === 'disputed' && !$incomingQuantities) {
+            throw new \Exception('A disputed product needs your own counted figures.');
+        }
+
+        return CountSessionItemReview::updateOrCreate(
+            ['count_session_item_id' => $item->id],
+            [
+                'reviewed_by' => $incomingUserId,
+                'outcome' => $outcome,
+                'incoming_quantities' => $outcome === 'disputed' ? $incomingQuantities : null,
+                'resolved_at' => null,
+            ]
+        );
+    }
+
+    /**
+     * The outgoing custodian's PIN-signed correction after the two of them
+     * recount a disputed product together — an open amendment, they can
+     * enter any figure, not just split the difference. Writing to their
+     * own count_session_sub_counts rows again (LogsActivity on that model
+     * captures the before/after) resolves the dispute back to 'accepted'.
+     *
+     * @param array<string, float|string|null> $newQuantities
+     */
+    public function amendDeclaration(CountSessionItem $item, string $outgoingPin, array $newQuantities, string $throttleKey): CountSessionItem
+    {
+        $session = $item->session;
+
+        if (!$session->isHandoverWithSuccessor()) {
+            throw new \Exception('Only a handover count with a successor can be amended this way.');
+        }
+
+        $review = $item->review;
+
+        if (!$review || !$review->isDisputed()) {
+            throw new \Exception('This product is not currently disputed.');
+        }
+
+        $outgoingUser = (new PinAuthService())->attempt($outgoingPin, $throttleKey);
+
+        if (!$outgoingUser || $outgoingUser->id !== $session->outgoing_user_id) {
+            throw new \Exception('That PIN does not match the outgoing custodian.');
+        }
+
+        $subCounts = $item->subCounts()->get()->keyBy('sub_location');
+
+        foreach (array_keys($newQuantities) as $subLocation) {
+            if (!$subCounts->has($subLocation)) {
+                throw new \Exception("'{$subLocation}' is not a valid sub-location for this item.");
+            }
+        }
+
+        return DB::transaction(function () use ($item, $newQuantities, $subCounts, $review) {
+            foreach ($newQuantities as $subLocation => $quantity) {
+                // Loaded instances, updated one at a time — not a mass
+                // ::where()->update(), which bypasses Eloquent model events
+                // and would silently skip LogsActivity's before/after trail,
+                // the whole point of amending through this method.
+                $subCounts[$subLocation]->update([
+                    'quantity' => $quantity === null || $quantity === '' ? 0 : (float) $quantity,
+                ]);
+            }
+
+            $item->update(['counted_quantity' => $item->subCounts()->sum('quantity')]);
+
+            $review->update(['outcome' => 'accepted', 'resolved_at' => now()]);
+
+            return $item->fresh();
+        });
+    }
+
+    /**
+     * The incoming custodian's explicit call, after a joint recount still
+     * didn't settle a disputed product: their figure becomes the baseline
+     * used at sealing, and a manager is notified — as a reader of the
+     * flag, never a gate. The handover proceeds unblocked either way.
+     */
+    public function markUnresolved(CountSessionItem $item, int $incomingUserId): CountSessionItemReview
+    {
+        $session = $item->session;
+
+        if ($session->incoming_user_id !== $incomingUserId) {
+            throw new \Exception('Only the incoming custodian can mark this unresolved.');
+        }
+
+        $review = $item->review;
+
+        if (!$review || !$review->isDisputed()) {
+            throw new \Exception('This product is not currently disputed.');
+        }
+
+        $review->update(['outcome' => 'unresolved', 'resolved_at' => now()]);
+
+        $this->notifyManagersOfUnresolvedDispute($item);
+
+        return $review->fresh();
+    }
+
+    private function notifyManagersOfUnresolvedDispute(CountSessionItem $item): void
+    {
+        $managers = User::whereHas('roles', function ($q) {
+            $q->whereIn('name', ['manager', 'admin', 'super_admin']);
+        })->get();
+
+        foreach ($managers as $manager) {
+            Notification::make()
+                ->title('Unresolved handover dispute')
+                ->body("Count session #{$item->count_session_id}, {$item->itemName()}: the two custodians could not agree, so the incoming custodian's figure was used.")
+                ->warning()
+                ->sendToDatabase($manager);
+        }
+    }
+
+    /**
+     * The dual-PIN seal: both sides sign with their own PIN (or, on the
+     * unwitnessed path, the witness signs in place of the absent outgoing)
+     * and the handover closes atomically — variance computed against LIVE
+     * stock exactly like submitForReview() does, shortfalls charged to
+     * the accountable (outgoing) custodian, stock true-up recorded via
+     * InventoryTransaction, and the incoming custodian's shift starts,
+     * lifting the freeze beginHandoverFreeze() started at declaration.
+     */
+    public function sealAgreement(CountSession $session, string $firstPin, string $secondPin, string $throttleKey): CountSession
+    {
+        if (!$session->isHandoverWithSuccessor()) {
+            throw new \Exception('Only a handover count with a successor is sealed this way.');
+        }
+
+        $isUnwitnessed = $session->isUnwitnessed();
+
+        if ($isUnwitnessed) {
+            if (!$session->isDraft()) {
+                throw new \Exception('This unwitnessed count is not ready to be sealed.');
+            }
+        } else {
+            if (!$session->isDeclared()) {
+                throw new \Exception('This count must be declared before it can be sealed.');
+            }
+
+            if ($session->items()->whereDoesntHave('review')->exists()) {
+                throw new \Exception('Every product must be reviewed before the agreement can be sealed.');
+            }
+
+            if ($session->items()->whereHas('review', fn ($q) => $q->where('outcome', 'disputed'))->exists()) {
+                throw new \Exception('Every disputed product must be resolved or marked unresolved before sealing.');
+            }
+        }
+
+        $firstExpectedUserId = $isUnwitnessed ? $session->witness_user_id : $session->outgoing_user_id;
+        $secondExpectedUserId = $session->incoming_user_id;
+
+        $pinAuth = new PinAuthService();
+
+        $firstUser = $pinAuth->attempt($firstPin, "{$throttleKey}:first");
+
+        if (!$firstUser || $firstUser->id !== $firstExpectedUserId) {
+            throw new \Exception($isUnwitnessed
+                ? 'That PIN does not match the witness.'
+                : 'That PIN does not match the outgoing custodian.');
+        }
+
+        $secondUser = $pinAuth->attempt($secondPin, "{$throttleKey}:second");
+
+        if (!$secondUser || $secondUser->id !== $secondExpectedUserId) {
+            throw new \Exception('That PIN does not match the incoming custodian.');
+        }
+
+        return DB::transaction(function () use ($session, $isUnwitnessed, $firstUser, $secondUser) {
+            $accountableUserId = $session->accountableUserId();
+
+            foreach ($session->items as $item) {
+                $review = $item->review;
+
+                $finalQuantity = ($review && $review->isUnresolved())
+                    ? (float) array_sum($review->incoming_quantities ?? [])
+                    : (float) ($item->counted_quantity ?? 0);
+
+                $currentQty = $item->item_type === 'product'
+                    ? (float) (InventoryItem::where('product_id', $item->product_id)->where('warehouse_id', $session->warehouse_id)->value('quantity') ?? 0)
+                    : (float) (IngredientInventoryItem::where('ingredient_id', $item->ingredient_id)->where('warehouse_id', $session->warehouse_id)->value('quantity') ?? 0);
+
+                $variance = $finalQuantity - $currentQty;
+
+                $item->update([
+                    'adjusted_expected_quantity' => $currentQty,
+                    'counted_quantity' => $finalQuantity,
+                    'variance' => $variance,
+                ]);
+
+                if (abs($variance) > 0.0001) {
+                    $this->trueUpStock($item, $variance, $secondUser->id);
+
+                    if ($variance < 0) {
+                        $this->chargeAccountability($item, abs($variance), $secondUser->id);
+                        $item->update(['decision' => 'accountability']);
+                    } else {
+                        $item->update(['decision' => 'true_up']);
+                    }
+                }
+            }
+
+            $session->update([
+                'status' => 'reviewed',
+                'reviewed_at' => now(),
+            ]);
+
+            (new BartenderChefShiftService())->completeHandoverBoundary($session->fresh());
+
+            activity('count_session')
+                ->performedOn($session)
+                ->withProperties([
+                    'sealed_by_first' => $firstUser->id,
+                    'sealed_by_second' => $secondUser->id,
+                    'unwitnessed' => $isUnwitnessed,
+                ])
+                ->log('Handover sealed with dual-PIN agreement');
+
+            return $session->fresh();
+        });
     }
 
     /**

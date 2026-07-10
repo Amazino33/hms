@@ -59,6 +59,11 @@ class CountSession extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function witnessUser()
+    {
+        return $this->belongsTo(User::class, 'witness_user_id');
+    }
+
     public function isHandover(): bool
     {
         return in_array($this->type, ['bar_handover', 'kitchen_handover'], true);
@@ -75,9 +80,38 @@ class CountSession extends Model
         return (bool) $this->is_closing;
     }
 
+    /**
+     * The peer-to-peer declare/review/dispute/dual-seal flow only applies
+     * to a real handover — someone is actually taking over the bar/kitchen.
+     * A closing count (no successor) and a main_store_stocktake (solo,
+     * manager-reviewed) both stay on the older counting -> pending_review
+     * -> reviewed path untouched by this.
+     */
+    public function isHandoverWithSuccessor(): bool
+    {
+        return $this->isHandover() && !$this->isClosing();
+    }
+
+    /**
+     * Set only when the outgoing custodian was absent — the incoming
+     * person counted alone and a witness (any PIN holder) co-signs in
+     * their place at seal time instead of the outgoing confirming.
+     * outgoing_user_id is still recorded on these sessions so
+     * accountableUserId() still resolves to the absent bartender/chef.
+     */
+    public function isUnwitnessed(): bool
+    {
+        return $this->witness_user_id !== null;
+    }
+
     public function isDraft(): bool
     {
         return $this->status === 'counting';
+    }
+
+    public function isDeclared(): bool
+    {
+        return $this->status === 'declared';
     }
 
     public function isPendingReview(): bool
