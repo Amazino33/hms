@@ -37,7 +37,16 @@
     </div>
 </div>
 
-@once
+{{--
+    This keypad only ever enters the DOM through a Livewire morph — the
+    kiosk PIN modal appears after tapping a table, the seal screen after
+    a status change — never on the page's initial full load. A plain
+    <script> (or @once) injected that way never executes; only @script
+    gets Livewire to re-run it after every such update, which is why
+    the digit grid was rendering completely empty in production despite
+    working in every earlier local check.
+--}}
+@script
     <script>
         function pinKeypad() {
             return {
@@ -80,4 +89,4 @@
             };
         }
     </script>
-@endonce
+@endscript
