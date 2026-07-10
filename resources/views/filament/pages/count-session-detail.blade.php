@@ -41,7 +41,89 @@
         @endif
 
         @if($session->status === 'counting' && (!$this->isHandoverWithSuccessor() || $this->iAmCounter()))
-            <div x-data="countFlow(@js($this->safeCountItems()))" x-init="init()" class="max-w-md mx-auto">
+            {{-- Inline x-data, deliberately not a named function loaded via a
+                 separate <script> (@script/@once both proved unreliable here
+                 in real production use, even on a fresh full page load, not
+                 just a Livewire morph) — an inline object literal has
+                 nothing to load, Alpine evaluates it directly from this
+                 attribute. --}}
+            <div x-data="{
+                    items: @js($this->safeCountItems()),
+                    currentIndex: 0,
+                    activeSubLocation: null,
+                    saving: false,
+                    justSaved: false,
+                    pressed: null,
+
+                    get current() { return this.items[this.currentIndex] ?? null },
+                    get isFirst() { return this.currentIndex === 0 },
+                    get isLast() { return this.currentIndex === this.items.length - 1 },
+                    get progress() { return this.items.length ? `Product ${this.currentIndex + 1} of ${this.items.length}` : '' },
+
+                    init() {
+                        this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                    },
+
+                    selectSlot(loc) {
+                        this.activeSubLocation = loc
+                    },
+
+                    flash(key) {
+                        this.pressed = key
+                        setTimeout(() => { if (this.pressed === key) this.pressed = null }, 150)
+                    },
+
+                    typeDigit(d) {
+                        if (!this.activeSubLocation || !this.current) return
+                        this.flash(d)
+                        const existing = (this.current.values[this.activeSubLocation] ?? '').toString()
+                        if (d === '.' && existing.includes('.')) return
+                        this.current.values[this.activeSubLocation] = existing + d
+                    },
+
+                    backspace() {
+                        if (!this.activeSubLocation || !this.current) return
+                        this.flash('back')
+                        const existing = (this.current.values[this.activeSubLocation] ?? '').toString()
+                        this.current.values[this.activeSubLocation] = existing.slice(0, -1)
+                    },
+
+                    saveCurrent() {
+                        const cur = this.current
+                        if (!cur) return
+                        this.saving = true
+                        this.justSaved = false
+                        this.$wire.set('subLocationInputs.' + cur.id, cur.values)
+                            .then(() => this.$wire.call('recordCount', cur.id))
+                            .then(() => { this.justSaved = true })
+                            .finally(() => { this.saving = false })
+                    },
+
+                    next() {
+                        this.saveCurrent()
+                        if (!this.isLast) {
+                            this.currentIndex++
+                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                        }
+                    },
+
+                    prev() {
+                        if (!this.isFirst) {
+                            this.currentIndex--
+                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                        }
+                    },
+
+                    enterOnSlot() {
+                        const locs = this.current?.subLocations ?? []
+                        const idx = locs.indexOf(this.activeSubLocation)
+                        if (idx > -1 && idx < locs.length - 1) {
+                            this.activeSubLocation = locs[idx + 1]
+                        } else {
+                            this.next()
+                        }
+                    },
+                }" x-init="init()" class="max-w-md mx-auto">
                 <!-- Progress -->
                 <div class="flex items-center justify-between mb-3 text-sm">
                     <span class="font-bold text-gray-500 dark:text-gray-400" x-text="progress"></span>
@@ -115,98 +197,6 @@
                     </div>
                 </template>
             </div>
-
-            @script
-            <script>
-                function countFlow(items) {
-                    return {
-                        items: items,
-                        currentIndex: 0,
-                        activeSubLocation: null,
-                        saving: false,
-                        justSaved: false,
-                        pressed: null,
-
-                        get current() { return this.items[this.currentIndex] ?? null },
-                        get isFirst() { return this.currentIndex === 0 },
-                        get isLast() { return this.currentIndex === this.items.length - 1 },
-                        get progress() { return this.items.length ? `Product ${this.currentIndex + 1} of ${this.items.length}` : '' },
-
-                        init() {
-                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
-                        },
-
-                        selectSlot(loc) {
-                            this.activeSubLocation = loc;
-                        },
-
-                        flash(key) {
-                            this.pressed = key;
-                            setTimeout(() => { if (this.pressed === key) this.pressed = null; }, 150);
-                        },
-
-                        typeDigit(d) {
-                            if (!this.activeSubLocation || !this.current) return;
-                            this.flash(d);
-                            const existing = (this.current.values[this.activeSubLocation] ?? '').toString();
-                            if (d === '.' && existing.includes('.')) return;
-                            this.current.values[this.activeSubLocation] = existing + d;
-                        },
-
-                        backspace() {
-                            if (!this.activeSubLocation || !this.current) return;
-                            this.flash('back');
-                            const existing = (this.current.values[this.activeSubLocation] ?? '').toString();
-                            this.current.values[this.activeSubLocation] = existing.slice(0, -1);
-                        },
-
-                        // Fire-and-forget on purpose — the counter must never
-                        // wait on the network to move to the next product.
-                        // What's already typed lives in `items` (this
-                        // component's own state) regardless of when, or
-                        // whether, the save finishes.
-                        saveCurrent() {
-                            const cur = this.current;
-                            if (!cur) return;
-                            this.saving = true;
-                            this.justSaved = false;
-                            this.$wire.set('subLocationInputs.' + cur.id, cur.values)
-                                .then(() => this.$wire.call('recordCount', cur.id))
-                                .then(() => { this.justSaved = true; })
-                                .finally(() => { this.saving = false; });
-                        },
-
-                        next() {
-                            this.saveCurrent();
-                            if (!this.isLast) {
-                                this.currentIndex++;
-                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
-                            }
-                        },
-
-                        prev() {
-                            if (!this.isFirst) {
-                                this.currentIndex--;
-                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
-                            }
-                        },
-
-                        // Enter confirms the active slot and hops to the next
-                        // slot on this same product; on the last slot it
-                        // behaves like Next.
-                        enterOnSlot() {
-                            const locs = this.current?.subLocations ?? [];
-                            const idx = locs.indexOf(this.activeSubLocation);
-                            if (idx > -1 && idx < locs.length - 1) {
-                                this.activeSubLocation = locs[idx + 1];
-                            } else {
-                                this.next();
-                            }
-                        },
-                    };
-                }
-            </script>
-            @endscript
 
             @if(!$this->isHandoverWithSuccessor())
                 <div class="flex flex-wrap gap-2 mt-4 max-w-md mx-auto">
@@ -286,7 +276,71 @@
 
         @if($session->status === 'declared')
             @if($this->iAmReviewer())
-                <div x-data="reviewFlow(@js($this->safeReviewItems()))" x-init="init()" class="max-w-md mx-auto">
+                <div x-data="{
+                        items: @js($this->safeReviewItems()),
+                        currentIndex: 0,
+                        activeSubLocation: null,
+                        disputing: false,
+                        disputeValues: {},
+
+                        get current() { return this.items[this.currentIndex] ?? null },
+                        get isFirst() { return this.currentIndex === 0 },
+                        get isLast() { return this.currentIndex === this.items.length - 1 },
+                        get progress() { return this.items.length ? `Product ${this.currentIndex + 1} of ${this.items.length}` : '' },
+
+                        init() {
+                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                        },
+
+                        accept() {
+                            const cur = this.current
+                            if (!cur) return
+                            cur.outcome = 'accepted'
+                            this.$wire.call('reviewAccept', cur.id)
+                            this.goNextIfPossible()
+                        },
+
+                        startDispute() {
+                            this.disputeValues = {}
+                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                            this.disputing = true
+                        },
+
+                        typeDisputeDigit(d) {
+                            if (!this.activeSubLocation) return
+                            const existing = (this.disputeValues[this.activeSubLocation] ?? '').toString()
+                            if (d === '.' && existing.includes('.')) return
+                            this.disputeValues[this.activeSubLocation] = existing + d
+                        },
+
+                        backspaceDispute() {
+                            if (!this.activeSubLocation) return
+                            const existing = (this.disputeValues[this.activeSubLocation] ?? '').toString()
+                            this.disputeValues[this.activeSubLocation] = existing.slice(0, -1)
+                        },
+
+                        submitDispute() {
+                            const cur = this.current
+                            if (!cur) return
+                            cur.outcome = 'disputed'
+                            cur.incomingValues = this.disputeValues
+                            this.$wire.call('reviewDispute', cur.id, this.disputeValues)
+                            this.disputing = false
+                            this.goNextIfPossible()
+                        },
+
+                        goNextIfPossible() {
+                            if (!this.isLast) this.currentIndex++
+                        },
+
+                        next() {
+                            if (!this.isLast) this.currentIndex++
+                        },
+
+                        prev() {
+                            if (!this.isFirst) this.currentIndex--
+                        },
+                    }" x-init="init()" class="max-w-md mx-auto">
                     <div class="flex items-center justify-between mb-3 text-sm">
                         <span class="font-bold text-gray-500 dark:text-gray-400" x-text="progress"></span>
                     </div>
@@ -377,77 +431,6 @@
                     </template>
                 </div>
 
-                @script
-                <script>
-                    function reviewFlow(items) {
-                        return {
-                            items: items,
-                            currentIndex: 0,
-                            activeSubLocation: null,
-                            disputing: false,
-                            disputeValues: {},
-
-                            get current() { return this.items[this.currentIndex] ?? null },
-                            get isFirst() { return this.currentIndex === 0 },
-                            get isLast() { return this.currentIndex === this.items.length - 1 },
-                            get progress() { return this.items.length ? `Product ${this.currentIndex + 1} of ${this.items.length}` : '' },
-
-                            init() {
-                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
-                            },
-
-                            accept() {
-                                const cur = this.current;
-                                if (!cur) return;
-                                cur.outcome = 'accepted';
-                                this.$wire.call('reviewAccept', cur.id);
-                                this.goNextIfPossible();
-                            },
-
-                            startDispute() {
-                                this.disputeValues = {};
-                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null;
-                                this.disputing = true;
-                            },
-
-                            typeDisputeDigit(d) {
-                                if (!this.activeSubLocation) return;
-                                const existing = (this.disputeValues[this.activeSubLocation] ?? '').toString();
-                                if (d === '.' && existing.includes('.')) return;
-                                this.disputeValues[this.activeSubLocation] = existing + d;
-                            },
-
-                            backspaceDispute() {
-                                if (!this.activeSubLocation) return;
-                                const existing = (this.disputeValues[this.activeSubLocation] ?? '').toString();
-                                this.disputeValues[this.activeSubLocation] = existing.slice(0, -1);
-                            },
-
-                            submitDispute() {
-                                const cur = this.current;
-                                if (!cur) return;
-                                cur.outcome = 'disputed';
-                                cur.incomingValues = this.disputeValues;
-                                this.$wire.call('reviewDispute', cur.id, this.disputeValues);
-                                this.disputing = false;
-                                this.goNextIfPossible();
-                            },
-
-                            goNextIfPossible() {
-                                if (!this.isLast) this.currentIndex++;
-                            },
-
-                            next() {
-                                if (!this.isLast) this.currentIndex++;
-                            },
-
-                            prev() {
-                                if (!this.isFirst) this.currentIndex--;
-                            },
-                        };
-                    }
-                </script>
-                @endscript
             @else
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center">
                     <p class="text-gray-600 dark:text-gray-300">Waiting for {{ $session->incomingUser?->name }} to review your declared count.</p>
