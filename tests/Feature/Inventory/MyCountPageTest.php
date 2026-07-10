@@ -173,3 +173,41 @@ it('still lets a bartender reach the count session detail page directly, without
     expect(CountSessions::canAccess())->toBeFalse();
     expect(\App\Filament\Pages\CountSessionDetail::canAccess())->toBeTrue();
 });
+
+it('offers an unwitnessed handover instead of a solo opening count when someone else is still on shift', function () {
+    grantMyCountPagePermissions();
+    WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'type' => 'consumer']);
+
+    $absentOutgoing = User::factory()->create();
+    $absentOutgoing->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+    Shift::create(['user_id' => $absentOutgoing->id, 'type' => 'bartender', 'started_at' => now()->subHours(2), 'status' => 'active']);
+
+    $incoming = User::factory()->create();
+    $incoming->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+
+    $witness = User::factory()->create();
+    $witness->assignRole(Role::firstOrCreate(['name' => 'storekeeper']));
+    (new \App\Services\PinAuthService())->setPin($witness, '9911');
+
+    Livewire::actingAs($incoming)
+        ->test(MyCount::class)
+        ->assertSee('Start an Unwitnessed Handover')
+        ->assertDontSee('Start Your Opening Count')
+        ->call('startCount') // no witnessUserId set yet
+        ->assertSet('witnessUserId', null);
+
+    expect(CountSession::count())->toBe(0);
+
+    Livewire::actingAs($incoming)
+        ->test(MyCount::class)
+        ->set('witnessUserId', $witness->id)
+        ->call('startCount')
+        ->assertRedirect();
+
+    $session = CountSession::where('type', 'bar_handover')->first();
+    expect($session)->not->toBeNull();
+    expect($session->outgoing_user_id)->toBe($absentOutgoing->id);
+    expect($session->incoming_user_id)->toBe($incoming->id);
+    expect($session->witness_user_id)->toBe($witness->id);
+    expect($session->isUnwitnessed())->toBeTrue();
+});

@@ -52,6 +52,25 @@
                 <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
                     {{ $isClosing ? 'Start Closing Count' : 'Start Handover Count' }}
                 </button>
+            @elseif($this->otherActiveCustodian)
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Start an Unwitnessed Handover</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    {{ $this->otherActiveCustodian->name }} is still shown on shift but isn't here to count with you.
+                    You'll count alone, and someone else needs to witness it — any staff member with a PIN. The
+                    shortfall (if any) is still charged to {{ $this->otherActiveCustodian->name }}, not the witness.
+                </p>
+
+                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Witness</label>
+                <select wire:model="witnessUserId" class="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 mb-4">
+                    <option value="">Choose…</option>
+                    @foreach($this->candidateWitnesses as $user)
+                        <option value="{{ $user->id }}">{{ $user->name }}</option>
+                    @endforeach
+                </select>
+
+                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
+                    Start Unwitnessed Count
+                </button>
             @else
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Start Your Opening Count</h3>
                 <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">

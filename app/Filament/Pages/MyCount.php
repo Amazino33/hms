@@ -47,6 +47,8 @@ class MyCount extends Page
 
     public ?int $incomingUserId = null;
 
+    public ?int $witnessUserId = null;
+
     /**
      * Only meaningful when hasActiveShift() is true. False = a normal
      * handover (incomingUserId becomes the new custodian, gets a shift).
@@ -114,10 +116,11 @@ class MyCount extends Page
         }
 
         return CountSession::where('type', $type)
-            ->whereIn('status', ['counting', 'pending_review'])
+            ->whereIn('status', ['counting', 'declared', 'pending_review'])
             ->where(function ($query) {
                 $query->where('outgoing_user_id', auth()->id())
-                    ->orWhere('incoming_user_id', auth()->id());
+                    ->orWhere('incoming_user_id', auth()->id())
+                    ->orWhere('witness_user_id', auth()->id());
             })
             ->latest('opened_at')
             ->first();
@@ -135,6 +138,38 @@ class MyCount extends Page
         return User::role($role)->where('id', '!=', auth()->id())->orderBy('name')->get();
     }
 
+    /**
+     * The bartender/chef currently holding this role's shift, if anyone —
+     * used to tell apart "someone SHOULD be handing over to me but isn't
+     * here" (an unwitnessed handover) from a genuine first-of-the-day solo
+     * opening count with nobody on duty yet.
+     */
+    #[Computed]
+    public function otherActiveCustodian(): ?User
+    {
+        $role = $this->myRole();
+
+        if (!$role) {
+            return null;
+        }
+
+        $shift = Shift::where('user_id', '!=', auth()->id())->ofType($role)->activeNonStale($role)->first();
+
+        return $shift?->user;
+    }
+
+    /**
+     * Any staff member with a PIN set — a witness carries zero
+     * responsibility for the counted numbers, so it's deliberately not
+     * restricted to bartenders/chefs the way the incoming-custodian
+     * picker is.
+     */
+    #[Computed]
+    public function candidateWitnesses()
+    {
+        return User::whereNotNull('pin_hash')->where('id', '!=', auth()->id())->orderBy('name')->get();
+    }
+
     public function startCount(): void
     {
         $role = $this->myRole();
@@ -147,6 +182,7 @@ class MyCount extends Page
         }
 
         $isHandover = $this->hasActiveShift();
+        $absentCustodian = $isHandover ? null : $this->otherActiveCustodian;
 
         if ($isHandover && !$this->incomingUserId) {
             Notification::make()->title($this->isClosing
@@ -155,14 +191,20 @@ class MyCount extends Page
             return;
         }
 
+        if ($absentCustodian && !$this->witnessUserId) {
+            Notification::make()->title('Choose someone to witness this unwitnessed handover first')->warning()->send();
+            return;
+        }
+
         try {
             $session = (new CountSessionService())->openSession(
                 $type,
                 $warehouseId,
                 auth()->id(),
-                $isHandover ? auth()->id() : null,
-                $isHandover ? $this->incomingUserId : auth()->id(),
+                outgoingUserId: $isHandover ? auth()->id() : $absentCustodian?->id,
+                incomingUserId: $isHandover ? $this->incomingUserId : auth()->id(),
                 isClosing: $isHandover && $this->isClosing,
+                witnessUserId: $absentCustodian ? $this->witnessUserId : null,
             );
 
             $this->redirect("/admin/count-session-detail?session_id={$session->id}");

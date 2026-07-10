@@ -10,7 +10,9 @@ use App\Models\StaffDebt;
 use App\Models\User;
 use App\Models\WareHouse;
 use App\Services\CountSessionService;
+use App\Services\OrderSplitter;
 use App\Services\PinAuthService;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
 function seedBarHandoverScenario(int $quantity = 24): array
@@ -226,4 +228,72 @@ it('refuses to seal until every disputed product is either resolved or explicitl
 
     expect(fn () => $service->sealAgreement($session, '5793', '2846', 'test-blocked'))
         ->toThrow(Exception::class, 'Every disputed product must be resolved or marked unresolved before sealing.');
+});
+
+it('proves the freeze end to end through OrderSplitter: bar orders rejected once declared, allowed again once sealed', function () {
+    ['bar' => $bar, 'outgoing' => $outgoing, 'incoming' => $incoming] = seedBarHandoverScenario();
+    DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
+
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    $service = new CountSessionService();
+    $orderSplitter = new OrderSplitter();
+    $cart = fn (Product $product) => [$product->id => ['name' => $product->name, 'price' => $product->price, 'quantity' => 1]];
+    $product = Product::first();
+
+    // Before declaring, the outgoing's shift is still active — bar sales work.
+    $orderSplitter->handle($cart($product), 1, $waiter->id, []);
+    expect(\App\Models\Order::count())->toBe(1);
+
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
+    $session = $service->declare($session, '5793', 'test-freeze-declare');
+
+    expect(fn () => $orderSplitter->handle($cart($product), 1, $waiter->id, []))
+        ->toThrow(Exception::class, 'No active bartender session');
+    expect(\App\Models\Order::count())->toBe(1); // unchanged — the freeze attempt didn't sneak an order through
+
+    $item->refresh();
+    $service->reviewProduct($item, $incoming->id, 'accepted');
+    $service->sealAgreement($session, '5793', '2846', 'test-freeze-seal');
+
+    // Sealed — the incoming's new shift lifts the freeze. order_number is
+    // second-precision (ORD-{time()}-{destination}), so a 1s gap avoids
+    // colliding with the first order placed above in the same test.
+    sleep(1);
+    $orderSplitter->handle($cart($product), 1, $waiter->id, []);
+    expect(\App\Models\Order::count())->toBe(2);
+});
+
+it('never ships the expected/adjusted quantity to the browser through the new declare/review screens', function () {
+    ['bar' => $bar, 'outgoing' => $outgoing, 'incoming' => $incoming] = seedBarHandoverScenario();
+
+    \App\Models\PagePermission::firstOrCreate(
+        ['page_class' => \App\Filament\Pages\CountSessionDetail::class, 'role_name' => 'bartender'],
+        ['page_class' => \App\Filament\Pages\CountSessionDetail::class, 'page_name' => 'Count Session Detail', 'role_name' => 'bartender']
+    );
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
+    $session = $service->declare($session, '5793', 'test-blind-declare');
+    $item->refresh();
+    $service->reviewProduct($item, $incoming->id, 'disputed', ['Fridge' => 20]);
+
+    $component = \Livewire\Livewire::actingAs($incoming)
+        ->test(\App\Filament\Pages\CountSessionDetail::class, ['session_id' => $session->id]);
+
+    $safeReviewItems = $component->instance()->safeReviewItems();
+    expect(json_encode($safeReviewItems))->not->toContain('expected');
+    expect($safeReviewItems[0])->not->toHaveKey('expected_quantity_at_open');
+    expect($safeReviewItems[0])->not->toHaveKey('adjusted_expected_quantity');
+
+    // Raw wire:snapshot check too, same guarantee the original counting
+    // screen's test protects, extended to the 'declared' status.
+    $rawSnapshotData = json_encode($component->getData());
+    expect($rawSnapshotData)->not->toContain('expected_quantity_at_open');
+    expect($rawSnapshotData)->not->toContain('adjusted_expected_quantity');
 });
