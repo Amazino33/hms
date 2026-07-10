@@ -251,11 +251,33 @@
                                 </div>
                             @endforeach
                         </div>
-                        <div x-data="{ declareError: @js(null) }"
-                            @pin-entered="
-                                $wire.declare($event.detail).then(() => { show = false })
-                            ">
-                            <x-pin-keypad />
+                        <div x-data="{
+                                pin: '', pressed: null,
+                                digit(d) { if (this.pin.length >= 4) return; this.flash(d); this.pin += d
+                                    if (this.pin.length === 4) { const p = this.pin; this.$nextTick(() => { $wire.declare(p).then(() => { show = false }); this.pin = '' }) } },
+                                backspace() { this.flash('back'); this.pin = this.pin.slice(0, -1) },
+                                flash(key) { this.pressed = key; setTimeout(() => { if (this.pressed === key) this.pressed = null }, 150) },
+                            }">
+                            <div class="flex justify-center gap-3 mb-5">
+                                <template x-for="i in 4" :key="i">
+                                    <div class="w-5 h-5 rounded-full border-2 border-gray-400 transition-all duration-150"
+                                        :class="i <= pin.length ? 'bg-gray-900 border-gray-900 scale-110' : ''"></div>
+                                </template>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3">
+                                @foreach (['1','2','3','4','5','6','7','8','9'] as $digit)
+                                    <button type="button" @click="digit('{{ $digit }}')"
+                                        :class="pressed === '{{ $digit }}' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                        class="py-4 rounded-lg text-xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">{{ $digit }}</button>
+                                @endforeach
+                                <div></div>
+                                <button type="button" @click="digit('0')"
+                                    :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                    class="py-4 rounded-lg text-xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">0</button>
+                                <button type="button" @click="backspace"
+                                    :class="pressed === 'back' ? 'bg-red-300 scale-95' : 'bg-red-100 dark:bg-red-900/30'"
+                                    class="py-4 rounded-lg text-lg font-bold text-red-700 dark:text-red-400 transition-all duration-100 touch-manipulation">&larr;</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -451,8 +473,12 @@
                                 <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Recounted together and it's different from what you declared? Enter the real number and confirm with your PIN.</p>
                                 <div x-data="{
                                         values: @js($disputedItem->subCounts->pluck('quantity', 'sub_location')->all()),
-                                    }"
-                                    @pin-entered="$wire.amendDeclaration({{ $disputedItem->id }}, $event.detail, values)">
+                                        pin: '', pressed: null,
+                                        digit(d) { if (this.pin.length >= 4) return; this.flash(d); this.pin += d
+                                            if (this.pin.length === 4) { const p = this.pin; this.$nextTick(() => { $wire.amendDeclaration({{ $disputedItem->id }}, p, this.values); this.pin = '' }) } },
+                                        backspace() { this.flash('back'); this.pin = this.pin.slice(0, -1) },
+                                        flash(key) { this.pressed = key; setTimeout(() => { if (this.pressed === key) this.pressed = null }, 150) },
+                                    }">
                                     <div class="grid gap-2 mb-2" :class="Object.keys(values).length > 1 ? 'grid-cols-' + Object.keys(values).length : 'grid-cols-1'">
                                         <template x-for="loc in Object.keys(values)" :key="loc">
                                             <div>
@@ -461,7 +487,26 @@
                                             </div>
                                         </template>
                                     </div>
-                                    <x-pin-keypad />
+                                    <div class="flex justify-center gap-3 mb-3">
+                                        <template x-for="i in 4" :key="i">
+                                            <div class="w-4 h-4 rounded-full border-2 border-gray-400 transition-all duration-150"
+                                                :class="i <= pin.length ? 'bg-gray-900 border-gray-900 scale-110' : ''"></div>
+                                        </template>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        @foreach (['1','2','3','4','5','6','7','8','9'] as $digit)
+                                            <button type="button" @click="digit('{{ $digit }}')"
+                                                :class="pressed === '{{ $digit }}' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                                class="py-3 rounded-lg text-lg font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">{{ $digit }}</button>
+                                        @endforeach
+                                        <div></div>
+                                        <button type="button" @click="digit('0')"
+                                            :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                            class="py-3 rounded-lg text-lg font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">0</button>
+                                        <button type="button" @click="backspace"
+                                            :class="pressed === 'back' ? 'bg-red-300 scale-95' : 'bg-red-100 dark:bg-red-900/30'"
+                                            class="py-3 rounded-lg text-base font-bold text-red-700 dark:text-red-400 transition-all duration-100 touch-manipulation">&larr;</button>
+                                    </div>
                                 </div>
                             @elseif($this->iAmReviewer())
                                 <button wire:click="markItemUnresolved({{ $disputedItem->id }})"
