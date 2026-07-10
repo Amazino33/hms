@@ -160,3 +160,28 @@ it('walks a full bar handover session end to end through the detail page', funct
     expect($debt->user_id)->toBe($outgoing->id);
     expect((float) $debt->amount)->toEqual(2000.0);
 });
+
+it('binds ?session_id= on a real HTTP GET request, not just a Livewire::test() mount argument', function () {
+    // Regression test: Livewire::test(CountSessionDetail::class, ['session_id'
+    // => $id]) injects the mount() parameter directly and always worked —
+    // it never actually exercised how Filament resolves a real
+    // /admin/count-session-detail?session_id=X request from a browser,
+    // where the query string silently failed to reach mount() at all,
+    // making every real visitor bounce straight back to the session list
+    // (MyCount's "Start Handover Count" redirect, the admin list's row
+    // links, all of it) despite every Livewire-level test passing.
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 10]);
+
+    $manager = User::factory()->create();
+    $manager->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']));
+
+    $session = (new CountSessionService())->openSession('main_store_stocktake', $bar->id, $manager->id);
+
+    $response = $this->actingAs($manager)->get("/admin/count-session-detail?session_id={$session->id}");
+
+    $response->assertOk();
+    $response->assertSee('Beer');
+});

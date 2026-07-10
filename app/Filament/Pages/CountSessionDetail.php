@@ -59,7 +59,15 @@ class CountSessionDetail extends Page
 
     public function mount(?int $session_id = null): void
     {
-        $this->countSessionId = $session_id;
+        // $session_id (the mount parameter) is only reliably populated when
+        // a test injects it directly via Livewire::test(['session_id' =>
+        // ...]) — on a real HTTP GET, Filament's page routing doesn't
+        // forward ?session_id= into mount() the way a bare Livewire full-
+        // page route would, so it silently arrived null and every real
+        // visitor bounced straight back to the list. Reading the query
+        // string directly here is what actually works for a real request.
+        $queryValue = request()->integer('session_id');
+        $this->countSessionId = $session_id ?? ($queryValue > 0 ? $queryValue : null);
 
         if (!$this->session) {
             redirect('/admin/count-sessions');
