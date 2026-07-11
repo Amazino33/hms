@@ -11,7 +11,15 @@ class Ingredient extends Model
     use HasFactory;
     use LogsActivity;
 
-    protected $fillable = ['name', 'sku', 'unit_name', 'quantity', 'cost_per_unit', 'category'];
+    protected $fillable = [
+        'name', 'sku', 'unit_name', 'quantity', 'cost_per_unit', 'category',
+        'purchase_unit_name', 'units_per_purchase_unit', 'created_by_staff', 'created_by',
+    ];
+
+    protected $casts = [
+        'units_per_purchase_unit' => 'integer',
+        'created_by_staff' => 'boolean',
+    ];
 
     public function getActivitylogOptions(): LogOptions
     {
@@ -25,6 +33,16 @@ class Ingredient extends Model
     public function recipes()
     {
         return $this->hasMany(Recipe::class);
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function procurementIngredientItems()
+    {
+        return $this->hasMany(ProcurementIngredientItem::class);
     }
 
     public function inventory()

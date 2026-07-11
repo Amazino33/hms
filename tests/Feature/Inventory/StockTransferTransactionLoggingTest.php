@@ -71,7 +71,7 @@ it('supports transferring ingredients through the same shared stock_transfers he
     expect($txn)->toBe(2); // one out, one in
 });
 
-it('throws when receiving a transfer with insufficient source ingredient stock', function () {
+it('throws when creating a transfer with insufficient source ingredient stock', function () {
     Role::firstOrCreate(['name' => 'storekeeper']);
     $storekeeper = User::factory()->create();
 
@@ -82,9 +82,8 @@ it('throws when receiving a transfer with insufficient source ingredient stock',
     IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $main->id, 'quantity' => 5]);
 
     $service = new StockTransferService();
-    $transfer = $service->createTransfer($main->id, $kitchen->id, $storekeeper->id, [], [
-        ['ingredient_id' => $ingredient->id, 'quantity' => 20],
-    ]);
 
-    expect(fn () => $service->receiveTransfer($transfer, $storekeeper->id))->toThrow(Exception::class);
+    expect(fn () => $service->createTransfer($main->id, $kitchen->id, $storekeeper->id, [], [
+        ['ingredient_id' => $ingredient->id, 'quantity' => 20],
+    ]))->toThrow(Exception::class);
 });

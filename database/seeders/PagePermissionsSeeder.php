@@ -216,6 +216,35 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'Waiter Ledger',
                 'role_name' => 'manager',
             ],
+
+            // Record Procurement (goods receipt) - Storekeepers and Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\NewProcurement',
+                'page_name' => 'Record Procurement',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\NewProcurement',
+                'page_name' => 'Record Procurement',
+                'role_name' => 'storekeeper',
+            ],
+
+            // Transfer Discrepancies - Managers, Admins, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\TransferDiscrepancies',
+                'page_name' => 'Transfer Discrepancies',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\TransferDiscrepancies',
+                'page_name' => 'Transfer Discrepancies',
+                'role_name' => 'admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\TransferDiscrepancies',
+                'page_name' => 'Transfer Discrepancies',
+                'role_name' => 'manager',
+            ],
         ];
 
         foreach ($permissions as $permission) {

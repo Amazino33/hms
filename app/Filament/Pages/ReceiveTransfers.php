@@ -2,7 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\IngredientTransferItem;
 use App\Models\StockTransfer;
+use App\Models\StockTransferItem;
+use App\Services\StockTransferService;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
@@ -64,8 +68,8 @@ class ReceiveTransfers extends Page
         if ($user->hasRole('storekeeper') || $user->hasRole('super_admin')) {
             // Storekeeper can see all transfers regardless of warehouse
             $transfers = Cache::remember('receive_transfers:all', 5, fn () =>
-                StockTransfer::with(['items','fromWarehouse','toWarehouse'])
-                    ->whereIn('status', ['pending','sent'])
+                StockTransfer::with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
+                    ->whereIn('status', ['pending','sent','partially_received'])
                     ->latest()
                     ->get()
             );
@@ -97,8 +101,8 @@ class ReceiveTransfers extends Page
             $cacheKey = "receive_transfers:wh:{$warehouseId}";
             $transfers = Cache::remember($cacheKey, 5, fn () =>
                 StockTransfer::where('to_warehouse_id', $warehouseId)
-                    ->whereIn('status', ['pending','sent'])
-                    ->with(['items','fromWarehouse','toWarehouse'])
+                    ->whereIn('status', ['pending','sent','partially_received'])
+                    ->with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
                     ->latest()
                     ->get()
             );
@@ -109,6 +113,39 @@ class ReceiveTransfers extends Page
             'warehouseId' => $warehouseId,
             'warehouseName' => $warehouseName,
         ];
+    }
+
+    /**
+     * Receive a single transfer line for a partial/line-by-line receipt —
+     * the primary receive path now. The whole-transfer bulk-receive action
+     * (StockTransferController::bulkReceive, still calling the untouched
+     * all-or-nothing receiveTransfer()) stays available for full receipts.
+     */
+    public function receiveLine(int $itemId, string $type, mixed $receivedQty): void
+    {
+        $user = Auth::user();
+
+        if (! $user->hasAnyRole(['storekeeper', 'chef', 'bartender', 'super_admin'])) {
+            Notification::make()->danger()->title('Permission denied')->send();
+
+            return;
+        }
+
+        $item = $type === 'ingredient'
+            ? IngredientTransferItem::findOrFail($itemId)
+            : StockTransferItem::findOrFail($itemId);
+
+        try {
+            app(StockTransferService::class)->receiveTransferLine($item, (float) $receivedQty, $user->id);
+            Notification::make()->success()->title('Line received')->send();
+        } catch (\Throwable $e) {
+            Notification::make()->danger()->title('Could not receive line')->body($e->getMessage())->send();
+
+            return;
+        }
+
+        Cache::forget('receive_transfers:all');
+        Cache::forget("receive_transfers:wh:{$item->transfer->to_warehouse_id}");
     }
 
     public static function canAccess(): bool

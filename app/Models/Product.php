@@ -16,10 +16,19 @@ class Product extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'units_per_purchase_unit' => 'integer',
+        'last_cost_price' => 'decimal:2',
+        'created_by_staff' => 'boolean',
+    ];
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'sku', 'price', 'cost_price', 'category_id', 'is_active', 'fridge_par'])
+            ->logOnly([
+                'name', 'sku', 'price', 'cost_price', 'category_id', 'is_active', 'fridge_par',
+                'base_unit', 'purchase_unit_name', 'units_per_purchase_unit', 'last_cost_price', 'created_by_staff',
+            ])
             ->logOnlyDirty()
             ->useLogName('product')
             ->dontLogEmptyChanges();
@@ -28,6 +37,16 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function procurementItems()
+    {
+        return $this->hasMany(ProcurementItem::class);
     }
 
     public function inventory()

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Ingredient;
 use App\Models\Product;
 use Filament\Pages\Page;
 use BackedEnum;
@@ -29,21 +30,24 @@ class StorekeeperTransfers extends Page
     {
         // Short cache for lookup lists (these are cheap and useful immediately)
         $products = Cache::remember('storekeeper:products', 60, fn () => Product::with('category')->orderBy('name')->get());
+        $ingredients = Cache::remember('storekeeper:ingredients', 60, fn () => Ingredient::orderBy('name')->get());
         $warehouses = Cache::remember('storekeeper:warehouses', 60, fn () => WareHouse::orderBy('name')->get());
 
         if (! $this->ready) {
             return [
                 'products' => $products,
+                'ingredients' => $ingredients,
                 'warehouses' => $warehouses,
                 'recentTransfers' => collect(),
             ];
         }
 
         $page = request()->get('page', 1);
-        $recent = StockTransfer::with(['items','fromWarehouse','toWarehouse'])->latest()->paginate(10, ['*'], 'page', $page);
+        $recent = StockTransfer::with(['items','ingredientItems','fromWarehouse','toWarehouse'])->latest()->paginate(10, ['*'], 'page', $page);
 
         return [
             'products' => $products,
+            'ingredients' => $ingredients,
             'warehouses' => $warehouses,
             'recentTransfers' => $recent,
         ];

@@ -89,8 +89,8 @@
                                 </svg>
                             </div>
                             <div>
-                                <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ $transfers->sum(fn($t) => $t->items->sum('quantity')) }}</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Total Items</p>
+                                <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ $transfers->sum(fn($t) => $t->items->count() + $t->ingredientItems->count()) }}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Total Lines</p>
                             </div>
                         </div>
                     </div>
@@ -157,16 +157,14 @@
                                     </div>
                                     <div class="flex items-center gap-4">
                                         <div class="text-right">
-                                            <p class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ $t->items->sum('quantity') }}</p>
-                                            <p class="text-xs text-gray-500 dark:text-gray-400">Total Items</p>
+                                            <p class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ $t->items->count() + $t->ingredientItems->count() }}</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Lines</p>
                                         </div>
-                                        <button onclick="openReceiveModal({{ $t->id }}, '{{ $t->transfer_number }}')"
-                                            class="px-5 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                            Receive
-                                        </button>
+                                        <span class="px-3 py-1 text-xs font-semibold rounded-full
+                                            @if($t->status === 'partially_received') bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300
+                                            @else bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 @endif">
+                                            {{ $t->status === 'partially_received' ? 'Partially received' : ucfirst($t->status) }}
+                                        </span>
                                     </div>
                                 </div>
 
@@ -186,53 +184,64 @@
                                             </div>
                                         </div>
                                         <div class="text-right">
-                                            <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">{{ $t->items->sum('quantity') }}</p>
-                                            <p class="text-xs text-gray-500 dark:text-gray-400">Items</p>
+                                            <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">{{ $t->items->count() + $t->ingredientItems->count() }}</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Lines</p>
                                         </div>
-                                    </div>
-                                    <div class="flex items-center justify-end">
-                                        <button onclick="openReceiveModal({{ $t->id }}, '{{ $t->transfer_number }}')"
-                                            class="px-5 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                            Receive
-                                        </button>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Items Table -->
                             <div class="p-4">
+                                {{-- Per-line receipt: an editable "received" quantity, pre-filled with
+                                     the sent amount and clamped to it, submitted independently per
+                                     line so a short/damaged line doesn't block the rest of the
+                                     transfer. A short receipt opens a manager-visible discrepancy
+                                     instead of throwing. --}}
+                                @php
+                                    $lines = $t->items->map(fn ($it) => ['item' => $it, 'type' => 'product', 'name' => $it->product->name ?? $it->product_id])
+                                        ->concat($t->ingredientItems->map(fn ($it) => ['item' => $it, 'type' => 'ingredient', 'name' => $it->ingredient->name ?? $it->ingredient_id]));
+                                @endphp
+
                                 <!-- Desktop Table -->
                                 <div class="hidden md:block">
                                     <div class="overflow-x-auto">
                                         <table class="w-full">
                                             <thead>
                                                 <tr class="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                                    <th class="pb-4 pl-4">Product</th>
-                                                    <th class="pb-4 text-center">Quantity</th>
+                                                    <th class="pb-4 pl-4">Item</th>
+                                                    <th class="pb-4 text-center">Sent</th>
+                                                    <th class="pb-4 text-center">Received</th>
                                                     <th class="pb-4 pr-4 text-right">Status</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                                                @foreach($t->items as $it)
+                                                @foreach($lines as $line)
+                                                    @php $it = $line['item']; @endphp
                                                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                                         <td class="py-4 pl-4">
-                                                            <div class="flex items-center gap-3">
-                                                                <div class="w-10 h-10 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-lg flex items-center justify-center">
-                                                                    <svg class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                                                                    </svg>
-                                                                </div>
-                                                                <span class="font-medium text-gray-900 dark:text-white">{{ $it->product->name ?? $it->product_id }}</span>
-                                                            </div>
+                                                            <span class="font-medium text-gray-900 dark:text-white">{{ $line['name'] }}</span>
                                                         </td>
                                                         <td class="py-4 text-center">
                                                             <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full font-semibold">{{ $it->quantity }}</span>
                                                         </td>
+                                                        <td class="py-4 text-center">
+                                                            @if ($it->isPending())
+                                                                <input type="number" id="recv-{{ $line['type'] }}-{{ $it->id }}" value="{{ $it->quantity }}" min="0" max="{{ $it->quantity }}" step="0.01" class="w-24 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-center">
+                                                            @else
+                                                                <span class="text-gray-600 dark:text-gray-400">{{ $it->received_quantity }}</span>
+                                                            @endif
+                                                        </td>
                                                         <td class="py-4 pr-4 text-right">
-                                                            <span class="px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full text-xs font-semibold">Pending</span>
+                                                            @if ($it->isPending())
+                                                                <button wire:click="receiveLine({{ $it->id }}, '{{ $line['type'] }}', document.getElementById('recv-{{ $line['type'] }}-{{ $it->id }}').value)" wire:loading.attr="disabled" class="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-xs font-semibold">Receive</button>
+                                                            @elseif ($it->outcome === 'received_full')
+                                                                <span class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs font-semibold">Received</span>
+                                                            @elseif ($it->outcome === 'received_short')
+                                                                <span class="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-xs font-semibold">Short</span>
+                                                            @else
+                                                                <span class="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-xs font-semibold">Rejected</span>
+                                                            @endif
                                                         </td>
                                                     </tr>
                                                 @endforeach
@@ -243,25 +252,25 @@
 
                                 <!-- Mobile Card Layout -->
                                 <div class="md:hidden space-y-4">
-                                    @foreach($t->items as $it)
-                                        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-2 border border-gray-200 dark:border-gray-700">
-                                            <div class="flex items-start justify-between">
-                                                <div class="flex items-center gap-3 flex-1">
-                                                    <div class="w-10 h-10 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                        <svg class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                                                        </svg>
-                                                    </div>
-                                                    <div class="flex-1 min-w-0">
-                                                        <h4 class="font-medium text-gray-900 dark:text-white text-sm leading-tight">{{ $it->product->name ?? $it->product_id }}</h4>
-
-                                                    </div>
+                                    @foreach($lines as $line)
+                                        @php $it = $line['item']; @endphp
+                                        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 border border-gray-200 dark:border-gray-700">
+                                            <h4 class="font-medium text-gray-900 dark:text-white text-sm leading-tight mb-2">{{ $line['name'] }}</h4>
+                                            <div class="flex items-center gap-2 mb-2">
+                                                <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-semibold">Sent: {{ $it->quantity }}</span>
+                                            </div>
+                                            @if ($it->isPending())
+                                                <div class="flex items-center gap-2">
+                                                    <input type="number" id="recv-m-{{ $line['type'] }}-{{ $it->id }}" value="{{ $it->quantity }}" min="0" max="{{ $it->quantity }}" step="0.01" class="w-24 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-center">
+                                                    <button wire:click="receiveLine({{ $it->id }}, '{{ $line['type'] }}', document.getElementById('recv-m-{{ $line['type'] }}-{{ $it->id }}').value)" wire:loading.attr="disabled" class="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-xs font-semibold">Receive</button>
                                                 </div>
-                                            </div>
-                                            <div class="flex items-center gap-2 mt-3">
-                                                <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-semibold">Qty: {{ $it->quantity }}</span>
-                                                <span class="px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-lg text-xs font-semibold">Pending</span>
-                                            </div>
+                                            @elseif ($it->outcome === 'received_full')
+                                                <span class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-xs font-semibold">Received {{ $it->received_quantity }}</span>
+                                            @elseif ($it->outcome === 'received_short')
+                                                <span class="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg text-xs font-semibold">Short — received {{ $it->received_quantity }}</span>
+                                            @else
+                                                <span class="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-xs font-semibold">Rejected</span>
+                                            @endif
                                         </div>
                                     @endforeach
                                 </div>
@@ -272,40 +281,9 @@
             @endif
         @endif
     </div>
-    
-    <!-- Confirm receive modal -->
-    <div id="receive-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
-        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 transform transition-all duration-300 scale-100">
-            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">Confirm Receipt</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">This action will update inventory</p>
-                    </div>
-                </div>
-            </div>
-            <div class="p-6">
-                <p id="modal-transfer-number" class="text-gray-700 dark:text-gray-300">Are you sure you want to mark this transfer as received?</p>
-            </div>
-            <div class="p-6 bg-gray-50 dark:bg-gray-900/50 rounded-b-2xl flex justify-end gap-3">
-                <button onclick="closeReceiveModal()" class="px-5 py-2.5 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium transition-all">
-                    Cancel
-                </button>
-                <button type="button" onclick="submitReceive()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all">
-                    Yes, Receive Transfer
-                </button>
-            </div>
-        </div>
-    </div>
 
-    @push('script')
+    @push('scripts')
     <script>
-        let currentReceiveId = null;
         let selectedTransfers = [];
 
         function showToast(msg, type = 'success') {
@@ -322,48 +300,6 @@
                 toast.classList.add('hidden');
                 toast.classList.remove('animate-slideIn');
             }, 4000);
-        }
-
-        function openReceiveModal(id, number) {
-            const modal = document.getElementById('receive-modal');
-            const p = document.getElementById('modal-transfer-number');
-            currentReceiveId = id;
-            p.textContent = `Mark transfer ${number} as received? This will update your inventory.`;
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-        }
-
-        function closeReceiveModal() {
-            const modal = document.getElementById('receive-modal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            currentReceiveId = null;
-        }
-
-        function submitReceive() {
-            if (!currentReceiveId) return;
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ||
-                document.querySelector('input[name="_token"]')?.value || '';
-            fetch(`/stock-transfers/${currentReceiveId}/receive`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': csrfToken,
-                    'Content-Type': 'application/json'
-                }
-            }).then(r => r.json()).then(data => {
-                if (data.message && data.message.includes('Forbidden')) {
-                    showToast('Permission denied', 'error');
-                } else if (data.status === 'received') {
-                    showToast('Transfer received successfully!');
-                    closeReceiveModal();
-                    setTimeout(() => location.reload(), 2000);
-                } else if (data.message) {
-                    showToast(data.message, 'error');
-                }
-            }).catch(e => {
-                console.error(e);
-                showToast('Error receiving transfer', 'error');
-            });
         }
 
         // Bulk selection functionality
@@ -448,173 +384,10 @@
             console.log('Event listeners initialized');
         });
 
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                closeReceiveModal();
-            }
-        });
     </script>
     @endpush
 
-    <script>
-        console.log('Script loaded directly in template');
-        let currentReceiveId = null;
-        let selectedTransfers = [];
-
-        function showToast(msg, type = 'success') {
-            const toast = document.getElementById('toast');
-            if (!toast) {
-                console.error('Toast element not found');
-                return;
-            }
-            const content = document.getElementById('toast-content');
-            const bgClass = type === 'success' 
-                ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
-                : 'bg-gradient-to-r from-red-500 to-red-600';
-            content.className = `${bgClass} text-white px-6 py-4 rounded-xl shadow-2xl font-medium`;
-            content.textContent = msg;
-            toast.classList.remove('hidden');
-            toast.classList.add('animate-slideIn');
-            setTimeout(() => {
-                toast.classList.add('hidden');
-                toast.classList.remove('animate-slideIn');
-            }, 4000);
-        }
-
-        function openReceiveModal(id, number) {
-            const modal = document.getElementById('receive-modal');
-            if (!modal) {
-                console.error('Receive modal not found');
-                return;
-            }
-            const p = document.getElementById('modal-transfer-number');
-            currentReceiveId = id;
-            p.textContent = `Mark transfer ${number} as received? This will update your inventory.`;
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-        }
-
-        function closeReceiveModal() {
-            const modal = document.getElementById('receive-modal');
-            if (!modal) return;
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            currentReceiveId = null;
-        }
-
-        function submitReceive() {
-            if (!currentReceiveId) return;
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ||
-                document.querySelector('input[name="_token"]')?.value || '';
-            fetch(`/stock-transfers/${currentReceiveId}/receive`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': csrfToken,
-                    'Content-Type': 'application/json'
-                }
-            }).then(r => r.json()).then(data => {
-                if (data.message && data.message.includes('Forbidden')) {
-                    showToast('Permission denied', 'error');
-                } else if (data.status === 'received') {
-                    showToast('Transfer received successfully!');
-                    closeReceiveModal();
-                    setTimeout(() => location.reload(), 2000);
-                } else if (data.message) {
-                    showToast(data.message, 'error');
-                }
-            }).catch(e => {
-                console.error(e);
-                showToast('Error receiving transfer', 'error');
-            });
-        }
-
-        // Bulk selection functionality
-        function updateSelectedCount() {
-            const checkboxes = document.querySelectorAll('.transfer-checkbox:checked');
-            selectedTransfers = Array.from(checkboxes).map(cb => parseInt(cb.value));
-            const count = selectedTransfers.length;
-            const countElement = document.getElementById('selected-count');
-            if (countElement) {
-                countElement.textContent = `${count} selected`;
-            }
-            const bulkBtn = document.getElementById('bulk-receive-btn');
-            if (bulkBtn) {
-                bulkBtn.disabled = count === 0;
-            }
-        }
-
-        function submitBulkReceive() {
-            if (selectedTransfers.length === 0) return;
-
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ||
-                document.querySelector('input[name="_token"]')?.value || '';
-
-            showToast('Processing bulk receive...', 'success');
-
-            fetch('/stock-transfers/bulk-receive', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': csrfToken,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    transfer_ids: selectedTransfers
-                })
-            }).then(r => r.json()).then(data => {
-                const successful = data.successful || 0;
-                const failed = data.failed || 0;
-
-                if (failed === 0) {
-                    showToast(`Successfully received ${successful} transfers!`);
-                } else if (successful === 0) {
-                    showToast(`Failed to receive ${failed} transfers. Check console for details.`, 'error');
-                    console.error('Bulk receive errors:', data.errors);
-                } else {
-                    showToast(`Received ${successful} transfers, ${failed} failed. Check console for details.`, 'error');
-                    console.error('Bulk receive errors:', data.errors);
-                }
-
-                setTimeout(() => location.reload(), 2000);
-            }).catch(e => {
-                console.error(e);
-                showToast('Error processing bulk receive', 'error');
-            });
-        }
-
-        // Initialize event listeners
-        // Delegated listeners — work after wire:init re-renders the DOM
-        document.addEventListener('change', function(e) {
-            if (e.target.id === 'select-all') {
-                const checkboxes = document.querySelectorAll('.transfer-checkbox');
-                checkboxes.forEach(cb => { cb.checked = e.target.checked; });
-                updateSelectedCount();
-                const label = e.target.nextElementSibling;
-                if (label) label.textContent = e.target.checked ? 'Deselect All' : 'Select All';
-            }
-            if (e.target.classList.contains('transfer-checkbox')) {
-                updateSelectedCount();
-                const allCheckboxes = document.querySelectorAll('.transfer-checkbox');
-                const checkedCheckboxes = document.querySelectorAll('.transfer-checkbox:checked');
-                const selectAll = document.getElementById('select-all');
-                if (selectAll) {
-                    selectAll.checked = allCheckboxes.length === checkedCheckboxes.length && allCheckboxes.length > 0;
-                    selectAll.indeterminate = checkedCheckboxes.length > 0 && checkedCheckboxes.length < allCheckboxes.length;
-                }
-            }
-        });
-
-        document.addEventListener('click', function(e) {
-            if (e.target.closest('#bulk-receive-btn')) submitBulkReceive();
-        });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                closeReceiveModal();
-            }
-        });
-    </script> 
-    
-    @push('style')
+    @push('styles')
     <style>
         @keyframes slideIn {
             from {

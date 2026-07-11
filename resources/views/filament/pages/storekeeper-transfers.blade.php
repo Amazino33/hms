@@ -61,24 +61,7 @@
                     <!-- Items Section -->
                     <div class="mb-6">
                         <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Transfer Items</label>
-                        <div id="items-list" class="space-y-3">
-                            <div class="md:flex md:gap-3 md:items-center p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-all">
-                                <select data-index="0" name="items[0][product_id]" class="product-select md:flex-1 w-full md:w-auto px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none mb-3 md:mb-0">
-                                    <option value="">Select Product</option>
-                                    @foreach($products as $product)
-                                        <option value="{{ $product->id }}">{{ $product->name }}</option>
-                                    @endforeach
-                                </select>
-                                <div class="flex gap-3 items-center">
-                                    <input data-index="0" name="items[0][quantity]" type="number" min="1" value="1" placeholder="Qty" class="w-full md:w-24 px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none text-center font-medium" />
-                                    <button type="button" class="px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all" onclick="removeItemRow(this)">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <div id="items-list" class="space-y-3"></div>
                         <div class="mt-4 md:flex md:justify-start flex justify-center">
                             <button type="button" onclick="addItemRow()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 hover:from-gray-200 hover:to-gray-300 dark:hover:from-gray-600 dark:hover:to-gray-500 text-gray-800 dark:text-gray-100 rounded-xl font-medium transition-all shadow-sm hover:shadow">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,8 +102,9 @@
                     <table class="w-full text-sm">
                         <thead class="hidden lg:table-header-group">
                             <tr class="text-left text-gray-500 dark:text-gray-400 text-xs uppercase font-semibold">
-                                <th class="py-3 px-2">Product</th>
+                                <th class="py-3 px-2">Item</th>
                                 <th class="py-3 px-2 text-center">Qty</th>
+                                <th class="py-3 px-2 text-center">= Base</th>
                                 <th class="py-3 px-2 text-center">Avail</th>
                             </tr>
                         </thead>
@@ -185,7 +169,7 @@
                                         <!-- Row 3: Item Count -->
                                         <div>
                                             <p class="text-sm text-gray-600 dark:text-gray-400">
-                                                <span class="font-medium">Items:</span> {{ $transfer->items->sum('quantity') }}
+                                                <span class="font-medium">Lines:</span> {{ $transfer->items->count() + $transfer->ingredientItems->count() }}
                                             </p>
                                         </div>
                                     </div>
@@ -222,17 +206,18 @@
     <!-- stop <script> tag from giving only one root error for livewire -->
     @push('scripts')
     <script>
-        let idx = 1;
+        let idx = 0;
         const allProducts = @json($products);
+        const allIngredients = @json($ingredients);
         const warehouses = @json($warehouses);
-        const productAvailability = {}; // Store availability data
+        const availabilityCache = {}; // keyed by `${type}:${id}` -> quantity
 
         function getFilteredProducts(toWarehouseId) {
             if (!toWarehouseId) return allProducts;
-            
+
             const warehouse = warehouses.find(w => w.id == toWarehouseId);
             if (!warehouse || warehouse.type !== 'consumer') return allProducts;
-            
+
             // For consumer warehouses, filter by category type based on warehouse name
             const warehouseName = warehouse.name.toLowerCase();
             if (warehouseName.includes('bar')) {
@@ -240,53 +225,91 @@
             } else if (warehouseName.includes('kitchen')) {
                 return allProducts.filter(p => p.category && p.category.type === 'food');
             }
-            
+
             return allProducts;
         }
 
-        function updateProductSelects() {
-            const toWarehouseSelect = document.querySelector('select[name="to_warehouse_id"]');
-            const toWarehouseId = toWarehouseSelect ? toWarehouseSelect.value : null;
-            const filteredProducts = getFilteredProducts(toWarehouseId);
-            
-            // Update all existing product selects
-            const productSelects = document.querySelectorAll('.product-select');
-            productSelects.forEach(select => {
-                const currentValue = select.value;
-                select.innerHTML = '<option value="">Select Product</option>' +
-                    filteredProducts.map(product => `<option value="${product.id}" ${product.id == currentValue ? 'selected' : ''}>${product.name}</option>`).join('');
-            });
+        function itemsFor(type, toWarehouseId) {
+            return type === 'ingredient' ? allIngredients : getFilteredProducts(toWarehouseId);
+        }
+
+        function findItem(type, id) {
+            const list = type === 'ingredient' ? allIngredients : allProducts;
+            return list.find(i => i.id == id);
+        }
+
+        function baseUnitLabel(type, item) {
+            if (!item) return type === 'ingredient' ? 'unit' : 'bottle';
+            return type === 'ingredient' ? (item.unit_name || 'kg') : (item.base_unit || 'bottle');
+        }
+
+        function rowEl(index) {
+            return document.querySelector(`.item-row[data-index="${index}"]`);
         }
 
         function addItemRow() {
             const container = document.getElementById('items-list');
-            const toWarehouseSelect = document.querySelector('select[name="to_warehouse_id"]');
-            const toWarehouseId = toWarehouseSelect ? toWarehouseSelect.value : null;
-            const filteredProducts = getFilteredProducts(toWarehouseId);
-            
+            const toWarehouseId = document.querySelector('select[name="to_warehouse_id"]')?.value;
+            const i = idx++;
+
             const div = document.createElement('div');
-            div.className = 'md:flex md:gap-3 md:items-center p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-all animate-fadeIn';
+            div.className = 'item-row p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-all animate-fadeIn';
+            div.dataset.index = i;
             div.innerHTML = `
-                <select data-index="${idx}" class="product-select md:flex-1 w-full md:w-auto px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none mb-3 md:mb-0">
-                    <option value="">Select Product</option>
-                    ${filteredProducts.map(product => `<option value="${product.id}">${product.name}</option>`).join('')}
-                </select>
-                <div class="flex gap-3 items-center">
-                    <input data-index="${idx}" type="number" min="1" value="1" placeholder="Qty" class="w-full md:w-24 px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none text-center font-medium" />
-                    <button type="button" class="px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all" onclick="removeItemRow(this)">
+                <div class="md:flex md:gap-3 md:items-center">
+                    <select class="type-select px-3 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mb-3 md:mb-0">
+                        <option value="product">Product</option>
+                        <option value="ingredient">Ingredient</option>
+                    </select>
+                    <select class="item-select md:flex-1 w-full md:w-auto px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none mb-3 md:mb-0"></select>
+                    <button type="button" class="px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all" onclick="removeItemRow(this)">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                         </svg>
                     </button>
                 </div>
+                <div class="flex flex-wrap gap-3 items-center mt-3">
+                    <input type="number" min="0.01" step="0.01" value="1" placeholder="Qty" class="qty-input w-24 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-center font-medium" />
+                    <select class="unit-select px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"></select>
+                    <span class="conversion-note text-xs text-gray-500 dark:text-gray-400"></span>
+                </div>
             `;
             container.appendChild(div);
-            idx++;
+            refreshItemSelect(i);
+            refreshUnitSelect(i);
             refreshPreview();
         }
 
+        function refreshItemSelect(i) {
+            const row = rowEl(i);
+            if (!row) return;
+            const type = row.querySelector('.type-select').value;
+            const toWarehouseId = document.querySelector('select[name="to_warehouse_id"]')?.value;
+            const select = row.querySelector('.item-select');
+            const currentValue = select.value;
+            const list = itemsFor(type, toWarehouseId);
+            select.innerHTML = '<option value="">Select ' + (type === 'ingredient' ? 'Ingredient' : 'Product') + '</option>' +
+                list.map(item => `<option value="${item.id}" ${item.id == currentValue ? 'selected' : ''}>${item.name}</option>`).join('');
+        }
+
+        function refreshUnitSelect(i) {
+            const row = rowEl(i);
+            if (!row) return;
+            const type = row.querySelector('.type-select').value;
+            const itemId = row.querySelector('.item-select').value;
+            const item = findItem(type, itemId);
+            const unitSelect = row.querySelector('.unit-select');
+            const base = baseUnitLabel(type, item);
+
+            let html = `<option value="base_unit">${base}</option>`;
+            if (item && item.units_per_purchase_unit) {
+                html += `<option value="purchase_unit">${item.purchase_unit_name || 'pack'} (${item.units_per_purchase_unit} ${base})</option>`;
+            }
+            unitSelect.innerHTML = html;
+        }
+
         function removeItemRow(btn) {
-            const row = btn.closest('div');
+            const row = btn.closest('.item-row');
             if (row) {
                 row.classList.add('animate-fadeOut');
                 setTimeout(() => {
@@ -296,142 +319,169 @@
             }
         }
 
+        function rowData(row) {
+            const type = row.querySelector('.type-select').value;
+            const itemId = row.querySelector('.item-select').value;
+            const item = findItem(type, itemId);
+            const enteredQty = parseFloat(row.querySelector('.qty-input').value) || 0;
+            const enteredUnit = row.querySelector('.unit-select').value;
+            const unitsPerPurchaseUnit = (item && item.units_per_purchase_unit) || null;
+            const baseQty = (enteredUnit === 'purchase_unit' && unitsPerPurchaseUnit)
+                ? Math.round(enteredQty * unitsPerPurchaseUnit * 100) / 100
+                : Math.round(enteredQty * 100) / 100;
+
+            return { type, itemId, item, enteredQty, enteredUnit, baseQty };
+        }
+
         async function refreshPreview() {
-            const rows = document.querySelectorAll('#items-list > div');
+            const rows = document.querySelectorAll('#items-list > .item-row');
             const body = document.getElementById('preview-body');
             const mobileBody = document.getElementById('mobile-preview-body');
             const fromWarehouseId = document.querySelector('select[name="from_warehouse_id"]')?.value;
-            
-            // Clear both preview areas
+
             body.innerHTML = '';
             mobileBody.innerHTML = '';
             let total = 0;
-            
-            // Check which preview is currently visible
-            const isDesktopVisible = window.getComputedStyle(document.querySelector('.overflow-x-auto.lg\\:overflow-x-visible')).display !== 'none';
-            const isMobileVisible = window.getComputedStyle(mobileBody.parentElement).display !== 'none';
-            
+
             for (const r of rows) {
-                const sel = r.querySelector('select.product-select');
-                const qty = r.querySelector('input[type="number"]');
-                const name = sel.options[sel.selectedIndex]?.text || '';
-                const productId = sel.value;
-                const q = parseInt(qty.value) || 0;
-                total += q;
-                
+                const { type, itemId, item, enteredQty, enteredUnit, baseQty } = rowData(r);
+                const name = item ? item.name : '';
+                const noteEl = r.querySelector('.conversion-note');
+                const base = baseUnitLabel(type, item);
+                noteEl.textContent = enteredUnit === 'purchase_unit' ? `= ${baseQty} ${base}` : '';
+                total += baseQty;
+
                 let availability = '-';
-                if (fromWarehouseId && productId) {
+                const cacheKey = `${type}:${itemId}`;
+                if (fromWarehouseId && itemId) {
                     try {
-                        const response = await fetch(`/warehouses/${fromWarehouseId}/product/${productId}/quantity`);
+                        const url = type === 'ingredient'
+                            ? `/warehouses/${fromWarehouseId}/ingredient/${itemId}/quantity`
+                            : `/warehouses/${fromWarehouseId}/product/${itemId}/quantity`;
+                        const response = await fetch(url);
                         const data = await response.json();
-                        availability = data.quantity || 0;
-                        productAvailability[productId] = availability;
+                        availability = data.quantity ?? 0;
+                        availabilityCache[cacheKey] = availability;
                     } catch (e) {
-                        console.error('Error fetching availability:', e);
                         availability = '-';
-                        productAvailability[productId] = 0;
+                        availabilityCache[cacheKey] = 0;
                     }
                 }
-                
-                // Only update the visible preview section
-                if (isDesktopVisible) {
-                    // Update table row
-                    const tr = document.createElement('tr');
-                    tr.className = 'border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors';
-                    tr.innerHTML = `
-                        <td class="py-3 px-2 font-medium text-gray-900 dark:text-gray-100">${name}</td>
-                        <td class="py-3 px-2 text-center font-semibold text-blue-600 dark:text-blue-400">${q}</td>
-                        <td class="py-3 px-2 text-center text-gray-600 dark:text-gray-400">${availability}</td>
-                    `;
-                    body.appendChild(tr);
-                }
-                
-                if (isMobileVisible) {
-                    // Update mobile card
-                    const card = document.createElement('div');
-                    card.className = 'bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700';
-                    card.innerHTML = `
-                        <div class="flex items-center justify-between">
-                            <div class="flex-1">
-                                <h4 class="font-medium text-gray-900 dark:text-white text-sm">${name}</h4>
-                                <div class="flex items-center gap-2 mt-1">
-                                    <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold">Qty: ${q}</span>
-                                    <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs font-semibold">Avail: ${availability}</span>
-                                </div>
-                            </div>
+
+                const tr = document.createElement('tr');
+                tr.className = 'border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors';
+                tr.innerHTML = `
+                    <td class="py-3 px-2 font-medium text-gray-900 dark:text-gray-100">${name}</td>
+                    <td class="py-3 px-2 text-center font-semibold text-blue-600 dark:text-blue-400">${enteredQty}</td>
+                    <td class="py-3 px-2 text-center text-gray-600 dark:text-gray-400">${baseQty}</td>
+                    <td class="py-3 px-2 text-center text-gray-600 dark:text-gray-400">${availability}</td>
+                `;
+                body.appendChild(tr);
+
+                const card = document.createElement('div');
+                card.className = 'bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700';
+                card.innerHTML = `
+                    <div class="flex-1">
+                        <h4 class="font-medium text-gray-900 dark:text-white text-sm">${name}</h4>
+                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                            <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold">= ${baseQty} ${base}</span>
+                            <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs font-semibold">Avail: ${availability}</span>
                         </div>
-                    `;
-                    mobileBody.appendChild(card);
-                }
+                    </div>
+                `;
+                mobileBody.appendChild(card);
             }
-            
-            document.getElementById('preview-count').textContent = `${total} item${total !== 1 ? 's' : ''}`;
+
+            document.getElementById('preview-count').textContent = `${rows.length} line${rows.length !== 1 ? 's' : ''}`;
         }
 
         document.addEventListener('input', function (e) {
-            if (e.target && (e.target.matches('select.product-select') || e.target.matches('input[type="number"]') || e.target.matches('select[name="from_warehouse_id"]'))) {
+            if (e.target && (e.target.matches('.qty-input') || e.target.matches('select[name="from_warehouse_id"]'))) {
                 refreshPreview();
             }
         });
 
         document.addEventListener('change', function (e) {
-            if (e.target && e.target.matches('select[name="from_warehouse_id"]')) {
-                // Clear availability data when warehouse changes
-                Object.keys(productAvailability).forEach(key => delete productAvailability[key]);
+            const row = e.target.closest && e.target.closest('.item-row');
+
+            if (e.target.matches('select[name="from_warehouse_id"]')) {
+                Object.keys(availabilityCache).forEach(key => delete availabilityCache[key]);
                 refreshPreview();
             }
-            if (e.target && e.target.matches('select[name="to_warehouse_id"]')) {
-                // Update product selects when destination warehouse changes
-                updateProductSelects();
+            if (e.target.matches('select[name="to_warehouse_id"]')) {
+                document.querySelectorAll('.item-row').forEach(r => refreshItemSelect(parseInt(r.dataset.index)));
+                refreshPreview();
+            }
+            if (row && e.target.matches('.type-select')) {
+                row.querySelector('.item-select').value = '';
+                refreshItemSelect(parseInt(row.dataset.index));
+                refreshUnitSelect(parseInt(row.dataset.index));
+                refreshPreview();
+            }
+            if (row && e.target.matches('.item-select')) {
+                refreshUnitSelect(parseInt(row.dataset.index));
+                refreshPreview();
+            }
+            if (row && e.target.matches('.unit-select')) {
                 refreshPreview();
             }
         });
 
-        refreshPreview();
-        updateProductSelects(); // Update product selects on page load
+        addItemRow(); // start with one row
 
         document.getElementById('transfer-form').addEventListener('submit', function (e) {
             e.preventDefault();
-            
-            // Validate quantities against availability
-            const rows = document.querySelectorAll('#items-list > div');
-            let isValid = true;
-            let errorMessages = [];
-            
+
+            const rows = document.querySelectorAll('#items-list > .item-row');
+            const items = [];
+            const ingredientItems = [];
+            const errorMessages = [];
+
             for (const r of rows) {
-                const sel = r.querySelector('select.product-select');
-                const qty = r.querySelector('input[type="number"]');
-                const productId = sel.value;
-                const productName = sel.options[sel.selectedIndex].text;
-                const quantity = parseInt(qty.value) || 0;
-                const available = productAvailability[productId] || 0;
-                
-                if (quantity > available) {
-                    isValid = false;
-                    errorMessages.push(`Cannot transfer ${quantity} of "${productName}" - only ${available} available`);
+                const { type, itemId, item, enteredQty, enteredUnit, baseQty } = rowData(r);
+                if (!itemId) continue;
+
+                const available = availabilityCache[`${type}:${itemId}`] ?? 0;
+                if (baseQty > available) {
+                    errorMessages.push(`Cannot transfer ${baseQty} ${baseUnitLabel(type, item)} of "${item.name}" - only ${available} available`);
+                }
+
+                const line = { entered_qty: enteredQty, entered_unit: enteredUnit };
+                if (type === 'ingredient') {
+                    line.ingredient_id = parseInt(itemId);
+                    ingredientItems.push(line);
+                } else {
+                    line.product_id = parseInt(itemId);
+                    items.push(line);
                 }
             }
-            
-            if (!isValid) {
-                // Show error messages
-                const errorDiv = document.getElementById('form-errors');
+
+            if (items.length === 0 && ingredientItems.length === 0) {
+                errorMessages.push('Add at least one line.');
+            }
+
+            const errorDiv = document.getElementById('form-errors');
+            if (errorMessages.length > 0) {
                 errorDiv.innerHTML = errorMessages.map(msg => `<p>${msg}</p>`).join('');
                 errorDiv.classList.remove('hidden');
                 showToast('Please fix the errors before submitting', 'error');
                 return;
             }
-            
-            // Hide any previous errors
-            document.getElementById('form-errors').classList.add('hidden');
-            
-            // Submit the form
-            const form = document.getElementById('transfer-form');
-            const formData = new FormData(form);
-            
-            fetch(form.action, {
+            errorDiv.classList.add('hidden');
+
+            const payload = {
+                from_warehouse_id: document.querySelector('select[name="from_warehouse_id"]').value,
+                to_warehouse_id: document.querySelector('select[name="to_warehouse_id"]').value,
+                items,
+                ingredient_items: ingredientItems,
+            };
+
+            fetch('/stock-transfers', {
                 method: 'POST',
-                body: formData,
+                body: JSON.stringify(payload),
                 headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 }
             })
@@ -441,16 +491,14 @@
                     showToast('Permission denied', 'error');
                 } else if (data.transfer_number) {
                     showToast('Transfer created successfully!');
-                    // Reset form
-                    form.reset();
-                    // Clear product availability
-                    Object.keys(productAvailability).forEach(key => delete productAvailability[key]);
-                    // Refresh preview
+                    document.getElementById('items-list').innerHTML = '';
+                    idx = 0;
+                    addItemRow();
+                    Object.keys(availabilityCache).forEach(key => delete availabilityCache[key]);
                     refreshPreview();
-                    // Reload recent transfers
                     setTimeout(() => location.reload(), 2000);
                 } else {
-                    showToast('Error creating transfer', 'error');
+                    showToast(data.message || 'Error creating transfer', 'error');
                 }
             })
             .catch(error => {

@@ -27,10 +27,14 @@ class StockTransferController extends Controller
             'to_warehouse_id' => 'required|integer',
             'items' => 'required_without:ingredient_items|array',
             'items.*.product_id' => 'required|integer',
-            'items.*.quantity' => 'required|numeric|min:1',
+            'items.*.quantity' => 'required_without:items.*.entered_qty|nullable|numeric|min:0.01',
+            'items.*.entered_qty' => 'nullable|numeric|min:0.01',
+            'items.*.entered_unit' => 'nullable|in:purchase_unit,base_unit',
             'ingredient_items' => 'required_without:items|array',
             'ingredient_items.*.ingredient_id' => 'required|integer',
-            'ingredient_items.*.quantity' => 'required|numeric|min:1',
+            'ingredient_items.*.quantity' => 'required_without:ingredient_items.*.entered_qty|nullable|numeric|min:0.01',
+            'ingredient_items.*.entered_qty' => 'nullable|numeric|min:0.01',
+            'ingredient_items.*.entered_unit' => 'nullable|in:purchase_unit,base_unit',
         ]);
 
         $transfer = $this->service->createTransfer(
@@ -126,6 +130,16 @@ class StockTransferController extends Controller
             ->where('product_id', $productId)
             ->value('quantity');
 
-        return response()->json(['quantity' => (int) $qty]);
+        return response()->json(['quantity' => (float) $qty]);
+    }
+
+    public function ingredientQuantity($warehouseId, $ingredientId)
+    {
+        $qty = \DB::table('ingredient_inventory_items')
+            ->where('warehouse_id', $warehouseId)
+            ->where('ingredient_id', $ingredientId)
+            ->value('quantity');
+
+        return response()->json(['quantity' => (float) $qty]);
     }
 }

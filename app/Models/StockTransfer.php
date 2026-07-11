@@ -45,4 +45,15 @@ class StockTransfer extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * True once every product and ingredient line has moved past 'pending' —
+     * used by receiveTransferLine() to decide whether the transfer should
+     * flip to 'received' (fully resolved) vs stay 'partially_received'.
+     */
+    public function allLinesResolved(): bool
+    {
+        return $this->items()->where('outcome', 'pending')->doesntExist()
+            && $this->ingredientItems()->where('outcome', 'pending')->doesntExist();
+    }
 }

@@ -113,6 +113,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/stock-transfers/{stockTransfer}/receive', [StockTransferController::class, 'receive']);
     Route::post('/stock-transfers/bulk-receive', [StockTransferController::class, 'bulkReceive']);
     Route::get('/warehouses/{warehouse}/product/{product}/quantity', [StockTransferController::class, 'productQuantity']);
+    Route::get('/warehouses/{warehouse}/ingredient/{ingredient}/quantity', [StockTransferController::class, 'ingredientQuantity']);
 
     // Floor plan AJAX routes
     Route::get('/admin/floor-plan/order/{orderId}', [FloorPlanController::class, 'getOrderDetails']);
