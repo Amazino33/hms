@@ -185,3 +185,73 @@ it('binds ?session_id= on a real HTTP GET request, not just a Livewire::test() m
     $response->assertOk();
     $response->assertSee('Beer');
 });
+
+it('shows a manager the final comparison of counted vs expected stock once a handover is sealed', function () {
+    $bar = WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'is_active' => 1]);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Heineken', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'bartender']);
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole('bartender');
+    $incoming = User::factory()->create();
+    $incoming->assignRole('bartender');
+
+    $pinAuth = new \App\Services\PinAuthService();
+    $pinAuth->setPin($outgoing, '6284');
+    $pinAuth->setPin($incoming, '3971');
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    $service->recordCount($item, ['Fridge' => 20], $outgoing->id); // 4 short of 24
+    $session = $service->declare($session, '6284', 'test-manager-view-declare');
+    $item->refresh();
+    $service->reviewProduct($item, $incoming->id, 'accepted');
+    $session = $service->sealAgreement($session, '6284', '3971', 'test-manager-view-seal');
+
+    $manager = User::factory()->create();
+    $manager->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']));
+
+    $response = $this->actingAs($manager)->get("/admin/count-session-detail?session_id={$session->id}");
+
+    $response->assertOk();
+    $response->assertSee('Final Comparison');
+    $response->assertSee('24.00'); // expected
+    $response->assertSee('20.00'); // counted
+    $response->assertSee('Accepted');
+});
+
+it('flags a shortfall on the admin Count Sessions list once a handover with an accountability decision is reviewed', function () {
+    $bar = WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'is_active' => 1]);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Heineken', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'bartender']);
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole('bartender');
+    $incoming = User::factory()->create();
+    $incoming->assignRole('bartender');
+
+    $pinAuth = new \App\Services\PinAuthService();
+    $pinAuth->setPin($outgoing, '6284');
+    $pinAuth->setPin($incoming, '3971');
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    $service->recordCount($item, ['Fridge' => 20], $outgoing->id);
+    $session = $service->declare($session, '6284', 'test-list-shortfall-declare');
+    $item->refresh();
+    $service->reviewProduct($item, $incoming->id, 'accepted');
+    $service->sealAgreement($session, '6284', '3971', 'test-list-shortfall-seal');
+
+    $manager = User::factory()->create();
+    $manager->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']));
+
+    Livewire::actingAs($manager)
+        ->test(CountSessions::class)
+        ->assertSee('Yes'); // the Shortfall? column badge
+});

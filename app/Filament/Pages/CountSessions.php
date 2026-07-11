@@ -38,7 +38,7 @@ class CountSessions extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(CountSession::query()->with(['warehouse', 'openedBy', 'outgoingUser', 'incomingUser']))
+            ->query(CountSession::query()->with(['warehouse', 'openedBy', 'outgoingUser', 'incomingUser', 'items']))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('type')
@@ -52,8 +52,16 @@ class CountSessions extends Page implements HasTable
                 TextColumn::make('warehouse.name')->label('Warehouse'),
                 TextColumn::make('status')
                     ->badge()
+                    ->formatStateUsing(fn (string $state) => match ($state) {
+                        'counting' => 'Counting',
+                        'declared' => 'Declared',
+                        'pending_review' => 'Pending Review',
+                        'reviewed' => 'Reviewed',
+                        default => $state,
+                    })
                     ->color(fn (string $state) => match ($state) {
                         'counting' => 'warning',
+                        'declared' => 'info',
                         'pending_review' => 'info',
                         'reviewed' => 'success',
                         default => 'gray',
@@ -61,11 +69,19 @@ class CountSessions extends Page implements HasTable
                 TextColumn::make('openedBy.name')->label('Opened By'),
                 TextColumn::make('outgoingUser.name')->label('Outgoing')->default('—'),
                 TextColumn::make('incomingUser.name')->label('Incoming')->default('—'),
+                TextColumn::make('shortfall')
+                    ->label('Shortfall?')
+                    ->state(fn (CountSession $record) => $record->status !== 'reviewed'
+                        ? null
+                        : ($record->items->contains('decision', 'accountability') ? 'Yes' : 'No'))
+                    ->badge()
+                    ->color(fn (?string $state) => $state === 'Yes' ? 'danger' : 'success')
+                    ->placeholder('—'),
                 TextColumn::make('opened_at')->dateTime('M j, Y g:i A'),
             ])
             ->filters([
                 SelectFilter::make('status')
-                    ->options(['counting' => 'Counting', 'pending_review' => 'Pending Review', 'reviewed' => 'Reviewed']),
+                    ->options(['counting' => 'Counting', 'declared' => 'Declared', 'pending_review' => 'Pending Review', 'reviewed' => 'Reviewed']),
                 SelectFilter::make('type')
                     ->options([
                         'bar_handover' => 'Bar Handover',

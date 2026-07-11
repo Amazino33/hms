@@ -41,19 +41,26 @@
         @endif
 
         @if($session->status === 'counting' && (!$this->isHandoverWithSuccessor() || $this->iAmCounter()))
-            {{-- Inline x-data, deliberately not a named function loaded via a
-                 separate <script> (@script/@once both proved unreliable here
-                 in real production use, even on a fresh full page load, not
-                 just a Livewire morph) — an inline object literal has
-                 nothing to load, Alpine evaluates it directly from this
-                 attribute. --}}
-            <div x-data="{
+            {{-- wire:ignore is load-bearing, not decorative: every recordCount()
+                 call re-renders the component server-side, and since this
+                 element's own x-data attribute embeds @js($this->safeCountItems())
+                 directly, Livewire's DOM morph would otherwise see that
+                 attribute's string change on every save and treat the whole
+                 element as replaced — destroying and re-creating the Alpine
+                 component, which resets currentIndex back to 0. That's what
+                 sent counters back to product 1 after every single save.
+                 wire:ignore freezes this subtree after its first render;
+                 everything from here on is pure client-side Alpine state,
+                 which is the whole point of the fire-and-forget save design
+                 anyway — it was never supposed to depend on a fresh render. --}}
+            <div wire:ignore x-data="{
                     items: @js($this->safeCountItems()),
                     currentIndex: 0,
                     activeSubLocation: null,
                     saving: false,
                     justSaved: false,
                     pressed: null,
+                    finished: false,
 
                     get current() { return this.items[this.currentIndex] ?? null },
                     get isFirst() { return this.currentIndex === 0 },
@@ -104,10 +111,13 @@
                         if (!this.isLast) {
                             this.currentIndex++
                             this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                        } else {
+                            this.finished = true
                         }
                     },
 
                     prev() {
+                        this.finished = false
                         if (!this.isFirst) {
                             this.currentIndex--
                             this.activeSubLocation = this.current?.subLocations?.[0] ?? null
@@ -138,7 +148,25 @@
                     <div class="text-center text-gray-500 dark:text-gray-400 py-8">Nothing to count in this session.</div>
                 </template>
 
-                <template x-if="current">
+                {{-- Clear "what next" state once the last product is saved —
+                     replaces the product card instead of leaving them
+                     wondering why tapping Finish didn't seem to do anything. --}}
+                <template x-if="current && finished">
+                    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-emerald-300 dark:border-emerald-700 p-6 text-center">
+                        <div class="text-4xl mb-2">✓</div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">All products counted</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                            Tap the button below this card to review your figures and finish up.
+                            Need to fix something first?
+                        </p>
+                        <button type="button" @click="prev"
+                            class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold text-sm touch-manipulation">
+                            &larr; Go back and edit
+                        </button>
+                    </div>
+                </template>
+
+                <template x-if="current && !finished">
                     <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
                         <!-- Product name -->
                         <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center mb-4" x-text="current.name"></h2>
@@ -276,7 +304,13 @@
 
         @if($session->status === 'declared')
             @if($this->iAmReviewer())
-                <div x-data="{
+                {{-- wire:ignore for the same reason as the counting flow above:
+                     reviewAccept()/reviewDispute() re-render the component
+                     server-side, and this element's x-data embeds
+                     @js($this->safeReviewItems()) directly — without this,
+                     every Accept/Dispute tap would reset the reviewer back
+                     to the first product. --}}
+                <div wire:ignore x-data="{
                         items: @js($this->safeReviewItems()),
                         currentIndex: 0,
                         activeSubLocation: null,
@@ -454,7 +488,12 @@
 
                             @if($this->iAmOutgoing())
                                 <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Recounted together and it's different from what you declared? Enter the real number and confirm with your PIN.</p>
-                                <div x-data="{
+                                {{-- wire:ignore: same reset risk as the counting/
+                                     review flows — an unrelated dispute action
+                                     elsewhere on the page re-renders this whole
+                                     @foreach loop, which would otherwise wipe
+                                     whatever this person has half-typed here. --}}
+                                <div wire:ignore x-data="{
                                         values: @js($disputedItem->subCounts->pluck('quantity', 'sub_location')->all()),
                                         pin: '', pressed: null,
                                         digit(d) { if (this.pin.length >= 4) return; this.flash(d); this.pin += d
@@ -572,23 +611,48 @@
                 </div>
             @endif
 
-            <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-4">
+                <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                    <h3 class="font-bold text-gray-900 dark:text-white">Final Comparison</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Counted vs. the stock the system expected to be there, per product.</p>
+                </div>
                 <table class="w-full text-sm">
                     <thead class="bg-gray-50 dark:bg-gray-800">
                         <tr>
                             <th class="text-left px-4 py-2">Item</th>
+                            <th class="text-left px-4 py-2">Expected</th>
+                            <th class="text-left px-4 py-2">Counted</th>
                             <th class="text-left px-4 py-2">Variance</th>
-                            <th class="text-left px-4 py-2">Decision</th>
-                            <th class="text-left px-4 py-2">Notes</th>
+                            <th class="text-left px-4 py-2">Outcome</th>
+                            <th class="text-left px-4 py-2">Decision / Notes</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                         @foreach($session->items as $item)
                             <tr>
                                 <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ $item->itemName() }}</td>
-                                <td class="px-4 py-2 font-mono">{{ $item->variance }}</td>
-                                <td class="px-4 py-2">{{ $item->decision ? ucwords(str_replace('_', ' ', $item->decision)) : '—' }}</td>
-                                <td class="px-4 py-2 text-gray-500">{{ $item->decision_notes }}</td>
+                                <td class="px-4 py-2 font-mono text-gray-500 dark:text-gray-400">{{ $item->adjusted_expected_quantity }}</td>
+                                <td class="px-4 py-2 font-mono">{{ $item->counted_quantity }}</td>
+                                <td class="px-4 py-2 font-mono font-bold {{ $item->variance < 0 ? 'text-red-600' : ($item->variance > 0 ? 'text-green-600' : 'text-gray-400') }}">
+                                    {{ abs($item->variance) < 0.0001 ? 'None' : $item->variance }}
+                                </td>
+                                <td class="px-4 py-2">
+                                    @if($item->review?->outcome === 'unresolved')
+                                        <span class="text-amber-600 font-bold text-xs">Unresolved dispute</span>
+                                    @elseif($item->review?->outcome === 'disputed')
+                                        <span class="text-red-600 font-bold text-xs">Disputed</span>
+                                    @elseif($item->review?->outcome === 'accepted')
+                                        <span class="text-green-600 text-xs">Accepted</span>
+                                    @else
+                                        <span class="text-gray-400 text-xs">—</span>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-2 text-gray-500">
+                                    {{ $item->decision ? ucwords(str_replace('_', ' ', $item->decision)) : '—' }}
+                                    @if($item->decision_notes)
+                                        <div class="text-xs">{{ $item->decision_notes }}</div>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
