@@ -207,6 +207,7 @@ it('shows a manager the final comparison of counted vs expected stock once a han
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 20], $outgoing->id); // 4 short of 24
     $session = $service->declare($session, '6284', 'test-manager-view-declare');
+    $session = $service->bindIncomingCustodian($session, '3971', 'test-manager-view-bind');
     $item->refresh();
     $service->reviewProduct($item, $incoming->id, 'accepted');
     $session = $service->sealAgreement($session, '6284', '3971', 'test-manager-view-seal');
@@ -218,8 +219,8 @@ it('shows a manager the final comparison of counted vs expected stock once a han
 
     $response->assertOk();
     $response->assertSee('Final Comparison');
-    $response->assertSee('24.00'); // expected
-    $response->assertSee('20.00'); // counted
+    $response->assertSee('24'); // expected — bar counts render as whole numbers, not "24.00"
+    $response->assertSee('20'); // counted
     $response->assertSee('Accepted');
 });
 
@@ -244,6 +245,7 @@ it('flags a shortfall on the admin Count Sessions list once a handover with an a
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 20], $outgoing->id);
     $session = $service->declare($session, '6284', 'test-list-shortfall-declare');
+    $session = $service->bindIncomingCustodian($session, '3971', 'test-list-shortfall-bind');
     $item->refresh();
     $service->reviewProduct($item, $incoming->id, 'accepted');
     $service->sealAgreement($session, '6284', '3971', 'test-list-shortfall-seal');

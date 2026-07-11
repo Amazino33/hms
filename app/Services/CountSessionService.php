@@ -175,6 +175,8 @@ class CountSessionService
 
         $validLocations = $item->subCounts()->pluck('sub_location')->all();
 
+        $this->assertIntegerCounts($session, $quantitiesBySubLocation);
+
         foreach ($quantitiesBySubLocation as $subLocation => $quantity) {
             if (!in_array($subLocation, $validLocations, true)) {
                 throw new \Exception("'{$subLocation}' is not a valid sub-location for this item.");
@@ -190,6 +192,32 @@ class CountSessionService
         ]);
 
         return $item->fresh();
+    }
+
+    /**
+     * Bar drinks are whole units (bottles/cans) — a bar_handover count must
+     * never accept a fractional figure. Kitchen ingredients (kg/litres)
+     * genuinely need decimals, so this is scoped to session type, not
+     * applied to every CountSession blanket — the underlying columns stay
+     * decimal(10,2) for both.
+     *
+     * @param array<string, float|string|null> $quantitiesBySubLocation
+     */
+    private function assertIntegerCounts(CountSession $session, array $quantitiesBySubLocation): void
+    {
+        if ($session->type !== 'bar_handover') {
+            return;
+        }
+
+        foreach ($quantitiesBySubLocation as $subLocation => $quantity) {
+            if ($quantity === null || $quantity === '') {
+                continue;
+            }
+
+            if (!is_numeric($quantity) || fmod((float) $quantity, 1.0) !== 0.0) {
+                throw new \Exception("'{$subLocation}' must be a whole number — bar counts don't take fractions.");
+            }
+        }
     }
 
     public function confirmOutgoing(CountSession $session, int $userId): CountSession
@@ -255,6 +283,52 @@ class CountSessionService
     }
 
     /**
+     * PINs are the identity on kiosk surfaces — the account logged into the
+     * device is irrelevant. incoming_user_id is only ever a guess made by
+     * the outgoing custodian at session-open time (a dropdown pick, not a
+     * verified identity); this is where the person who actually shows up to
+     * review confirms who they are, by PIN, and that guess gets overwritten
+     * with the PIN-verified identity. Review UI and the seal step both gate
+     * on isIncomingBound() rather than trusting the pre-bind value.
+     */
+    public function bindIncomingCustodian(CountSession $session, string $incomingPin, string $throttleKey): CountSession
+    {
+        if (!$session->isHandoverWithSuccessor() || $session->isUnwitnessed()) {
+            throw new \Exception('This session has no peer review phase to bind an incoming custodian to.');
+        }
+
+        if (!$session->isDeclared()) {
+            throw new \Exception('This count has not been declared yet.');
+        }
+
+        if ($session->isIncomingBound()) {
+            throw new \Exception('The incoming custodian has already confirmed their identity for this session.');
+        }
+
+        $role = self::ROLE_FOR_HANDOVER[$session->type];
+        $user = (new PinAuthService())->attempt($incomingPin, $throttleKey);
+
+        if (!$user) {
+            throw new \Exception('That PIN does not match anyone.');
+        }
+
+        if (!$user->hasRole($role)) {
+            throw new \Exception("Only a {$role} can review this count.");
+        }
+
+        if ($user->id === $session->outgoing_user_id) {
+            throw new \Exception('The incoming custodian cannot be the same person as the outgoing custodian.');
+        }
+
+        $session->update([
+            'incoming_user_id' => $user->id,
+            'incoming_bound_at' => now(),
+        ]);
+
+        return $session->fresh();
+    }
+
+    /**
      * The incoming custodian's per-product review of a declared count:
      * either accept the outgoing's figure outright, or dispute it by
      * entering their own — which never overwrites the outgoing's numbers,
@@ -286,6 +360,10 @@ class CountSessionService
 
         if ($outcome === 'disputed' && !$incomingQuantities) {
             throw new \Exception('A disputed product needs your own counted figures.');
+        }
+
+        if ($outcome === 'disputed') {
+            $this->assertIntegerCounts($session, $incomingQuantities);
         }
 
         return CountSessionItemReview::updateOrCreate(
@@ -335,6 +413,8 @@ class CountSessionService
                 throw new \Exception("'{$subLocation}' is not a valid sub-location for this item.");
             }
         }
+
+        $this->assertIntegerCounts($session, $newQuantities);
 
         return DB::transaction(function () use ($item, $newQuantities, $subCounts, $review) {
             foreach ($newQuantities as $subLocation => $quantity) {
@@ -432,26 +512,50 @@ class CountSessionService
             }
         }
 
-        $firstExpectedUserId = $isUnwitnessed ? $session->witness_user_id : $session->outgoing_user_id;
-        $secondExpectedUserId = $session->incoming_user_id;
-
         $pinAuth = new PinAuthService();
 
         $firstUser = $pinAuth->attempt($firstPin, "{$throttleKey}:first");
 
-        if (!$firstUser || $firstUser->id !== $firstExpectedUserId) {
-            throw new \Exception($isUnwitnessed
-                ? 'That PIN does not match the witness.'
-                : 'That PIN does not match the outgoing custodian.');
+        if ($isUnwitnessed) {
+            // A witness carries no responsibility for the counted numbers
+            // (candidateWitnesses() deliberately isn't role-restricted), so
+            // there's no pre-existing "expected" identity worth protecting —
+            // whoever validly PIN-authenticates at this moment IS the
+            // witness, resolved by lookup and bound here rather than
+            // compared against session-open's unverified dropdown guess.
+            if (!$firstUser) {
+                throw new \Exception('That PIN does not match anyone.');
+            }
+
+            if ($firstUser->id === $session->incoming_user_id) {
+                throw new \Exception('The witness cannot be the same person as the incoming custodian.');
+            }
+        } else {
+            $outgoingName = $session->outgoingUser?->name ?? 'the outgoing custodian';
+
+            if (!$firstUser || $firstUser->id !== $session->outgoing_user_id) {
+                throw new \Exception("Outgoing signature: PIN does not match {$outgoingName}'s PIN.");
+            }
         }
+
+        if (!$isUnwitnessed && !$session->isIncomingBound()) {
+            throw new \Exception('The incoming custodian must confirm their identity via PIN (at review start) before this can be sealed.');
+        }
+
+        $secondExpectedUserId = $session->incoming_user_id;
+        $incomingName = $session->incomingUser?->name ?? 'the incoming custodian';
 
         $secondUser = $pinAuth->attempt($secondPin, "{$throttleKey}:second");
 
         if (!$secondUser || $secondUser->id !== $secondExpectedUserId) {
-            throw new \Exception('That PIN does not match the incoming custodian.');
+            throw new \Exception("Incoming signature: PIN does not match {$incomingName}'s PIN.");
         }
 
         return DB::transaction(function () use ($session, $isUnwitnessed, $firstUser, $secondUser) {
+            if ($isUnwitnessed) {
+                $session->update(['witness_user_id' => $firstUser->id]);
+            }
+
             $accountableUserId = $session->accountableUserId();
 
             foreach ($session->items as $item) {

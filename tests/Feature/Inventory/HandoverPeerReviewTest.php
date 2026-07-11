@@ -83,6 +83,7 @@ it('freezes bar sales from declare() until sealAgreement() by removing the activ
     expect($session->status)->toBe('declared');
     expect(Shift::query()->active()->ofType('bartender')->exists())->toBeFalse();
 
+    $session = $service->bindIncomingCustodian($session, '2846', 'test-throttle-bind');
     $service->reviewProduct($item, $incoming->id, 'accepted');
 
     $session = $service->sealAgreement($session, '5793', '2846', 'test-throttle');
@@ -154,6 +155,7 @@ it('lets the incoming custodian mark a dispute unresolved, using their figure as
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
     $session = $service->declare($session, '5793', 'test-declare-3');
     $item->refresh();
+    $session = $service->bindIncomingCustodian($session, '2846', 'test-bind-3');
     $service->reviewProduct($item, $incoming->id, 'disputed', ['Fridge' => 20]);
 
     $review = $service->markUnresolved($item, $incoming->id);
@@ -256,6 +258,7 @@ it('proves the freeze end to end through OrderSplitter: bar orders rejected once
     expect(\App\Models\Order::count())->toBe(1); // unchanged — the freeze attempt didn't sneak an order through
 
     $item->refresh();
+    $service->bindIncomingCustodian($session, '2846', 'test-freeze-bind');
     $service->reviewProduct($item, $incoming->id, 'accepted');
     $service->sealAgreement($session, '5793', '2846', 'test-freeze-seal');
 

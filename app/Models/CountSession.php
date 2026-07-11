@@ -16,6 +16,7 @@ class CountSession extends Model
         'opened_at' => 'datetime',
         'confirmed_by_outgoing_at' => 'datetime',
         'confirmed_by_incoming_at' => 'datetime',
+        'incoming_bound_at' => 'datetime',
         'submitted_for_review_at' => 'datetime',
         'reviewed_at' => 'datetime',
     ];
@@ -122,6 +123,17 @@ class CountSession extends Model
     public function isReviewed(): bool
     {
         return $this->status === 'reviewed';
+    }
+
+    /**
+     * True once the incoming custodian has PIN-authenticated at review
+     * start (bindIncomingCustodian()) — as opposed to incoming_user_id
+     * merely holding the outgoing custodian's unverified guess from when
+     * the session was opened.
+     */
+    public function isIncomingBound(): bool
+    {
+        return $this->incoming_bound_at !== null;
     }
 
     /**

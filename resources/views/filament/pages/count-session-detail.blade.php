@@ -2,6 +2,11 @@
     @php($session = $this->session)
 
     @if($session)
+        {{-- Collapsed to reclaim vertical space while the counter is actually
+             counting — the one-screen layout (Issue 3) needs every pixel it
+             can get on a short phone viewport, and this summary is
+             redundant noise mid-count anyway (you already know who you are). --}}
+        @unless($session->status === 'counting' && $this->iAmCounter())
         <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
@@ -30,6 +35,7 @@
                 @endif
             </div>
         </div>
+        @endunless
 
         @if($session->status === 'counting' && $this->isHandoverWithSuccessor() && !$this->iAmCounter())
             <div class="max-w-md mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center">
@@ -55,6 +61,7 @@
                  anyway — it was never supposed to depend on a fresh render. --}}
             <div wire:ignore x-data="{
                     items: @js($this->safeCountItems()),
+                    isIntegerOnly: {{ $session->type === 'bar_handover' ? 'true' : 'false' }},
                     currentIndex: 0,
                     activeSubLocation: null,
                     saving: false,
@@ -80,8 +87,19 @@
                         setTimeout(() => { if (this.pressed === key) this.pressed = null }, 150)
                     },
 
+                    // Filters physical-keyboard input on the real <input> fields —
+                    // digits always, '.' only for a decimal (non-integer-only) session.
+                    filterKeydown(e) {
+                        const allowedControl = ['Backspace', 'Tab', 'ArrowLeft', 'ArrowRight', 'Delete', 'Enter'];
+                        if (allowedControl.includes(e.key)) return;
+                        if (/^[0-9]$/.test(e.key)) return;
+                        if (e.key === '.' && !this.isIntegerOnly) return;
+                        e.preventDefault();
+                    },
+
                     typeDigit(d) {
                         if (!this.activeSubLocation || !this.current) return
+                        if (d === '.' && this.isIntegerOnly) return
                         this.flash(d)
                         const existing = (this.current.values[this.activeSubLocation] ?? '').toString()
                         if (d === '.' && existing.includes('.')) return
@@ -133,14 +151,14 @@
                             this.next()
                         }
                     },
-                }" x-init="init()" class="max-w-md mx-auto">
+                }" x-init="init()" class="max-w-md mx-auto flex flex-col">
                 <!-- Progress -->
-                <div class="flex items-center justify-between mb-3 text-sm">
+                <div class="flex items-center justify-between mb-2 text-sm shrink-0">
                     <span class="font-bold text-gray-500 dark:text-gray-400" x-text="progress"></span>
                     <span class="text-gray-400" x-show="saving">Saving…</span>
                     <span class="text-green-600 font-bold" x-show="!saving && justSaved" x-transition.opacity.duration.1000ms>Saved ✓</span>
                 </div>
-                <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full mb-5 overflow-hidden">
+                <div class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mb-3 overflow-hidden shrink-0">
                     <div class="h-full bg-primary-500 transition-all duration-200" :style="`width: ${((currentIndex + 1) / items.length) * 100}%`"></div>
                 </div>
 
@@ -167,57 +185,64 @@
                 </template>
 
                 <template x-if="current && !finished">
-                    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+                    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex flex-col">
                         <!-- Product name -->
-                        <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center mb-4" x-text="current.name"></h2>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white text-center mb-2 shrink-0" x-text="current.name"></h2>
 
-                        <!-- Sub-location slots: tap to make active, big legible value -->
-                        <div class="grid gap-2 mb-4" :class="current.subLocations.length > 1 ? 'grid-cols-' + current.subLocations.length : 'grid-cols-1'">
-                            <template x-for="loc in current.subLocations" :key="loc">
-                                <button type="button" @click="selectSlot(loc)"
-                                    class="rounded-xl border-2 p-3 text-center touch-manipulation transition-colors"
+                        <!-- Sub-location slots: real inputs (keyboard + Tab/Enter on
+                             desktop; inputmode="none" suppresses the mobile virtual
+                             keyboard so the custom pad below is the only touch input) -->
+                        <div class="grid gap-2 mb-2 shrink-0" :class="current.subLocations.length > 1 ? 'grid-cols-' + current.subLocations.length : 'grid-cols-1'">
+                            <template x-for="(loc, idx) in current.subLocations" :key="loc">
+                                <div class="rounded-xl border-2 p-2 text-center transition-colors"
                                     :class="activeSubLocation === loc ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700'">
-                                    <div class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400" x-text="loc"></div>
-                                    <div class="text-3xl font-mono font-bold text-gray-900 dark:text-white mt-1"
-                                        x-text="current.values[loc] === '' || current.values[loc] === undefined ? '—' : current.values[loc]"></div>
-                                </button>
+                                    <label class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400" x-text="loc"></label>
+                                    {{-- inputmode="none" suppresses the mobile virtual keyboard (the
+                                         custom pad below is the touch input) without blocking a real
+                                         physical keyboard, which ignores inputmode entirely. --}}
+                                    <input type="text" inputmode="none" autocomplete="off"
+                                        x-model="current.values[loc]"
+                                        @focus="selectSlot(loc)"
+                                        @keydown="filterKeydown($event)"
+                                        @keydown.enter.prevent="enterOnSlot()"
+                                        :tabindex="idx + 1"
+                                        class="w-full bg-transparent text-center text-2xl font-mono font-bold text-gray-900 dark:text-white mt-1 outline-none border-0 p-0 focus:ring-0">
+                                </div>
                             </template>
                         </div>
 
-                        <!-- Number pad -->
-                        <div class="grid grid-cols-3 gap-2 mb-2">
+                        <!-- Number pad (touch) -->
+                        <div class="grid grid-cols-3 gap-1.5 mb-2 shrink-0">
                             <template x-for="d in ['1','2','3','4','5','6','7','8','9']" :key="d">
                                 <button type="button" @click="typeDigit(d)"
                                     :class="pressed === d ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
-                                    class="py-5 rounded-xl text-2xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">
+                                    class="py-3 rounded-xl text-xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">
                                     <span x-text="d"></span>
                                 </button>
                             </template>
-                            <button type="button" @click="typeDigit('.')"
+                            <button type="button" @click="typeDigit('.')" x-show="!isIntegerOnly"
                                 :class="pressed === '.' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
-                                class="py-5 rounded-xl text-2xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">.</button>
+                                class="py-3 rounded-xl text-xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">.</button>
+                            <div x-show="isIntegerOnly"></div>
                             <button type="button" @click="typeDigit('0')"
                                 :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
-                                class="py-5 rounded-xl text-2xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">0</button>
+                                class="py-3 rounded-xl text-xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">0</button>
                             <button type="button" @click="backspace"
                                 :class="pressed === 'back' ? 'bg-red-300' : 'bg-red-100 dark:bg-red-900/30'"
-                                class="py-5 rounded-xl text-lg font-bold text-red-700 dark:text-red-400 transition-all duration-100 touch-manipulation">&larr;</button>
+                                class="py-3 rounded-xl text-base font-bold text-red-700 dark:text-red-400 transition-all duration-100 touch-manipulation">&larr;</button>
                         </div>
 
-                        <button type="button" @click="enterOnSlot"
-                            class="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold touch-manipulation mb-4">
-                            Enter
-                        </button>
-
-                        <!-- Prev / Next -->
-                        <div class="grid grid-cols-2 gap-3">
+                        <!-- Prev / Next: sticky so it's always reachable without
+                             hunting for it, even on a viewport short enough that
+                             the content above still needs a touch of scroll. -->
+                        <div class="grid grid-cols-2 gap-3 sticky bottom-0 bg-white dark:bg-gray-900 pt-1 pb-1 shrink-0">
                             <button type="button" @click="prev" :disabled="isFirst"
                                 :class="isFirst ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'"
-                                class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation">
+                                class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation min-h-[48px]">
                                 &larr; Previous
                             </button>
                             <button type="button" @click="next"
-                                class="py-3 rounded-xl font-bold text-white touch-manipulation"
+                                class="py-3 rounded-xl font-bold text-white touch-manipulation min-h-[48px]"
                                 :class="isLast ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 dark:hover:bg-gray-500'">
                                 <span x-text="isLast ? 'Finish' : 'Next →'"></span>
                             </button>
@@ -303,7 +328,51 @@
         @endif
 
         @if($session->status === 'declared')
-            @if($this->iAmReviewer())
+            @if($this->needsIncomingBinding())
+                {{-- The incoming custodian confirms who they are by PIN before
+                     seeing anything — this is the fix for the identity bug:
+                     incoming_user_id up to now is only the outgoing
+                     custodian's unverified guess from session-open. Whoever
+                     types a valid PIN here (matching the right role, and not
+                     the outgoing custodian) becomes the bound reviewer,
+                     overwriting that guess. Visible to anyone viewing the
+                     page — the PIN is the gate, not the logged-in account. --}}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white text-center mb-1">Confirm your identity</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-4">
+                        Incoming custodian — enter your PIN to begin reviewing {{ $session->outgoingUser?->name }}'s declared count.
+                    </p>
+                    <div x-data="{
+                            pin: '', pressed: null, submitting: false,
+                            digit(d) { if (this.pin.length >= 4 || this.submitting) return; this.flash(d); this.pin += d
+                                if (this.pin.length === 4) { const p = this.pin; this.submitting = true
+                                    this.$nextTick(() => { $wire.bindIncomingReview(p).finally(() => { this.submitting = false; this.pin = '' }) }) } },
+                            backspace() { this.flash('back'); this.pin = this.pin.slice(0, -1) },
+                            flash(key) { this.pressed = key; setTimeout(() => { if (this.pressed === key) this.pressed = null }, 150) },
+                        }">
+                        <div class="flex justify-center gap-3 mb-5">
+                            <template x-for="i in 4" :key="i">
+                                <div class="w-5 h-5 rounded-full border-2 border-gray-400 transition-all duration-150"
+                                    :class="i <= pin.length ? 'bg-gray-900 border-gray-900 scale-110' : ''"></div>
+                            </template>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            @foreach (['1','2','3','4','5','6','7','8','9'] as $digit)
+                                <button type="button" @click="digit('{{ $digit }}')"
+                                    :class="pressed === '{{ $digit }}' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                    class="py-4 rounded-lg text-xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">{{ $digit }}</button>
+                            @endforeach
+                            <div></div>
+                            <button type="button" @click="digit('0')"
+                                :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100 dark:bg-gray-800'"
+                                class="py-4 rounded-lg text-xl font-bold text-gray-900 dark:text-white transition-all duration-100 touch-manipulation">0</button>
+                            <button type="button" @click="backspace"
+                                :class="pressed === 'back' ? 'bg-red-300 scale-95' : 'bg-red-100 dark:bg-red-900/30'"
+                                class="py-4 rounded-lg text-lg font-bold text-red-700 dark:text-red-400 transition-all duration-100 touch-manipulation">&larr;</button>
+                        </div>
+                    </div>
+                </div>
+            @elseif($this->iAmReviewer())
                 {{-- wire:ignore for the same reason as the counting flow above:
                      reviewAccept()/reviewDispute() re-render the component
                      server-side, and this element's x-data embeds
@@ -312,6 +381,7 @@
                      to the first product. --}}
                 <div wire:ignore x-data="{
                         items: @js($this->safeReviewItems()),
+                        isIntegerOnly: {{ $session->type === 'bar_handover' ? 'true' : 'false' }},
                         currentIndex: 0,
                         activeSubLocation: null,
                         disputing: false,
@@ -342,6 +412,7 @@
 
                         typeDisputeDigit(d) {
                             if (!this.activeSubLocation) return
+                            if (d === '.' && this.isIntegerOnly) return
                             const existing = (this.disputeValues[this.activeSubLocation] ?? '').toString()
                             if (d === '.' && existing.includes('.')) return
                             this.disputeValues[this.activeSubLocation] = existing + d
@@ -427,7 +498,8 @@
                                                     <button type="button" @click="typeDisputeDigit(d)"
                                                         class="py-4 rounded-xl text-xl font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 touch-manipulation" x-text="d"></button>
                                                 </template>
-                                                <button type="button" @click="typeDisputeDigit('.')" class="py-4 rounded-xl text-xl font-bold bg-gray-100 dark:bg-gray-800 touch-manipulation">.</button>
+                                                <button type="button" @click="typeDisputeDigit('.')" x-show="!isIntegerOnly" class="py-4 rounded-xl text-xl font-bold bg-gray-100 dark:bg-gray-800 touch-manipulation">.</button>
+                                                <div x-show="isIntegerOnly"></div>
                                                 <button type="button" @click="typeDisputeDigit('0')" class="py-4 rounded-xl text-xl font-bold bg-gray-100 dark:bg-gray-800 touch-manipulation">0</button>
                                                 <button type="button" @click="backspaceDispute" class="py-4 rounded-xl text-lg font-bold text-red-700 bg-red-100 dark:bg-red-900/30 touch-manipulation">&larr;</button>
                                             </div>
@@ -453,13 +525,13 @@
                                 </div>
                             </template>
 
-                            <div class="grid grid-cols-2 gap-3 mt-4">
+                            <div class="grid grid-cols-2 gap-3 mt-4 sticky bottom-0 bg-white dark:bg-gray-900 pt-1">
                                 <button type="button" @click="prev" :disabled="isFirst"
                                     :class="isFirst ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'"
-                                    class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation">&larr; Previous</button>
+                                    class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation min-h-[48px]">&larr; Previous</button>
                                 <button type="button" @click="next" :disabled="isLast"
                                     :class="isLast ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 dark:hover:bg-gray-500'"
-                                    class="py-3 rounded-xl font-bold text-white touch-manipulation">Next &rarr;</button>
+                                    class="py-3 rounded-xl font-bold text-white touch-manipulation min-h-[48px]">Next &rarr;</button>
                             </div>
                         </div>
                     </template>
@@ -481,9 +553,9 @@
                             <h4 class="font-bold text-gray-900 dark:text-white mb-1">{{ $disputedItem->itemName() }}</h4>
                             <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
                                 Declared:
-                                <span class="font-mono">{{ $disputedItem->subCounts->pluck('quantity', 'sub_location')->implode(', ') }}</span>
+                                <span class="font-mono">{{ $disputedItem->subCounts->pluck('quantity', 'sub_location')->map(fn ($q) => $this->formatQuantity($q))->implode(', ') }}</span>
                                 — Incoming counted:
-                                <span class="font-mono">{{ collect($disputedItem->review->incoming_quantities ?? [])->implode(', ') }}</span>
+                                <span class="font-mono">{{ collect($disputedItem->review->incoming_quantities ?? [])->map(fn ($q) => $this->formatQuantity($q))->implode(', ') }}</span>
                             </div>
 
                             @if($this->iAmOutgoing())
@@ -494,7 +566,8 @@
                                      @foreach loop, which would otherwise wipe
                                      whatever this person has half-typed here. --}}
                                 <div wire:ignore x-data="{
-                                        values: @js($disputedItem->subCounts->pluck('quantity', 'sub_location')->all()),
+                                        isIntegerOnly: {{ $session->type === 'bar_handover' ? 'true' : 'false' }},
+                                        values: @js($disputedItem->subCounts->pluck('quantity', 'sub_location')->map(fn ($q) => $this->formatQuantity($q))->all()),
                                         pin: '', pressed: null,
                                         digit(d) { if (this.pin.length >= 4) return; this.flash(d); this.pin += d
                                             if (this.pin.length === 4) { const p = this.pin; this.$nextTick(() => { $wire.amendDeclaration({{ $disputedItem->id }}, p, this.values); this.pin = '' }) } },
@@ -505,7 +578,7 @@
                                         <template x-for="loc in Object.keys(values)" :key="loc">
                                             <div>
                                                 <label class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400" x-text="loc"></label>
-                                                <input type="number" step="0.01" x-model="values[loc]" class="w-full border rounded px-2 py-1 text-sm dark:bg-gray-800 dark:border-gray-600">
+                                                <input type="number" :step="isIntegerOnly ? '1' : '0.01'" inputmode="numeric" x-model="values[loc]" class="w-full border rounded px-2 py-1 text-sm dark:bg-gray-800 dark:border-gray-600">
                                             </div>
                                         </template>
                                     </div>
@@ -565,10 +638,10 @@
                         @foreach($session->items as $item)
                             <tr wire:key="review-row-{{ $item->id }}">
                                 <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ $item->itemName() }}</td>
-                                <td class="px-4 py-2 font-mono">{{ $item->adjusted_expected_quantity }}</td>
-                                <td class="px-4 py-2 font-mono">{{ $item->counted_quantity ?? 0 }}</td>
+                                <td class="px-4 py-2 font-mono">{{ $this->formatQuantity($item->adjusted_expected_quantity) }}</td>
+                                <td class="px-4 py-2 font-mono">{{ $this->formatQuantity($item->counted_quantity ?? 0) }}</td>
                                 <td class="px-4 py-2 font-mono font-bold {{ $item->variance < 0 ? 'text-red-600' : ($item->variance > 0 ? 'text-green-600' : '') }}">
-                                    {{ $item->variance }}
+                                    {{ $this->formatQuantity($item->variance) }}
                                 </td>
                                 <td class="px-4 py-2">
                                     @if($item->decision)
@@ -631,10 +704,10 @@
                         @foreach($session->items as $item)
                             <tr>
                                 <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ $item->itemName() }}</td>
-                                <td class="px-4 py-2 font-mono text-gray-500 dark:text-gray-400">{{ $item->adjusted_expected_quantity }}</td>
-                                <td class="px-4 py-2 font-mono">{{ $item->counted_quantity }}</td>
+                                <td class="px-4 py-2 font-mono text-gray-500 dark:text-gray-400">{{ $this->formatQuantity($item->adjusted_expected_quantity) }}</td>
+                                <td class="px-4 py-2 font-mono">{{ $this->formatQuantity($item->counted_quantity) }}</td>
                                 <td class="px-4 py-2 font-mono font-bold {{ $item->variance < 0 ? 'text-red-600' : ($item->variance > 0 ? 'text-green-600' : 'text-gray-400') }}">
-                                    {{ abs($item->variance) < 0.0001 ? 'None' : $item->variance }}
+                                    {{ abs($item->variance) < 0.0001 ? 'None' : $this->formatQuantity($item->variance) }}
                                 </td>
                                 <td class="px-4 py-2">
                                     @if($item->review?->outcome === 'unresolved')

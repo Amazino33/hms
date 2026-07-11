@@ -120,9 +120,23 @@ class CountSessionDetail extends Page
             'name' => $item->itemName(),
             'subLocations' => $item->subCounts->pluck('sub_location')->all(),
             'values' => $item->subCounts->pluck('quantity', 'sub_location')
-                ->map(fn ($q) => $q > 0 ? (string) $q : '')
+                ->map(fn ($q) => $q > 0 ? $this->formatQuantity($q) : '')
                 ->all(),
         ])->values()->all();
+    }
+
+    /**
+     * Bar drinks are whole units — never show "24.00" for a bar_handover
+     * count, even though the underlying column is decimal(10,2) to serve
+     * kitchen ingredients (kg/litres) too, which keep their decimals.
+     */
+    public function formatQuantity(mixed $quantity): string
+    {
+        if ($this->session?->type === 'bar_handover') {
+            return (string) (int) round((float) $quantity);
+        }
+
+        return (string) $quantity;
     }
 
     public function getTitle(): string
@@ -204,10 +218,28 @@ class CountSessionDetail extends Page
             'name' => $item->itemName(),
             'subLocations' => $item->subCounts->pluck('sub_location')->all(),
             'declaredValues' => $item->subCounts->pluck('quantity', 'sub_location')
-                ->map(fn ($q) => (string) $q)->all(),
+                ->map(fn ($q) => $this->formatQuantity($q))->all(),
             'outcome' => $item->review?->outcome,
             'incomingValues' => $item->review?->incoming_quantities ?? [],
         ])->values()->all();
+    }
+
+    /**
+     * The incoming custodian's own PIN-authentication to begin review —
+     * resolves identity by PIN lookup and (re)binds incoming_user_id to
+     * whoever actually typed it, overwriting the outgoing custodian's
+     * unverified guess from session-open. The kiosk's logged-in account
+     * plays no part in this decision.
+     */
+    public function bindIncomingReview(string $pin): void
+    {
+        try {
+            (new CountSessionService())->bindIncomingCustodian($this->session, $pin, $this->pinThrottleKey('bind'));
+            $this->refreshSession();
+            Notification::make()->title('Identity confirmed — you can review now')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not confirm identity')->body($e->getMessage())->danger()->send();
+        }
     }
 
     public function reviewAccept(int $itemId): void
@@ -219,7 +251,7 @@ class CountSessionDetail extends Page
         }
 
         try {
-            (new CountSessionService())->reviewProduct($item, auth()->id(), 'accepted');
+            (new CountSessionService())->reviewProduct($item, $this->session->incoming_user_id, 'accepted');
             $this->refreshSession();
         } catch (\Exception $e) {
             Notification::make()->title('Could not accept')->body($e->getMessage())->danger()->send();
@@ -235,7 +267,7 @@ class CountSessionDetail extends Page
         }
 
         try {
-            (new CountSessionService())->reviewProduct($item, auth()->id(), 'disputed', $quantities);
+            (new CountSessionService())->reviewProduct($item, $this->session->incoming_user_id, 'disputed', $quantities);
             $this->refreshSession();
         } catch (\Exception $e) {
             Notification::make()->title('Could not record dispute')->body($e->getMessage())->danger()->send();
@@ -268,7 +300,7 @@ class CountSessionDetail extends Page
         }
 
         try {
-            (new CountSessionService())->markUnresolved($item, auth()->id());
+            (new CountSessionService())->markUnresolved($item, $this->session->incoming_user_id);
             $this->refreshSession();
             Notification::make()->title('Marked unresolved — a manager has been notified')->warning()->send();
         } catch (\Exception $e) {
@@ -306,9 +338,30 @@ class CountSessionDetail extends Page
             : $session->outgoing_user_id === auth()->id();
     }
 
+    /**
+     * True once the incoming custodian has PIN-confirmed their identity —
+     * deliberately not an auth()->id() comparison: the whole point of
+     * bindIncomingCustodian() is that the kiosk's logged-in account is
+     * irrelevant to who is allowed to review.
+     */
     public function iAmReviewer(): bool
     {
-        return $this->session && $this->session->incoming_user_id === auth()->id();
+        return (bool) $this->session?->isIncomingBound();
+    }
+
+    /**
+     * True when a declared, non-unwitnessed session is waiting for its
+     * incoming custodian to PIN-authenticate before review can begin.
+     */
+    public function needsIncomingBinding(): bool
+    {
+        $session = $this->session;
+
+        return $session
+            && $session->isDeclared()
+            && $session->isHandoverWithSuccessor()
+            && !$session->isUnwitnessed()
+            && !$session->isIncomingBound();
     }
 
     public function iAmOutgoing(): bool
@@ -346,6 +399,7 @@ class CountSessionDetail extends Page
         }
 
         return $session->isDeclared()
+            && $session->isIncomingBound()
             && !$session->items()->whereDoesntHave('review')->exists()
             && !$session->items()->whereHas('review', fn ($q) => $q->where('outcome', 'disputed'))->exists();
     }
