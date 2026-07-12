@@ -1195,8 +1195,8 @@ new class extends Component {
                         <div @if($canAddToCart)
                             @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float) $product->price }}, {{ (int) ($product->available_stock ?? 0) }})"
                         @endif
-                            class="relative {{ $canAddToCart ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
-                            <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">
+                            class="relative {{ $canAddToCart ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-32 lg:h-36 group touch-manipulation">
+                            <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-3 text-sm lg:text-base">
                                 {{ $product->name }}
                             </div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">
@@ -1211,8 +1211,8 @@ new class extends Component {
                         <div @if(auth()->user()->currentShift())
                             @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float) $menuItem->sale_price }}, {{ $stock === null ? 'null' : $stock }})"
                         @endif
-                            class="relative {{ auth()->user()->currentShift() && ($stock === null || $stock > 0) ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-28 lg:h-32 group touch-manipulation">
-                            <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-2 text-sm lg:text-base">
+                            class="relative {{ auth()->user()->currentShift() && ($stock === null || $stock > 0) ? 'cursor-pointer hover:border-amber-500 hover:shadow-md' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center transition-all h-32 lg:h-36 group touch-manipulation">
+                            <div class="font-bold text-gray-800 dark:text-gray-200 line-clamp-3 text-sm lg:text-base">
                                 {{ $menuItem->name }}
                             </div>
                             <div class="text-amber-600 dark:text-amber-500 font-mono mt-1 text-sm lg:text-base">
@@ -1460,7 +1460,7 @@ new class extends Component {
                         @click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ (float) $product->price }}, {{ (int) ($product->available_stock ?? 0) }})"
                     @endif
                         class="relative {{ $canAddToCartMobile ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
-                        <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">
+                        <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-3 mb-2">
                             {{ $product->name }}
                         </div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">
@@ -1476,7 +1476,7 @@ new class extends Component {
                         @click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ (float) $menuItem->sale_price }}, {{ $stock === null ? 'null' : $stock }})"
                     @endif
                         class="relative {{ $canAddToCartMobile && ($stock === null || $stock > 0) ? 'hover:border-amber-500 active:scale-95' : 'cursor-not-allowed opacity-60' }} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center transition-all touch-manipulation">
-                        <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-2 mb-2">
+                        <div class="font-bold text-gray-800 dark:text-gray-200 text-sm line-clamp-3 mb-2">
                             {{ $menuItem->name }}
                         </div>
                         <div class="text-amber-600 dark:text-amber-500 font-mono font-bold text-lg">
