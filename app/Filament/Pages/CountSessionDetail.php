@@ -389,6 +389,12 @@ class CountSessionDetail extends Page
 
     public function reviewAccept(int $itemId): void
     {
+        if (!$this->iAmReviewer()) {
+            Notification::make()->title('Only the incoming custodian can review this count')->danger()->send();
+
+            return;
+        }
+
         $item = $this->session->items->firstWhere('id', $itemId);
 
         if (!$item) {
@@ -405,6 +411,12 @@ class CountSessionDetail extends Page
 
     public function reviewDispute(int $itemId, array $quantities): void
     {
+        if (!$this->iAmReviewer()) {
+            Notification::make()->title('Only the incoming custodian can review this count')->danger()->send();
+
+            return;
+        }
+
         $item = $this->session->items->firstWhere('id', $itemId);
 
         if (!$item) {
@@ -438,6 +450,12 @@ class CountSessionDetail extends Page
 
     public function markItemUnresolved(int $itemId): void
     {
+        if (!$this->iAmReviewer()) {
+            Notification::make()->title('Only the incoming custodian can mark this unresolved')->danger()->send();
+
+            return;
+        }
+
         $item = $this->session->items->firstWhere('id', $itemId);
 
         if (!$item) {
@@ -487,13 +505,19 @@ class CountSessionDetail extends Page
 
     /**
      * True once the incoming custodian has PIN-confirmed their identity —
-     * deliberately not an auth()->id() comparison: the whole point of
-     * bindIncomingCustodian() is that the kiosk's logged-in account is
-     * irrelevant to who is allowed to review.
+     * deliberately not an auth()->id() === incoming_user_id comparison for
+     * the incoming side: the whole point of bindIncomingCustodian() is that
+     * the kiosk's logged-in account is irrelevant to who is allowed to
+     * review. isIncomingBound() is a session-wide flag though, not tied to
+     * any one device or login — so without also excluding the outgoing
+     * custodian's own account here, the outgoing could load this same page
+     * on their own login (not the shared kiosk) and see/use the peer
+     * review Accept/Dispute actions on their own declared count, once
+     * anyone anywhere had bound as incoming.
      */
     public function iAmReviewer(): bool
     {
-        return (bool) $this->session?->isIncomingBound();
+        return (bool) $this->session?->isIncomingBound() && !$this->iAmOutgoing();
     }
 
     /**
