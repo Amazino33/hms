@@ -103,7 +103,7 @@
                         window.addEventListener('request-count-flush', () => this.flushPendingEdit())
                     },
 
-                    // The "Review & Declare" / "Finish Counting -> Seal"
+                    // The 'Review & Declare' / 'Finish Counting -> Seal'
                     // buttons live in their own separate (non wire:ignore'd)
                     // x-data below and, unlike Next/Previous, used to open
                     // with a bare Alpine `show = true` — no save at all. A
@@ -171,7 +171,7 @@
                     // Returns true only once the server has actually
                     // confirmed the write (recordCount() now returns a
                     // bool, not void) — a caught server-side exception used
-                    // to still resolve this promise as "success" and the
+                    // to still resolve this promise as 'success' and the
                     // counter silently moved on with nothing written.
                     async saveCurrent() {
                         const cur = this.current
@@ -224,7 +224,7 @@
                             } else if (this.catchStepEnabled && !this.catchStep) {
                                 // Skip-zero's catch step: offered exactly
                                 // once, after the last frozen (>0-at-open)
-                                // item, before the "all counted" screen.
+                                // item, before the 'all counted' screen.
                                 // Hidden entirely in 'all' mode — nothing
                                 // was skipped from the list, so it would be
                                 // redundant.
