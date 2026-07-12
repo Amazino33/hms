@@ -126,6 +126,106 @@ class CountSessionDetail extends Page
     }
 
     /**
+     * safeCountItems() plus a zero-nudge flag per row — the declaration
+     * summary is already skip-zero filtered (only products with stock > 0
+     * at all), so an all-zero row is usually a miss, not a real count.
+     * Deliberately a PHP method, not an inline @php block in the Blade
+     * view: a @php...@endphp block placed immediately before a @foreach
+     * broke Livewire's compiled wire:key wrapping at that nesting depth,
+     * and the single-line @php(...) form choked on this expression's
+     * nested parens/brackets — computing it here sidesteps both.
+     *
+     * @return array<int, array{id: int, name: string, subLocations: array<int, string>, values: array<string, string>, isAllZero: bool}>
+     */
+    public function declarationSummaryItems(): array
+    {
+        return collect($this->safeCountItems())->map(fn ($item) => $item + [
+            'isAllZero' => collect($item['values'])->every(fn ($v) => $v === '' || (float) $v === 0.0),
+        ])->all();
+    }
+
+    /**
+     * Whether this session was actually opened in 'in_stock_only' mode —
+     * read from the session's own frozen count_scope column, never the
+     * live companies.handover_count_scope setting, so an admin flipping
+     * the setting mid-session can't make the catch step appear/disappear
+     * out from under whoever is already counting. In 'all' mode the catch
+     * step is redundant (nothing was skipped from the list) and hidden.
+     */
+    public function catchStepEnabled(): bool
+    {
+        return $this->session?->count_scope === 'in_stock_only';
+    }
+
+    /**
+     * The skip-zero catch step's search pool: everything NOT already on
+     * the frozen count list, for whichever catalog this session type
+     * counts (products for a bar handover, ingredients for kitchen).
+     * Sent to the client once — filtering by typed text happens locally,
+     * same client-first pattern as every other kiosk search in this app.
+     *
+     * @return array<int, array{id: int, name: string}>
+     */
+    public function catchCandidates(): array
+    {
+        if (!$this->session || $this->session->status !== 'counting' || !$this->catchStepEnabled()) {
+            return [];
+        }
+
+        $column = $this->session->type === 'kitchen_handover' ? 'ingredient_id' : 'product_id';
+        $existingIds = $this->session->items->pluck($column)->filter()->all();
+
+        if ($this->session->type === 'kitchen_handover') {
+            return \App\Models\Ingredient::whereNotIn('id', $existingIds)
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn ($i) => ['id' => $i->id, 'name' => $i->name])
+                ->all();
+        }
+
+        return \App\Models\Product::whereNotIn('id', $existingIds)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name])
+            ->all();
+    }
+
+    /**
+     * Returns the new item in the same shape safeCountItems() produces, so
+     * the JS can splice it straight into the frozen `items` array — the
+     * counting screen is wire:ignore'd (frozen after first render), so
+     * there's no server re-render to pick this up from otherwise.
+     *
+     * @return array{id: int, name: string, subLocations: array<int, string>, values: array<string, string>}|null
+     */
+    public function addCatchItem(string $itemType, int $itemId): ?array
+    {
+        if (!$this->catchStepEnabled()) {
+            Notification::make()->title('Could not add item')->body('This session is not using the in-stock-only catch step.')->danger()->send();
+
+            return null;
+        }
+
+        try {
+            $item = (new CountSessionService())->addCatchItem($this->session, $itemType, $itemId, auth()->id());
+            $this->refreshSession();
+            $this->prefillSubLocationInputs();
+
+            return [
+                'id' => $item->id,
+                'name' => $item->itemName(),
+                'subLocations' => $item->subCounts->pluck('sub_location')->all(),
+                'values' => $item->subCounts->pluck('quantity', 'sub_location')->map(fn () => '')->all(),
+            ];
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not add item')->body($e->getMessage())->danger()->send();
+
+            return null;
+        }
+    }
+
+    /**
      * Bar drinks are whole units — never show "24.00" for a bar_handover
      * count, even though the underlying column is decimal(10,2) to serve
      * kitchen ingredients (kg/litres) too, which keep their decimals.
@@ -149,12 +249,22 @@ class CountSessionDetail extends Page
         unset($this->session);
     }
 
-    public function recordCount(int $itemId): void
+    /**
+     * Returns whether the save actually succeeded — the client-side
+     * saveCurrent()/advance() flow in the counting screen awaits this
+     * return value (not just the request round-trip) before ever
+     * advancing currentIndex. Previously this always returned void, so a
+     * caught exception here (e.g. an ownership-check failure) still
+     * resolved the JS promise as "success" and the counter silently moved
+     * on with nothing written — the notification was the only signal, and
+     * on a kiosk screen nobody's watching for a toast mid-count.
+     */
+    public function recordCount(int $itemId): bool
     {
         $item = $this->session->items->firstWhere('id', $itemId);
 
         if (!$item) {
-            return;
+            return false;
         }
 
         // subLocationInputs.{itemId} is keyed by the item's 3 fixed
@@ -167,9 +277,11 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             $this->prefillSubLocationInputs();
 
-            Notification::make()->title('Count recorded')->success()->send();
+            return true;
         } catch (\Exception $e) {
             Notification::make()->title('Could not record count')->body($e->getMessage())->danger()->send();
+
+            return false;
         }
     }
 

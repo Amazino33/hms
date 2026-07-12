@@ -73,19 +73,43 @@
             <div wire:ignore x-data="{
                     items: @js($this->safeCountItems()),
                     isIntegerOnly: {{ $session->type === 'bar_handover' ? 'true' : 'false' }},
+                    catchItemType: '{{ $session->type === 'kitchen_handover' ? 'ingredient' : 'product' }}',
+                    catchStepEnabled: {{ $this->catchStepEnabled() ? 'true' : 'false' }},
+                    catchCandidates: @js($this->catchCandidates()),
+                    catchSearch: '',
+                    catchStep: false,
                     currentIndex: 0,
                     activeSubLocation: null,
                     saving: false,
                     justSaved: false,
+                    saveError: false,
+                    pendingDirection: null,
                     pressed: null,
                     finished: false,
 
                     get current() { return this.items[this.currentIndex] ?? null },
                     get isFirst() { return this.currentIndex === 0 },
                     get isLast() { return this.currentIndex === this.items.length - 1 },
+                    get filteredCatchCandidates() {
+                        const term = this.catchSearch.trim().toLowerCase()
+                        if (!term) return []
+                        return this.catchCandidates.filter((c) => c.name.toLowerCase().includes(term)).slice(0, 8)
+                    },
                     get progress() { return this.items.length ? `Product ${this.currentIndex + 1} of ${this.items.length}` : '' },
 
                     init() {
+                        this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                        window.addEventListener('jump-to-count-product', (e) => this.jumpTo(e.detail))
+                    },
+
+                    // From the declaration summary's zero-nudge — jumps
+                    // straight back to that product's count screen instead
+                    // of making the bartender hunt for it with Previous.
+                    jumpTo(itemId) {
+                        const idx = this.items.findIndex((i) => i.id === itemId)
+                        if (idx === -1) return
+                        this.finished = false
+                        this.currentIndex = idx
                         this.activeSubLocation = this.current?.subLocations?.[0] ?? null
                     },
 
@@ -124,33 +148,98 @@
                         this.current.values[this.activeSubLocation] = existing.slice(0, -1)
                     },
 
-                    saveCurrent() {
+                    // Returns true only once the server has actually
+                    // confirmed the write (recordCount() now returns a
+                    // bool, not void) — a caught server-side exception used
+                    // to still resolve this promise as "success" and the
+                    // counter silently moved on with nothing written.
+                    async saveCurrent() {
                         const cur = this.current
-                        if (!cur) return
+                        if (!cur) return true
                         this.saving = true
                         this.justSaved = false
-                        this.$wire.set('subLocationInputs.' + cur.id, cur.values)
-                            .then(() => this.$wire.call('recordCount', cur.id))
-                            .then(() => { this.justSaved = true })
-                            .finally(() => { this.saving = false })
+                        try {
+                            await this.$wire.set('subLocationInputs.' + cur.id, cur.values)
+                            const ok = await this.$wire.call('recordCount', cur.id)
+                            this.justSaved = !!ok
+                            return !!ok
+                        } catch (e) {
+                            return false
+                        } finally {
+                            this.saving = false
+                        }
                     },
 
-                    next() {
-                        this.saveCurrent()
-                        if (!this.isLast) {
-                            this.currentIndex++
-                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                    // One quick automatic retry, then surface a blocking,
+                    // visible error with a Retry action — a value on screen
+                    // must never be silently absent from the database.
+                    async persistWithRetry() {
+                        if (await this.saveCurrent()) return true
+                        if (await this.saveCurrent()) return true
+                        this.saveError = true
+                        return false
+                    },
+
+                    // Next/Previous never advance past unconfirmed data:
+                    // this is the actual fix for the lost-count bug — the
+                    // old next() fired the save and advanced currentIndex
+                    // in the same tick without awaiting it, so a slow
+                    // network plus a fast next tap on the following product
+                    // queued overlapping requests to the same component and
+                    // could silently drop the earlier product's figures.
+                    // Non-reentrant: a save already in flight blocks a
+                    // second tap outright.
+                    async advance(direction) {
+                        if (this.saving) return
+                        this.pendingDirection = direction
+                        this.saveError = false
+                        const ok = await this.persistWithRetry()
+                        if (!ok) return
+                        this.saveError = false
+                        this.pendingDirection = null
+                        if (direction === 'next') {
+                            if (!this.isLast) {
+                                this.currentIndex++
+                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                            } else if (this.catchStepEnabled && !this.catchStep) {
+                                // Skip-zero's catch step: offered exactly
+                                // once, after the last frozen (>0-at-open)
+                                // item, before the "all counted" screen.
+                                // Hidden entirely in 'all' mode — nothing
+                                // was skipped from the list, so it would be
+                                // redundant.
+                                this.catchStep = true
+                            } else {
+                                this.finished = true
+                            }
                         } else {
-                            this.finished = true
+                            this.finished = false
+                            this.catchStep = false
+                            if (!this.isFirst) {
+                                this.currentIndex--
+                                this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                            }
                         }
                     },
 
-                    prev() {
-                        this.finished = false
-                        if (!this.isFirst) {
-                            this.currentIndex--
-                            this.activeSubLocation = this.current?.subLocations?.[0] ?? null
-                        }
+                    next() { this.advance('next') },
+                    prev() { this.advance('prev') },
+                    retry() { this.advance(this.pendingDirection ?? 'next') },
+
+                    // Just hides the catch step and shows the last product
+                    // again — currentIndex never moved while on this
+                    // screen, so there's nothing to save/navigate here.
+                    backFromCatchStep() { this.catchStep = false },
+
+                    async addCatchItem(itemId) {
+                        const result = await this.$wire.call('addCatchItem', this.catchItemType, itemId)
+                        if (!result) return
+                        this.catchCandidates = this.catchCandidates.filter((c) => c.id !== itemId)
+                        this.items.push({ id: result.id, name: result.name, subLocations: result.subLocations, values: {} })
+                        this.catchSearch = ''
+                        this.catchStep = false
+                        this.currentIndex = this.items.length - 1
+                        this.activeSubLocation = this.current?.subLocations?.[0] ?? null
                     },
 
                     enterOnSlot() {
@@ -173,6 +262,15 @@
                     <div class="h-full bg-primary-500 transition-all duration-200" :style="`width: ${((currentIndex + 1) / items.length) * 100}%`"></div>
                 </div>
 
+                <div x-show="saveError" x-cloak
+                    class="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 p-3 mb-2 text-sm text-red-700 dark:text-red-300 flex items-center justify-between gap-2 shrink-0">
+                    <span>Could not save — check your connection.</span>
+                    <button type="button" @click="retry()"
+                        class="shrink-0 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs touch-manipulation min-h-[40px] kiosk-tap kiosk-primary-pulse">
+                        Retry
+                    </button>
+                </div>
+
                 <template x-if="!current">
                     <div class="text-center text-gray-500 dark:text-gray-400 py-8">Nothing to count in this session.</div>
                 </template>
@@ -189,13 +287,45 @@
                             Need to fix something first?
                         </p>
                         <button type="button" @click="prev"
-                            class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold text-sm touch-manipulation">
+                            class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold text-sm touch-manipulation kiosk-tap">
                             &larr; Go back and edit
                         </button>
                     </div>
                 </template>
 
-                <template x-if="current && !finished">
+                {{-- Skip-zero's catch step: offered once, after the last
+                     frozen (>0-at-open) item — a counter physically found
+                     stock of something that wasn't on the list at all. --}}
+                <template x-if="catchStep && !finished">
+                    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-1">Anything else?</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                            Search for anything you physically found stock of that wasn't in this list.
+                        </p>
+                        <input type="text" x-model="catchSearch" placeholder="Search…"
+                            class="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 mb-3" />
+                        <div class="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 mb-4" x-show="catchSearch">
+                            <template x-for="c in filteredCatchCandidates" :key="c.id">
+                                <button type="button" @click="addCatchItem(c.id)"
+                                    class="w-full py-2 flex justify-between items-center text-left touch-manipulation kiosk-tap">
+                                    <span x-text="c.name" class="text-sm text-gray-700 dark:text-gray-300"></span>
+                                    <span class="text-xs font-bold text-primary-600">+ Add</span>
+                                </button>
+                            </template>
+                            <p x-show="filteredCatchCandidates.length === 0" class="text-sm text-gray-400 py-2">No match.</p>
+                        </div>
+                        <button type="button" @click="next()"
+                            class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation kiosk-primary-pulse">
+                            No, that's everything &rarr;
+                        </button>
+                        <button type="button" @click="backFromCatchStep()"
+                            class="w-full mt-2 py-2 text-gray-500 dark:text-gray-400 text-sm font-bold touch-manipulation kiosk-tap">
+                            &larr; Back to last product
+                        </button>
+                    </div>
+                </template>
+
+                <template x-if="current && !finished && !catchStep">
                     <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex flex-col">
                         <!-- Product name -->
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white text-center mb-2 shrink-0" x-text="current.name"></h2>
@@ -206,7 +336,7 @@
                         <div class="grid gap-2 mb-2 shrink-0" :class="current.subLocations.length > 1 ? 'grid-cols-' + current.subLocations.length : 'grid-cols-1'">
                             <template x-for="(loc, idx) in current.subLocations" :key="loc">
                                 <div class="rounded-xl border-2 p-2 text-center transition-colors"
-                                    :class="activeSubLocation === loc ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700'">
+                                    :class="activeSubLocation === loc ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 kiosk-field-active' : 'border-gray-200 dark:border-gray-700'">
                                     <label class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400" x-text="loc"></label>
                                     {{-- inputmode="none" suppresses the mobile virtual keyboard (the
                                          custom pad below is the touch input) without blocking a real
@@ -247,15 +377,15 @@
                              hunting for it, even on a viewport short enough that
                              the content above still needs a touch of scroll. -->
                         <div class="grid grid-cols-2 gap-3 sticky bottom-0 bg-white dark:bg-gray-900 pt-1 pb-1 shrink-0">
-                            <button type="button" @click="prev" :disabled="isFirst"
-                                :class="isFirst ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'"
-                                class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation min-h-[48px]">
+                            <button type="button" @click="prev" :disabled="isFirst || saving || saveError"
+                                :class="(isFirst || saving || saveError) ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'"
+                                class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation min-h-[48px] kiosk-tap">
                                 &larr; Previous
                             </button>
-                            <button type="button" @click="next"
-                                class="py-3 rounded-xl font-bold text-white touch-manipulation min-h-[48px]"
-                                :class="isLast ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 dark:hover:bg-gray-500'">
-                                <span x-text="isLast ? 'Finish' : 'Next →'"></span>
+                            <button type="button" @click="next" :disabled="saving || saveError"
+                                class="py-3 rounded-xl font-bold text-white touch-manipulation min-h-[48px] kiosk-primary-pulse"
+                                :class="(saving || saveError) ? 'opacity-60 cursor-not-allowed bg-gray-500' : (isLast ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 dark:hover:bg-gray-500')">
+                                <span x-text="saving ? 'Saving…' : (isLast ? 'Finish' : 'Next →')"></span>
                             </button>
                         </div>
                     </div>
@@ -276,7 +406,7 @@
             @elseif($this->isUnwitnessedSession())
                 <div class="max-w-md mx-auto mt-4" x-data="{ show: false }">
                     <button type="button" @click="show = true" x-show="!show"
-                        class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation">
+                        class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation kiosk-tap kiosk-primary-pulse">
                         Finish Counting &rarr; Seal
                     </button>
                     <div x-show="show" x-cloak>
@@ -286,7 +416,7 @@
             @else
                 <div class="max-w-md mx-auto mt-4" x-data="{ show: false }">
                     <button type="button" @click="show = true" x-show="!show"
-                        class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation">
+                        class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation kiosk-tap kiosk-primary-pulse">
                         Review &amp; Declare
                     </button>
                     <div x-show="show" x-cloak class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
@@ -295,14 +425,28 @@
                             Review your own figures below. Once you declare, they're locked — only you can amend them
                             later, and only if the incoming custodian disputes one during their review.
                         </p>
+                        {{-- Zero-nudge: the list is already skip-zero filtered (only
+                             products with bar stock > 0 are on it at all), so an
+                             all-zero row is usually a miss, not a real count —
+                             flagged, but not blocking, and tapping it jumps
+                             straight back to that product to fix it.
+                             declarationSummaryItems() computes the isAllZero flag
+                             in PHP (not an inline @php block here) — a block
+                             immediately before a @foreach broke Livewire's
+                             compiled wire:key wrapping at this nesting depth. --}}
                         <div class="divide-y divide-gray-100 dark:divide-gray-800 mb-4 max-h-64 overflow-y-auto">
-                            @foreach($this->safeCountItems() as $summaryItem)
-                                <div class="py-2 flex justify-between text-sm">
-                                    <span class="text-gray-700 dark:text-gray-300">{{ $summaryItem['name'] }}</span>
-                                    <span class="font-mono font-bold text-gray-900 dark:text-white">
-                                        {{ collect($summaryItem['values'])->map(fn ($v) => $v === '' ? '0' : $v)->implode(' / ') }}
-                                    </span>
-                                </div>
+                            @foreach($this->declarationSummaryItems() as $summaryItem)
+                                <button type="button" wire:key="declare-row-{{ $summaryItem['id'] }}"
+                                    @click="show = false; $dispatch('jump-to-count-product', {{ $summaryItem['id'] }})"
+                                    class="w-full py-2 flex flex-col text-left touch-manipulation {{ $summaryItem['isAllZero'] ? 'kiosk-attention-pulse bg-amber-50 dark:bg-amber-900/20 -mx-2 px-2 rounded-lg' : '' }}">
+                                    <div class="flex justify-between text-sm">
+                                        <span class="{{ $summaryItem['isAllZero'] ? 'text-amber-800 dark:text-amber-300 font-semibold' : 'text-gray-700 dark:text-gray-300' }}">{{ $summaryItem['name'] }}</span>
+                                        <span class="font-mono font-bold {{ $summaryItem['isAllZero'] ? 'text-amber-700 dark:text-amber-400' : 'text-gray-900 dark:text-white' }}">
+                                            {{ collect($summaryItem['values'])->map(fn ($v) => $v === '' ? '0' : $v)->implode(' / ') }}
+                                        </span>
+                                    </div>
+                                    <span class="text-xs text-amber-700 dark:text-amber-400" style="{{ $summaryItem['isAllZero'] ? '' : 'display:none' }}">Counted as zero — correct? Tap to check.</span>
+                                </button>
                             @endforeach
                         </div>
                         <div x-data="{
@@ -486,8 +630,8 @@
                                 <div>
                                     <template x-if="!disputing">
                                         <div class="grid grid-cols-2 gap-3 mb-4">
-                                            <button type="button" @click="accept" class="py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold touch-manipulation">Accept</button>
-                                            <button type="button" @click="startDispute" class="py-4 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-bold touch-manipulation">Dispute</button>
+                                            <button type="button" @click="accept" class="py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold touch-manipulation kiosk-tap">Accept</button>
+                                            <button type="button" @click="startDispute" class="py-4 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-bold touch-manipulation kiosk-tap">Dispute</button>
                                         </div>
                                     </template>
 
@@ -497,8 +641,8 @@
                                             <div class="grid gap-2 mb-3" :class="current.subLocations.length > 1 ? 'grid-cols-' + current.subLocations.length : 'grid-cols-1'">
                                                 <template x-for="loc in current.subLocations" :key="loc">
                                                     <button type="button" @click="activeSubLocation = loc"
-                                                        class="rounded-xl border-2 p-3 text-center touch-manipulation transition-colors"
-                                                        :class="activeSubLocation === loc ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700'">
+                                                        class="rounded-xl border-2 p-3 text-center touch-manipulation transition-colors kiosk-tap"
+                                                        :class="activeSubLocation === loc ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 kiosk-field-active' : 'border-gray-200 dark:border-gray-700'">
                                                         <div class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400" x-text="loc"></div>
                                                         <div class="text-2xl font-mono font-bold text-gray-900 dark:text-white mt-1" x-text="disputeValues[loc] === '' || disputeValues[loc] === undefined ? '—' : disputeValues[loc]"></div>
                                                     </button>
@@ -515,8 +659,8 @@
                                                 <button type="button" @click="backspaceDispute" class="py-4 rounded-xl text-lg font-bold text-red-700 bg-red-100 dark:bg-red-900/30 touch-manipulation">&larr;</button>
                                             </div>
                                             <div class="grid grid-cols-2 gap-3">
-                                                <button type="button" @click="disputing = false" class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700 touch-manipulation">Cancel</button>
-                                                <button type="button" @click="submitDispute" class="py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 touch-manipulation">Submit Dispute</button>
+                                                <button type="button" @click="disputing = false" class="py-3 rounded-xl font-bold text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700 touch-manipulation kiosk-tap">Cancel</button>
+                                                <button type="button" @click="submitDispute" class="py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 touch-manipulation kiosk-tap kiosk-primary-pulse">Submit Dispute</button>
                                             </div>
                                         </div>
                                     </template>
@@ -560,7 +704,7 @@
             @if($this->disputedItems()->isNotEmpty() && ($this->iAmOutgoing() || $this->iAmReviewer()))
                 <div class="max-w-md mx-auto mt-4 space-y-3">
                     @foreach($this->disputedItems() as $disputedItem)
-                        <div class="bg-white dark:bg-gray-900 rounded-xl border border-amber-300 dark:border-amber-700 p-4" wire:key="dispute-{{ $disputedItem->id }}">
+                        <div class="bg-white dark:bg-gray-900 rounded-xl border border-amber-300 dark:border-amber-700 p-4 kiosk-attention-pulse" wire:key="dispute-{{ $disputedItem->id }}">
                             <h4 class="font-bold text-gray-900 dark:text-white mb-1">{{ $disputedItem->itemName() }}</h4>
                             <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
                                 Declared:
@@ -680,7 +824,7 @@
 
             <div class="mt-4">
                 <button wire:click="finalizeReview" wire:confirm="Finalize this session? This cannot be undone."
-                    class="px-4 py-2 rounded-lg bg-success-600 text-white font-bold text-sm">Finalize Session</button>
+                    class="px-4 py-2 rounded-lg bg-success-600 text-white font-bold text-sm kiosk-tap kiosk-primary-pulse">Finalize Session</button>
             </div>
         @endif
 
@@ -691,7 +835,7 @@
                         This was your opening count — no one to hand over from. Start your shift now to begin selling against this stock.
                     </p>
                     <button wire:click="startMyShift" wire:confirm="Start your shift from this count?"
-                        class="px-4 py-2 rounded-lg bg-success-600 text-white font-bold text-sm">Start My Shift</button>
+                        class="px-4 py-2 rounded-lg bg-success-600 text-white font-bold text-sm kiosk-tap kiosk-primary-pulse">Start My Shift</button>
                 </div>
             @endif
 

@@ -7,6 +7,7 @@ use App\Services\PermissionService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -42,10 +43,11 @@ class ManageCompanySettings extends Page implements HasForms
         );
 
         $this->form->fill([
-            'name'         => $this->company->name,
-            'address'      => $this->company->address,
-            'phone_number' => $this->company->phone_number,
-            'logo_path'    => $this->company->logo_path,
+            'name'                  => $this->company->name,
+            'address'               => $this->company->address,
+            'phone_number'          => $this->company->phone_number,
+            'logo_path'             => $this->company->logo_path,
+            'handover_count_scope'  => $this->company->handover_count_scope,
         ]);
     }
 
@@ -74,6 +76,18 @@ class ManageCompanySettings extends Page implements HasForms
                     ->image()
                     ->directory('company-logos')
                     ->imagePreviewHeight('80')
+                    ->columnSpanFull(),
+
+                Select::make('handover_count_scope')
+                    ->label('Bar/Kitchen Handover Count Scope')
+                    ->helperText('Applies to the next handover count session that gets opened — never changes a session already in progress.')
+                    ->options([
+                        'all' => 'Count every bar-stocked product (recommended while testing)',
+                        'in_stock_only' => 'Count only products currently showing stock',
+                    ])
+                    ->default('all')
+                    ->required()
+                    ->native(false)
                     ->columnSpanFull(),
             ]);
     }

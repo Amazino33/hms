@@ -15,3 +15,75 @@ li {
 li::marker {
     display: none;
 }
+
+/*
+ * Guided tap animations for kiosk screens: animate only the single next
+ * expected action on any screen, everything else stays still. All three
+ * are disabled outright under prefers-reduced-motion — a state change
+ * (label swap, layout) still communicates progress without any motion.
+ */
+
+/* Primary-action pulse: the flow-advancing button (Next, Declare, Confirm,
+   Agree), a slow ~2s breathing ring — never more than one per screen. */
+@keyframes kiosk-pulse-ring {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.45); }
+    50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+}
+
+.kiosk-primary-pulse {
+    animation: kiosk-pulse-ring 2s ease-in-out infinite;
+}
+
+/* One-time attention cue: a single pulse on load (declaration zero-rows,
+   review dispute rows), then rests — never an infinite blink on a list row. */
+@keyframes kiosk-attention-flash {
+    0%, 100% { background-color: transparent; }
+    30% { background-color: rgba(245, 158, 11, 0.18); }
+}
+
+.kiosk-attention-pulse {
+    animation: kiosk-attention-flash 1.4s ease-out 1;
+}
+
+/* Active field cue: a soft breathing border on the focused sub-location
+   input, on top of its existing amber highlight, so it's always obvious
+   which field the on-screen keypad feeds. */
+@keyframes kiosk-field-breathe {
+    0%, 100% { border-color: rgb(245, 158, 11); }
+    50% { border-color: rgb(217, 119, 6); }
+}
+
+.kiosk-field-active {
+    animation: kiosk-field-breathe 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kiosk-primary-pulse,
+    .kiosk-attention-pulse,
+    .kiosk-field-active {
+        animation: none !important;
+    }
+}
+
+/* Instant tap feedback (<100ms) for kiosk buttons that don't already track
+   their own Alpine `pressed` state (the on-screen numpad keys do that
+   individually already, with the same scale/darken shape). */
+.kiosk-tap {
+    transition: transform 100ms ease, filter 100ms ease;
+}
+
+.kiosk-tap:active {
+    transform: scale(0.97);
+    filter: brightness(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kiosk-tap {
+        transition: none;
+    }
+
+    .kiosk-tap:active {
+        transform: none;
+        filter: none;
+    }
+}

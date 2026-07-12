@@ -9,7 +9,7 @@
             <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
                 Status: <span class="font-bold">{{ ucwords(str_replace('_', ' ', $this->myOpenSession->status)) }}</span>
             </p>
-            <button wire:click="goToOpenSession" class="px-4 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold">
+            <button wire:click="goToOpenSession" class="px-4 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold kiosk-tap kiosk-primary-pulse">
                 Continue Counting
             </button>
         </div>
@@ -58,7 +58,7 @@
                     @endforelse
                 </div>
 
-                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
+                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold kiosk-tap kiosk-primary-pulse">
                     {{ $isClosing ? 'Start Closing Count' : 'Start Handover Count' }}
                 </button>
             @elseif($this->otherActiveCustodian)
@@ -77,7 +77,7 @@
                     @endforeach
                 </select>
 
-                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
+                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold kiosk-tap kiosk-primary-pulse">
                     Start Unwitnessed Count
                 </button>
             @else
@@ -86,7 +86,7 @@
                     You're not currently on a shift — this is the first count of the day, so there's no one to hand over from. Once this count is reviewed, you can start your shift from it.
                 </p>
 
-                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
+                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold kiosk-tap kiosk-primary-pulse">
                     Start Opening Count
                 </button>
             @endif

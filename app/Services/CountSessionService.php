@@ -12,6 +12,7 @@ use App\Models\Ingredient;
 use App\Models\IngredientInventoryItem;
 use App\Models\IngredientTransaction;
 use App\Models\InventoryItem;
+use App\Models\Company;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\Shift;
@@ -44,6 +45,15 @@ class CountSessionService
         ?int $witnessUserId = null,
     ): CountSession {
         $isHandover = in_array($type, ['bar_handover', 'kitchen_handover'], true);
+
+        // Reverted to a toggle, defaulting to 'all': during this testing/
+        // stabilization phase products sometimes reach the bar from the
+        // store without being recorded, so a system-zero product still
+        // needs to be on the list — counting it above zero is exactly what
+        // surfaces that unrecorded movement as an overage. 'in_stock_only'
+        // (the skip-zero + catch-step behavior) stays available behind the
+        // setting so it can be switched back on later with no new build.
+        $skipZero = $isHandover && $this->handoverCountScope() === 'in_stock_only';
 
         if ($isClosing && !$isHandover) {
             throw new \Exception('Only a bar/kitchen count can be a closing count.');
@@ -93,7 +103,7 @@ class CountSessionService
             throw new \Exception('The witness cannot be the same person as the incoming custodian.');
         }
 
-        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing, $witnessUserId) {
+        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing, $witnessUserId, $skipZero) {
             $session = CountSession::create([
                 'type' => $type,
                 'warehouse_id' => $warehouseId,
@@ -105,6 +115,7 @@ class CountSessionService
                 'witness_user_id' => $witnessUserId,
                 'is_closing' => $isClosing,
                 'notes' => $notes,
+                'count_scope' => $skipZero ? 'in_stock_only' : 'all',
             ]);
 
             // Snapshotted at open time, not resolved live from the warehouse
@@ -112,8 +123,16 @@ class CountSessionService
             // already-open session's slots.
             $subLocationLabels = WareHouse::findOrFail($warehouseId)->subLocationLabels();
 
+            // Skip-zero (in_stock_only mode only): a handover count only
+            // pages through products/ingredients that actually have stock
+            // right now. main_store_stocktake keeps counting everything
+            // regardless of the setting (it's the manager's full physical
+            // audit, not a bartender/chef handover) — deliberately not
+            // filtered.
             if ($type === 'kitchen_handover') {
-                $rows = IngredientInventoryItem::where('warehouse_id', $warehouseId)->get();
+                $rows = IngredientInventoryItem::where('warehouse_id', $warehouseId)
+                    ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))
+                    ->get();
                 foreach ($rows as $row) {
                     $item = CountSessionItem::create([
                         'count_session_id' => $session->id,
@@ -124,7 +143,9 @@ class CountSessionService
                     $this->seedSubLocationSlots($item, $subLocationLabels);
                 }
             } else {
-                $rows = InventoryItem::where('warehouse_id', $warehouseId)->get();
+                $rows = InventoryItem::where('warehouse_id', $warehouseId)
+                    ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))
+                    ->get();
                 foreach ($rows as $row) {
                     $item = CountSessionItem::create([
                         'count_session_id' => $session->id,
@@ -141,6 +162,20 @@ class CountSessionService
     }
 
     /**
+     * The admin-facing toggle (companies.handover_count_scope, edited via
+     * ManageCompanySettings) controlling whether a newly-opened handover
+     * count pages through every bar-stocked product ('all', the default)
+     * or only ones currently showing stock ('in_stock_only'). Read fresh
+     * on every call rather than cached — openSession() is the only
+     * consumer, and a setting change must never affect a session already
+     * in progress, only the next one opened.
+     */
+    public function handoverCountScope(): string
+    {
+        return Company::find(1)?->handover_count_scope ?? 'all';
+    }
+
+    /**
      * Every item gets exactly the warehouse's 3 fixed sub-location slots,
      * pre-created at zero — counting only ever updates these rows, it never
      * creates new arbitrary sub-locations.
@@ -154,6 +189,58 @@ class CountSessionService
                 'quantity' => 0,
             ]);
         }
+    }
+
+    /**
+     * The skip-zero filter's catch step: an item the counter physically
+     * found stock of that wasn't on the frozen (>0-at-open) list. Added
+     * with expected_quantity_at_open = 0, matching reality — it seals as a
+     * plain positive-variance overage through the exact same live-stock
+     * comparison every other item gets, no special-casing needed.
+     */
+    public function addCatchItem(CountSession $session, string $itemType, int $itemId, int $callerUserId): CountSessionItem
+    {
+        if (!$session->isDraft()) {
+            throw new \Exception('Items can only be added while the session is still open.');
+        }
+
+        if ($session->isHandoverWithSuccessor()) {
+            $expectedCounterId = ($session->isUnwitnessed() || $session->outgoing_user_id === null)
+                ? $session->incoming_user_id
+                : $session->outgoing_user_id;
+
+            if ($callerUserId !== $expectedCounterId) {
+                throw new \Exception('Only the person doing the count can add an item.');
+            }
+        }
+
+        if (!in_array($itemType, ['product', 'ingredient'], true)) {
+            throw new \Exception('Invalid item type.');
+        }
+
+        $column = $itemType === 'product' ? 'product_id' : 'ingredient_id';
+
+        $alreadyPresent = CountSessionItem::where('count_session_id', $session->id)
+            ->where('item_type', $itemType)
+            ->where($column, $itemId)
+            ->exists();
+
+        if ($alreadyPresent) {
+            throw new \Exception('This item is already in the count.');
+        }
+
+        return DB::transaction(function () use ($session, $itemType, $itemId, $column) {
+            $item = CountSessionItem::create([
+                'count_session_id' => $session->id,
+                'item_type' => $itemType,
+                $column => $itemId,
+                'expected_quantity_at_open' => 0,
+            ]);
+
+            $this->seedSubLocationSlots($item, $session->warehouse->subLocationLabels());
+
+            return $item->fresh();
+        });
     }
 
     /**
