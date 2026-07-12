@@ -100,6 +100,26 @@
                     init() {
                         this.activeSubLocation = this.current?.subLocations?.[0] ?? null
                         window.addEventListener('jump-to-count-product', (e) => this.jumpTo(e.detail))
+                        window.addEventListener('request-count-flush', () => this.flushPendingEdit())
+                    },
+
+                    // The "Review & Declare" / "Finish Counting -> Seal"
+                    // buttons live in their own separate (non wire:ignore'd)
+                    // x-data below and, unlike Next/Previous, used to open
+                    // with a bare Alpine `show = true` — no save at all. A
+                    // bartender who jumped back (Previous, or a summary-row
+                    // tap), edited a figure, then tapped straight into
+                    // Declare/Seal instead of Next again would see the
+                    // declaration list still show the pre-edit value,
+                    // because the edit had never left the browser. This is
+                    // the actual fix: those buttons now dispatch
+                    // 'request-count-flush' and await this before opening,
+                    // reusing the exact same persistWithRetry() gate (and,
+                    // on failure, the same visible error+Retry banner
+                    // already on screen) as first entry.
+                    async flushPendingEdit() {
+                        const ok = (this.current && !this.finished) ? await this.persistWithRetry() : true
+                        window.dispatchEvent(new CustomEvent('count-flush-result', { detail: ok }))
                     },
 
                     // From the declaration summary's zero-nudge — jumps
@@ -392,6 +412,18 @@
                 </template>
             </div>
 
+            <script>
+                // Bridges the outer (non wire:ignore'd) Declare/Seal button
+                // scopes below to the counting flow's flushPendingEdit() —
+                // see the comment on that method for why this exists.
+                function hmsRequestCountFlush() {
+                    return new Promise((resolve) => {
+                        window.addEventListener('count-flush-result', (e) => resolve(e.detail), { once: true })
+                        window.dispatchEvent(new CustomEvent('request-count-flush'))
+                    })
+                }
+            </script>
+
             @if(!$this->isHandoverWithSuccessor())
                 <div class="flex flex-wrap gap-2 mt-4 max-w-md mx-auto">
                     @if($session->outgoing_user_id && !$session->confirmed_by_outgoing_at)
@@ -405,7 +437,7 @@
                 </div>
             @elseif($this->isUnwitnessedSession())
                 <div class="max-w-md mx-auto mt-4" x-data="{ show: false }">
-                    <button type="button" @click="show = true" x-show="!show"
+                    <button type="button" @click="if (await hmsRequestCountFlush()) show = true" x-show="!show"
                         class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation kiosk-tap kiosk-primary-pulse">
                         Finish Counting &rarr; Seal
                     </button>
@@ -415,7 +447,7 @@
                 </div>
             @else
                 <div class="max-w-md mx-auto mt-4" x-data="{ show: false }">
-                    <button type="button" @click="show = true" x-show="!show"
+                    <button type="button" @click="if (await hmsRequestCountFlush()) show = true" x-show="!show"
                         class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation kiosk-tap kiosk-primary-pulse">
                         Review &amp; Declare
                     </button>

@@ -288,9 +288,16 @@ class CountSessionService
                 throw new \Exception("'{$subLocation}' is not a valid sub-location for this item.");
             }
 
-            CountSessionSubCount::where('count_session_item_id', $item->id)
-                ->where('sub_location', $subLocation)
-                ->update(['quantity' => $quantity === null || $quantity === '' ? 0 : (float) $quantity]);
+            // updateOrCreate, not where()->update(): the unique index on
+            // (count_session_item_id, sub_location) is the actual guarantee
+            // against duplicate draft rows, but this is the write path that
+            // must honor it — a bare where()->update() would silently do
+            // nothing if the row were ever missing, instead of recreating
+            // the single source of truth for that slot.
+            CountSessionSubCount::updateOrCreate(
+                ['count_session_item_id' => $item->id, 'sub_location' => $subLocation],
+                ['quantity' => $quantity === null || $quantity === '' ? 0 : (float) $quantity]
+            );
         }
 
         $item->update([
