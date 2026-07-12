@@ -42,12 +42,21 @@
                 <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                     {{ $isClosing ? 'Confirmed by' : 'Handing over to' }}
                 </label>
-                <select wire:model="incomingUserId" class="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 mb-4">
-                    <option value="">Choose…</option>
-                    @foreach($this->candidateIncomingUsers as $user)
-                        <option value="{{ $user->id }}">{{ $user->name }}</option>
-                    @endforeach
-                </select>
+                {{-- A button per person, not a dropdown list — a mis-tap on a
+                     tiny native <select> option is exactly how a wrong (or
+                     even the wrong-same) person has gotten picked before;
+                     large tappable buttons with the selection clearly
+                     highlighted are much harder to fat-finger. --}}
+                <div class="grid grid-cols-2 gap-2 mb-4">
+                    @forelse($this->candidateIncomingUsers as $user)
+                        <button type="button" wire:click="$set('incomingUserId', {{ $user->id }})"
+                            class="p-3 rounded-lg border-2 text-center font-bold text-sm touch-manipulation {{ (int) $incomingUserId === $user->id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300' }}">
+                            {{ $user->name }}
+                        </button>
+                    @empty
+                        <p class="col-span-2 text-sm text-gray-500 dark:text-gray-400">No one else is set up for this role yet.</p>
+                    @endforelse
+                </div>
 
                 <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
                     {{ $isClosing ? 'Start Closing Count' : 'Start Handover Count' }}

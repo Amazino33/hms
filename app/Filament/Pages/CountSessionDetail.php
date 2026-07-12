@@ -439,6 +439,46 @@ class CountSessionDetail extends Page
         }
     }
 
+    /**
+     * Self-service for the exact mistake that motivated this: someone
+     * picked the wrong person (or even themselves) and now the session is
+     * stuck blocking their own MyCount page. Anyone party to the session
+     * can clear it themselves before it's gone anywhere real; a manager
+     * can clear anyone's.
+     */
+    public function canCancelSession(): bool
+    {
+        $session = $this->session;
+
+        if (!$session || !$session->isCancellable()) {
+            return false;
+        }
+
+        $userId = auth()->id();
+
+        if (in_array($userId, [$session->opened_by, $session->outgoing_user_id, $session->incoming_user_id, $session->witness_user_id], true)) {
+            return true;
+        }
+
+        return auth()->user()->hasAnyRole(['manager', 'admin', 'super_admin']);
+    }
+
+    public function cancelSession(?string $reason = null): void
+    {
+        if (!$this->canCancelSession()) {
+            Notification::make()->title('You are not able to cancel this session')->danger()->send();
+            return;
+        }
+
+        try {
+            (new CountSessionService())->cancelSession($this->session, auth()->id(), $reason);
+            Notification::make()->title('Session cancelled')->success()->send();
+            $this->redirect('/admin/my-count');
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not cancel')->body($e->getMessage())->danger()->send();
+        }
+    }
+
     public function submitForReview(): void
     {
         try {

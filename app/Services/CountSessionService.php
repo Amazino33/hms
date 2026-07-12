@@ -76,6 +76,23 @@ class CountSessionService
             }
         }
 
+        // Guards against every "same person twice" mistake regardless of
+        // which UI created the session (MyCount's picker already excludes
+        // the logged-in user from its own dropdown, but the admin Count
+        // Sessions quick-create form has no such restriction, and someone
+        // there once picked the same bartender for both slots by mistake).
+        if ($outgoingUserId && $incomingUserId && $outgoingUserId === $incomingUserId) {
+            throw new \Exception('The incoming custodian cannot be the same person as the outgoing custodian.');
+        }
+
+        if ($witnessUserId && $outgoingUserId && $witnessUserId === $outgoingUserId) {
+            throw new \Exception('The witness cannot be the same person as the outgoing custodian.');
+        }
+
+        if ($witnessUserId && $incomingUserId && $witnessUserId === $incomingUserId) {
+            throw new \Exception('The witness cannot be the same person as the incoming custodian.');
+        }
+
         return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing, $witnessUserId) {
             $session = CountSession::create([
                 'type' => $type,
@@ -240,6 +257,32 @@ class CountSessionService
         }
 
         $session->update(['confirmed_by_incoming_at' => now()]);
+
+        return $session->fresh();
+    }
+
+    /**
+     * Clears a mistaken session (e.g. someone accidentally naming
+     * themselves as both custodians) before it's gone anywhere — no stock
+     * has moved yet at 'counting' or 'declared', so cancelling is a pure
+     * no-op on the ledger. Once it's reached pending_review/reviewed,
+     * stock has already been trued up and cancelling isn't safe; that
+     * needs a proper reversal instead, not this. Authorization (who is
+     * allowed to cancel) is the caller's responsibility, same as every
+     * other method here.
+     */
+    public function cancelSession(CountSession $session, int $cancelledByUserId, ?string $reason = null): CountSession
+    {
+        if (!$session->isCancellable()) {
+            throw new \Exception('This session has already moved past the point where it can be cancelled.');
+        }
+
+        $session->update([
+            'status' => 'cancelled',
+            'cancelled_by' => $cancelledByUserId,
+            'cancelled_at' => now(),
+            'cancelled_reason' => $reason,
+        ]);
 
         return $session->fresh();
     }

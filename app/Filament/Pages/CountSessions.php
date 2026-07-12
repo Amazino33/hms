@@ -60,6 +60,7 @@ class CountSessions extends Page implements HasTable
                         'declared' => 'Declared',
                         'pending_review' => 'Pending Review',
                         'reviewed' => 'Reviewed',
+                        'cancelled' => 'Cancelled',
                         default => $state,
                     })
                     ->color(fn (string $state) => match ($state) {
@@ -67,6 +68,7 @@ class CountSessions extends Page implements HasTable
                         'declared' => 'info',
                         'pending_review' => 'info',
                         'reviewed' => 'success',
+                        'cancelled' => 'gray',
                         default => 'gray',
                     }),
                 TextColumn::make('openedBy.name')->label('Opened By'),
@@ -97,7 +99,7 @@ class CountSessions extends Page implements HasTable
             ])
             ->filters([
                 SelectFilter::make('status')
-                    ->options(['counting' => 'Counting', 'declared' => 'Declared', 'pending_review' => 'Pending Review', 'reviewed' => 'Reviewed']),
+                    ->options(['counting' => 'Counting', 'declared' => 'Declared', 'pending_review' => 'Pending Review', 'reviewed' => 'Reviewed', 'cancelled' => 'Cancelled']),
                 SelectFilter::make('type')
                     ->options([
                         'bar_handover' => 'Bar Handover',
@@ -121,6 +123,26 @@ class CountSessions extends Page implements HasTable
                     }),
             ])
             ->recordUrl(fn (CountSession $record) => "/admin/count-session-detail?session_id={$record->id}")
+            ->recordActions([
+                Action::make('cancelSession')
+                    ->label('Cancel')
+                    ->color('danger')
+                    ->icon('heroicon-o-x-circle')
+                    ->visible(fn (CountSession $record) => $record->isCancellable() && auth()->user()->hasAnyRole(['manager', 'admin', 'super_admin']))
+                    ->requiresConfirmation()
+                    ->modalDescription('Clears this session out entirely — use this only for a genuine mistake (e.g. the wrong person was picked), not to undo real progress.')
+                    ->form([
+                        Textarea::make('reason')->label('Reason (optional)'),
+                    ])
+                    ->action(function (CountSession $record, array $data) {
+                        try {
+                            (new CountSessionService())->cancelSession($record, auth()->id(), $data['reason'] ?? null);
+                            Notification::make()->title('Session cancelled')->success()->send();
+                        } catch (\Exception $e) {
+                            Notification::make()->title('Could not cancel')->body($e->getMessage())->danger()->send();
+                        }
+                    }),
+            ])
             ->headerActions([
                 Action::make('newSession')
                     ->label('New Session')

@@ -21,6 +21,7 @@ class CountSession extends Model
         'reviewed_at' => 'datetime',
         'total_shortage_value' => 'decimal:2',
         'total_overage_quantity' => 'decimal:2',
+        'cancelled_at' => 'datetime',
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -65,6 +66,11 @@ class CountSession extends Model
     public function witnessUser()
     {
         return $this->belongsTo(User::class, 'witness_user_id');
+    }
+
+    public function cancelledBy()
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     /**
@@ -145,6 +151,21 @@ class CountSession extends Model
     public function isReviewed(): bool
     {
         return $this->status === 'reviewed';
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->status === 'cancelled';
+    }
+
+    /**
+     * Only safe before any stock has actually moved — once a session
+     * reaches pending_review or reviewed, sealing/finalizing already
+     * mutated stock and cancelling out from under that isn't safe.
+     */
+    public function isCancellable(): bool
+    {
+        return in_array($this->status, ['counting', 'declared'], true);
     }
 
     /**

@@ -2,6 +2,17 @@
     @php($session = $this->session)
 
     @if($session)
+        @if($this->canCancelSession())
+            <div class="max-w-md mx-auto mb-3 flex justify-end">
+                <button type="button"
+                    wire:click="cancelSession"
+                    wire:confirm="Cancel this session? This clears it out entirely — use this only for a genuine mistake (e.g. wrong person picked), not to undo real progress."
+                    class="text-xs font-bold text-red-600 dark:text-red-400 hover:underline">
+                    Cancel this session (started by mistake?)
+                </button>
+            </div>
+        @endif
+
         {{-- Collapsed to reclaim vertical space while the counter is actually
              counting — the one-screen layout (Issue 3) needs every pixel it
              can get on a short phone viewport, and this summary is
@@ -770,6 +781,17 @@
                         @endforeach
                     </tbody>
                 </table>
+            </div>
+        @endif
+
+        @if($session->status === 'cancelled')
+            <div class="max-w-md mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center">
+                <p class="text-gray-600 dark:text-gray-300">
+                    This session was cancelled{{ $session->cancelledBy ? ' by ' . $session->cancelledBy->name : '' }}{{ $session->cancelled_at ? ' on ' . $session->cancelled_at->format('d M Y H:i') : '' }}.
+                    @if($session->cancelled_reason)
+                        <span class="block text-sm mt-2 italic">"{{ $session->cancelled_reason }}"</span>
+                    @endif
+                </p>
             </div>
         @endif
     @endif
