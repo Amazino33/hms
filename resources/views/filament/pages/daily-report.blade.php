@@ -84,7 +84,7 @@
             </div>
         </div>
         
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto hms-table-scroll">
             <table class="w-full text-left text-sm">
                 <thead class="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 uppercase text-xs">
                     <tr>

@@ -25,7 +25,7 @@
                 <h3 class="font-bold text-gray-900 dark:text-white mb-3">
                     Will set ({{ count($matched) }})
                 </h3>
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto hms-table-scroll">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-left text-gray-500 dark:text-gray-400">

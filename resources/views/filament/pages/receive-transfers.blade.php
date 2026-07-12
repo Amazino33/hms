@@ -205,7 +205,7 @@
 
                                 <!-- Desktop Table -->
                                 <div class="hidden md:block">
-                                    <div class="overflow-x-auto">
+                                    <div class="overflow-x-auto hms-table-scroll">
                                         <table class="w-full">
                                             <thead>
                                                 <tr class="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">

@@ -87,3 +87,42 @@ li::marker {
         filter: none;
     }
 }
+
+/*
+ * Contained table scrolling: Filament's own table wrapper
+ * (.fi-ta-content-ctn) already scrolls horizontally, but has no height
+ * cap — so a table with many rows pushed its horizontal scrollbar to the
+ * bottom of the whole table (and often the whole page), forcing a full
+ * page scroll just to reach it, with vertical and horizontal scroll tied
+ * to the same page scroll. Capping the height here means both scrollbars
+ * live in one self-contained box: reachable without scrolling the page,
+ * and scrolling rows up/down never moves the horizontal scroll position.
+ */
+.fi-ta-content-ctn {
+    max-height: 65vh;
+    overflow-y: auto;
+}
+
+.fi-ta-content-ctn thead,
+.hms-table-scroll thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    /* Explicit background, not relying on each table's own header
+       classes — Receive Transfers' custom table has a transparent
+       header, which would let scrolled rows show through underneath
+       a sticky one without this. */
+    background-color: white;
+}
+
+.dark .fi-ta-content-ctn thead,
+.dark .hms-table-scroll thead {
+    background-color: rgb(31 41 55);
+}
+
+/* Same containment for the handful of custom (non-Filament-table) pages
+   that hand-build their own <table> for a genuinely long list. */
+.hms-table-scroll {
+    max-height: 65vh;
+    overflow-y: auto;
+}
