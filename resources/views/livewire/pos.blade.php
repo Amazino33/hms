@@ -916,7 +916,10 @@ new class extends Component {
                     ->sum('quantity');
             }
 
-            return $products;
+            // In-stock products first, out-of-stock ones sink to the
+            // bottom — sortBy() is a stable sort, so within each group the
+            // original order (category browsing/search relevance) is kept.
+            return $products->sortBy(fn ($p) => $p->available_stock > 0 ? 0 : 1)->values();
         };
 
         $buildMenuItems = function () {
@@ -928,7 +931,14 @@ new class extends Component {
             elseif ($this->activeCategoryId)
                 $query->where('category_id', $this->activeCategoryId);
 
-            return $query->limit(100)->get();
+            $menuItems = $query->limit(100)->get();
+
+            // Same rule as products: out-of-stock sinks to the bottom.
+            // available_stock === null means "unlimited/service item" (no
+            // recipe defined) — that's not a stock-out, so it stays put.
+            return $menuItems
+                ->sortBy(fn ($m) => ($m->available_stock === null || $m->available_stock > 0) ? 0 : 1)
+                ->values();
         };
 
         // A live search creates a distinct cache key on every keystroke
