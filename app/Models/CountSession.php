@@ -83,14 +83,20 @@ class CountSession extends Model
 
     /**
      * The peer-to-peer declare/review/dispute/dual-seal flow only applies
-     * to a real handover — someone is actually taking over the bar/kitchen.
-     * A closing count (no successor) and a main_store_stocktake (solo,
-     * manager-reviewed) both stay on the older counting -> pending_review
-     * -> reviewed path untouched by this.
+     * to a real handover — someone is actually taking over FROM someone
+     * else. A closing count (no successor), a solo opening count (no
+     * outgoing custodian — nobody was on shift yet), and a
+     * main_store_stocktake all stay on the older counting -> pending_review
+     * -> reviewed path untouched by this. Without the outgoing_user_id
+     * check, a solo opening count got treated as a real handover with no
+     * outgoing PIN to ever declare with — the counter (incoming) could
+     * never be recognized either, since the old check only compared
+     * against outgoing_user_id, permanently stuck on "Waiting for  to
+     * finish counting and declare."
      */
     public function isHandoverWithSuccessor(): bool
     {
-        return $this->isHandover() && !$this->isClosing();
+        return $this->isHandover() && !$this->isClosing() && $this->outgoing_user_id !== null;
     }
 
     /**

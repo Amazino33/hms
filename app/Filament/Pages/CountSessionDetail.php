@@ -321,9 +321,11 @@ class CountSessionDetail extends Page
     /**
      * Whether the current user is the one authorized to record counts
      * right now — the outgoing custodian normally, or the incoming
-     * custodian on the unwitnessed path (counting solo since the outgoing
-     * is absent). Mirrors the same check CountSessionService::recordCount()
-     * enforces server-side; this is only for deciding what to render.
+     * custodian whenever there is no outgoing physically present to do it
+     * (the unwitnessed path, or a solo opening count with no outgoing
+     * custodian at all). Mirrors the same check
+     * CountSessionService::recordCount() enforces server-side; this is
+     * only for deciding what to render.
      */
     public function iAmCounter(): bool
     {
@@ -333,7 +335,7 @@ class CountSessionDetail extends Page
             return false;
         }
 
-        return $session->isUnwitnessed()
+        return ($session->isUnwitnessed() || $session->outgoing_user_id === null)
             ? $session->incoming_user_id === auth()->id()
             : $session->outgoing_user_id === auth()->id();
     }
