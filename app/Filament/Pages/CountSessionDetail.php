@@ -42,6 +42,18 @@ class CountSessionDetail extends Page
     public array $reviewNotes = [];
 
     /**
+     * catchCandidates()'s search pool, computed once in mount() rather than
+     * on every request. It's only ever consumed inside the wire:ignore'd
+     * counting flow's x-data — sent to the client once and never re-read
+     * from the server afterward (addCatchItem() updates the client's own
+     * copy directly) — so recomputing its whereNotIn() query on every
+     * single Next/edit round trip was pure wasted latency.
+     *
+     * @var array<int, array{id: int, name: string}>
+     */
+    public array $catchCandidatesCache = [];
+
+    /**
      * Deliberately a #[Computed] property, not a public one: public
      * properties are part of Livewire's wire:snapshot and get shipped to
      * the browser on every request, regardless of what the Blade template
@@ -75,6 +87,7 @@ class CountSessionDetail extends Page
         }
 
         $this->prefillSubLocationInputs();
+        $this->catchCandidatesCache = $this->computeCatchCandidates();
     }
 
     /**
@@ -164,9 +177,21 @@ class CountSessionDetail extends Page
      * Sent to the client once — filtering by typed text happens locally,
      * same client-first pattern as every other kiosk search in this app.
      *
+     * Just an accessor over catchCandidatesCache (computed once, in
+     * mount()) — kept as its own method since existing tests and the
+     * catch-step's own docs call it by this name.
+     *
      * @return array<int, array{id: int, name: string}>
      */
     public function catchCandidates(): array
+    {
+        return $this->catchCandidatesCache;
+    }
+
+    /**
+     * @return array<int, array{id: int, name: string}>
+     */
+    private function computeCatchCandidates(): array
     {
         if (!$this->session || $this->session->status !== 'counting' || !$this->catchStepEnabled()) {
             return [];
@@ -258,8 +283,19 @@ class CountSessionDetail extends Page
      * resolved the JS promise as "success" and the counter silently moved
      * on with nothing written — the notification was the only signal, and
      * on a kiosk screen nobody's watching for a toast mid-count.
+     *
+     * $quantities is taken directly as an argument rather than read back
+     * off $this->subLocationInputs — the JS side used to call
+     * $wire.set('subLocationInputs...') and then $wire.call('recordCount'),
+     * two sequential round trips for what's really one save. Passing the
+     * values straight through collapses that to a single trip, which
+     * matters most on the slow/mobile connections this gate exists for in
+     * the first place. subLocationInputs is still kept in sync below, since
+     * it's what prefillSubLocationInputs() reads back on a page reload.
+     *
+     * @param array<string, float|string|null> $quantities
      */
-    public function recordCount(int $itemId): bool
+    public function recordCount(int $itemId, array $quantities): bool
     {
         $item = $this->session->items->firstWhere('id', $itemId);
 
@@ -267,10 +303,7 @@ class CountSessionDetail extends Page
             return false;
         }
 
-        // subLocationInputs.{itemId} is keyed by the item's 3 fixed
-        // sub-location labels (e.g. Fridge/Floor/Shelf) — blank entries are
-        // treated as zero by the service, not rejected.
-        $quantities = $this->subLocationInputs[$itemId] ?? [];
+        $this->subLocationInputs[$itemId] = $quantities;
 
         try {
             (new CountSessionService())->recordCount($item, $quantities, auth()->id());

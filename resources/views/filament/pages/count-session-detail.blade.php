@@ -173,14 +173,19 @@
                     // bool, not void) — a caught server-side exception used
                     // to still resolve this promise as 'success' and the
                     // counter silently moved on with nothing written.
+                    //
+                    // A single $wire.call() carrying the values directly,
+                    // not $wire.set() followed by a separate $wire.call() —
+                    // that used to be two sequential network round trips
+                    // for one save, doubling the wait on a slow connection
+                    // for no reason.
                     async saveCurrent() {
                         const cur = this.current
                         if (!cur) return true
                         this.saving = true
                         this.justSaved = false
                         try {
-                            await this.$wire.set('subLocationInputs.' + cur.id, cur.values)
-                            const ok = await this.$wire.call('recordCount', cur.id)
+                            const ok = await this.$wire.call('recordCount', cur.id, cur.values)
                             this.justSaved = !!ok
                             return !!ok
                         } catch (e) {

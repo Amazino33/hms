@@ -43,10 +43,9 @@ it('returns true from the page-level recordCount on a real successful save', fun
 
     $result = Livewire::actingAs($outgoing)
         ->test(CountSessionDetail::class, ['session_id' => $session->id])
-        ->set("subLocationInputs.{$item->id}.Fridge", 7)
-        ->call('recordCount', $item->id);
+        ->call('recordCount', $item->id, ['Fridge' => 7]);
 
-    expect($result->instance()->recordCount($item->id))->toBeTrue();
+    expect($result->instance()->recordCount($item->id, ['Fridge' => 7]))->toBeTrue();
     expect((float) $item->fresh()->counted_quantity)->toBe(7.0);
 });
 
@@ -74,10 +73,9 @@ it('returns false from the page-level recordCount when the underlying save is re
     // handover — this must fail server-side, and the page method must
     // report that failure as `false`, not silently resolve as success.
     $component = Livewire::actingAs($incoming)
-        ->test(CountSessionDetail::class, ['session_id' => $session->id])
-        ->set("subLocationInputs.{$item->id}.Fridge", 99);
+        ->test(CountSessionDetail::class, ['session_id' => $session->id]);
 
-    $ok = $component->instance()->recordCount($item->id);
+    $ok = $component->instance()->recordCount($item->id, ['Fridge' => 99]);
 
     expect($ok)->toBeFalse();
     expect((float) $item->fresh()->counted_quantity ?? 0)->not->toBe(99.0);

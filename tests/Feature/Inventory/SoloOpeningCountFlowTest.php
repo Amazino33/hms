@@ -51,8 +51,7 @@ it('lets the incoming custodian actually count and submit a solo opening session
     expect($component->instance()->iAmCounter())->toBeTrue();
 
     $component
-        ->set("subLocationInputs.{$item->id}.Fridge", 24)
-        ->call('recordCount', $item->id)
+        ->call('recordCount', $item->id, ['Fridge' => 24])
         ->call('confirmIncoming')
         ->call('submitForReview');
 

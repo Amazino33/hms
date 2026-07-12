@@ -48,13 +48,11 @@ it('reflects an edited value in the declaration summary, overwriting the first e
     $component = Livewire::actingAs($bartender)->test(CountSessionDetail::class, ['session_id' => $session->id]);
 
     // First entry.
-    $component->set("subLocationInputs.{$item->id}", ['Fridge' => '2', 'Floor' => '', 'Shelf' => '']);
-    $component->call('recordCount', $item->id);
+    $component->call('recordCount', $item->id, ['Fridge' => '2', 'Floor' => '', 'Shelf' => '']);
 
     // The edit — same product, changed value, exactly like returning via
     // Previous or a summary-row tap and correcting the figure.
-    $component->set("subLocationInputs.{$item->id}", ['Fridge' => '9', 'Floor' => '', 'Shelf' => '']);
-    $component->call('recordCount', $item->id);
+    $component->call('recordCount', $item->id, ['Fridge' => '9', 'Floor' => '', 'Shelf' => '']);
 
     expect((float) $item->fresh()->counted_quantity)->toBe(9.0);
 

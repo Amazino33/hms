@@ -133,8 +133,7 @@ it('walks a full bar handover session end to end through the detail page', funct
 
     $component = Livewire::actingAs($outgoing)
         ->test(CountSessionDetail::class, ['session_id' => $session->id])
-        ->set("subLocationInputs.{$item->id}.Fridge", 20)
-        ->call('recordCount', $item->id)
+        ->call('recordCount', $item->id, ['Fridge' => 20])
         ->call('confirmOutgoing');
 
     Livewire::actingAs($incoming)
