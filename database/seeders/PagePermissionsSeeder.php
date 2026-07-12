@@ -245,6 +245,57 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'Transfer Discrepancies',
                 'role_name' => 'manager',
             ],
+
+            // Handover Discrepancies - Managers, Admins, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\HandoverDiscrepancies',
+                'page_name' => 'Handover Discrepancies',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\HandoverDiscrepancies',
+                'page_name' => 'Handover Discrepancies',
+                'role_name' => 'admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\HandoverDiscrepancies',
+                'page_name' => 'Handover Discrepancies',
+                'role_name' => 'manager',
+            ],
+
+            // My Handover History - Bartenders and Chefs (own sessions only)
+            [
+                'page_class' => 'App\Filament\Pages\MyHandoverHistory',
+                'page_name' => 'My Handover History',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyHandoverHistory',
+                'page_name' => 'My Handover History',
+                'role_name' => 'bartender',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyHandoverHistory',
+                'page_name' => 'My Handover History',
+                'role_name' => 'chef',
+            ],
+
+            // Shortage Reports - Managers, Admins, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\ShortageReports',
+                'page_name' => 'Shortage Reports',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ShortageReports',
+                'page_name' => 'Shortage Reports',
+                'role_name' => 'admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ShortageReports',
+                'page_name' => 'Shortage Reports',
+                'role_name' => 'manager',
+            ],
         ];
 
         foreach ($permissions as $permission) {

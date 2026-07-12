@@ -53,7 +53,7 @@ class CountSessionDetail extends Page
     #[Computed]
     public function session(): ?CountSession
     {
-        return CountSession::with(['items.subCounts', 'items.product', 'items.ingredient', 'items.review', 'warehouse', 'outgoingUser', 'incomingUser', 'witnessUser'])
+        return CountSession::with(['items.subCounts', 'items.product', 'items.ingredient', 'items.review', 'items.discrepancy', 'warehouse', 'outgoingUser', 'incomingUser', 'witnessUser'])
             ->find($this->countSessionId);
     }
 

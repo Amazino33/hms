@@ -74,9 +74,12 @@ class MyShiftReport extends Page
             ->orderBy('ended_at', 'desc')
             ->get();
 
-        // Open/partially-settled debts this user personally owes.
+        // Open/partially-settled debts this user personally owes — repayment
+        // history eager-loaded so a bartender sees their own itemized
+        // payments (each recorded by a manager) without a second query per row.
         $myDebts = auth()->user()->debts()
             ->whereIn('status', ['open', 'partially_settled'])
+            ->with('repayments.recordedBy')
             ->orderByDesc('created_at')
             ->get();
         $myDebtsTotal = $myDebts->sum(fn ($debt) => $debt->remainingBalance());

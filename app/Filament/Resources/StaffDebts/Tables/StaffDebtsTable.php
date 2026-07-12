@@ -85,17 +85,29 @@ class StaffDebtsTable
                     ->preload(),
             ])
             ->recordActions([
+                Action::make('viewRepayments')
+                    ->label('Repayment History')
+                    ->icon('heroicon-o-clock')
+                    ->color('gray')
+                    ->modalHeading(fn (StaffDebt $record) => 'Repayment history — ' . ($record->user->name ?? 'Unknown'))
+                    ->modalContent(fn (StaffDebt $record) => view('filament.resources.staff-debts.repayment-history', [
+                        'debt' => $record->loadMissing('repayments.recordedBy'),
+                    ]))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close'),
                 Action::make('recordRepayment')
                     ->label('Record Repayment')
                     ->icon('heroicon-o-banknotes')
                     ->color('success')
                     ->visible(fn (StaffDebt $record) => $record->status !== 'settled')
-                    ->form([
+                    ->form(fn (StaffDebt $record) => [
                         TextInput::make('amount')
                             ->numeric()
                             ->prefix('₦')
                             ->required()
-                            ->minValue(0.01),
+                            ->minValue(0.01)
+                            ->maxValue($record->remainingBalance())
+                            ->helperText('Outstanding balance: ₦' . number_format($record->remainingBalance(), 2)),
                         Select::make('method')
                             ->options([
                                 'cash' => 'Cash',

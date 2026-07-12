@@ -45,3 +45,52 @@ function something()
 {
     // ..
 }
+
+/**
+ * Seals a full bar handover end to end (open -> count -> declare -> bind ->
+ * review -> seal) and returns every actor/model a discrepancy/snapshot test
+ * needs. Shared across the handover-discrepancy test files rather than
+ * duplicated per file.
+ */
+function sealedHandoverScenario(int $liveStockQuantity = 24, int $countedQuantity = 20): array
+{
+    static $call = 0;
+    $call++;
+
+    // Distinct, non-trivial 4-digit PINs per call — PinAuthService enforces
+    // system-wide PIN uniqueness, so a hardcoded PIN would collide the
+    // second time this helper runs within the same test.
+    $outgoingPin = (string) (2461 + $call);
+    $incomingPin = (string) (7358 + $call);
+
+    // A fresh warehouse per call, not the hardcoded id=4 "Bar" — openSession()
+    // snapshots EVERY InventoryItem row already at that warehouse, so reusing
+    // one warehouse across repeated calls (e.g. two sessions in one test)
+    // would pull in the earlier call's product too and leave it unreviewed,
+    // blocking the seal on "every product must be reviewed."
+    $bar = \App\Models\WareHouse::create(['name' => 'Bar ' . uniqid(), 'type' => 'consumer', 'is_active' => 1]);
+    $category = \App\Models\Category::firstOrCreate(['name' => 'Drinks'], ['type' => 'drink']);
+    $product = \App\Models\Product::create(['name' => 'Heineken ' . uniqid(), 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    \App\Models\InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => $liveStockQuantity]);
+
+    \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'bartender']);
+    $outgoing = \App\Models\User::factory()->create();
+    $outgoing->assignRole('bartender');
+    $incoming = \App\Models\User::factory()->create();
+    $incoming->assignRole('bartender');
+
+    $pinAuth = new \App\Services\PinAuthService();
+    $pinAuth->setPin($outgoing, $outgoingPin);
+    $pinAuth->setPin($incoming, $incomingPin);
+
+    $service = new \App\Services\CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    $service->recordCount($item, ['Fridge' => $countedQuantity], $outgoing->id);
+    $session = $service->declare($session, $outgoingPin, 'seal-scenario-declare-' . uniqid());
+    $session = $service->bindIncomingCustodian($session, $incomingPin, 'seal-scenario-bind-' . uniqid());
+    $service->reviewProduct($item->fresh(), $incoming->id, 'accepted');
+    $session = $service->sealAgreement($session, $outgoingPin, $incomingPin, 'seal-scenario-seal-' . uniqid());
+
+    return compact('service', 'session', 'item', 'product', 'outgoing', 'incoming', 'bar', 'outgoingPin', 'incomingPin');
+}

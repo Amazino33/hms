@@ -117,18 +117,31 @@
 
             <div class="max-h-64 overflow-y-auto space-y-2 pr-2">
                 @foreach($my_debts as $debt)
-                    <div class="flex justify-between items-center text-sm p-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
-                        <div>
-                            <div class="font-bold text-gray-800 dark:text-gray-200">
-                                {{ ucfirst(str_replace('_', ' ', $debt->reason)) }}
+                    <div class="text-sm p-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="font-bold text-gray-800 dark:text-gray-200">
+                                    {{ ucfirst(str_replace('_', ' ', $debt->reason)) }}
+                                </div>
+                                <div class="text-xs text-gray-400">
+                                    {{ $debt->created_at->format('M j, Y') }} • {{ ucfirst(str_replace('_', ' ', $debt->status)) }}
+                                    • ₦{{ number_format((float) $debt->amount, 2) }} original
+                                </div>
                             </div>
-                            <div class="text-xs text-gray-400">
-                                {{ $debt->created_at->format('M j, Y') }} • {{ ucfirst(str_replace('_', ' ', $debt->status)) }}
+                            <div class="font-mono font-bold text-amber-700 dark:text-amber-400">
+                                ₦{{ number_format($debt->remainingBalance()) }}
                             </div>
                         </div>
-                        <div class="font-mono font-bold text-amber-700 dark:text-amber-400">
-                            ₦{{ number_format($debt->remainingBalance()) }}
-                        </div>
+                        @if($debt->repayments->isNotEmpty())
+                            <div class="mt-2 pl-2 border-l-2 border-amber-300 dark:border-amber-700 space-y-1">
+                                @foreach($debt->repayments as $repayment)
+                                    <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                                        <span>{{ $repayment->created_at->format('M j, Y') }} — {{ ucfirst(str_replace('_', ' ', $repayment->method)) }} (by {{ $repayment->recordedBy->name ?? '—' }})</span>
+                                        <span class="font-mono text-green-600 dark:text-green-400">−₦{{ number_format((float) $repayment->amount, 2) }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
                     </div>
                 @endforeach
                 <div class="flex justify-between items-center text-sm p-2 font-bold border-t border-gray-200 dark:border-gray-700 pt-2">

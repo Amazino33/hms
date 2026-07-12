@@ -6,6 +6,8 @@ use App\Models\CountSession;
 use App\Models\CountSessionItem;
 use App\Models\CountSessionItemReview;
 use App\Models\CountSessionSubCount;
+use App\Models\HandoverDiscrepancy;
+use App\Models\HandoverDiscrepancyRecount;
 use App\Models\Ingredient;
 use App\Models\IngredientInventoryItem;
 use App\Models\IngredientTransaction;
@@ -556,7 +558,8 @@ class CountSessionService
                 $session->update(['witness_user_id' => $firstUser->id]);
             }
 
-            $accountableUserId = $session->accountableUserId();
+            $totalShortageValue = 0.0;
+            $totalOverageQuantity = 0.0;
 
             foreach ($session->items as $item) {
                 $review = $item->review;
@@ -571,19 +574,40 @@ class CountSessionService
 
                 $variance = $finalQuantity - $currentQty;
 
+                // Frozen here, at seal time, from the exact same price source
+                // chargeAccountability() always used — never recomputed from
+                // a live price afterward, so a later price change can't alter
+                // this session's historic naira figures.
+                $unitPrice = $this->unitSellingPrice($item);
+                $varianceValue = round($variance * $unitPrice, 2);
+
                 $item->update([
                     'adjusted_expected_quantity' => $currentQty,
                     'counted_quantity' => $finalQuantity,
                     'variance' => $variance,
+                    'unit_selling_price' => $unitPrice,
+                    'variance_value' => $varianceValue,
                 ]);
 
                 if (abs($variance) > 0.0001) {
                     $this->trueUpStock($item, $variance, $secondUser->id);
 
                     if ($variance < 0) {
-                        $this->chargeAccountability($item, abs($variance), $secondUser->id);
+                        // No StaffDebt yet — the manager decides what happens
+                        // to each shortage afterward (recount / debit / pend
+                        // / write off) via the HandoverDiscrepancies queue.
+                        // The dual-PIN seal never gates on that decision.
+                        HandoverDiscrepancy::create([
+                            'count_session_item_id' => $item->id,
+                            'shortfall_quantity' => abs($variance),
+                            'unit_price' => $unitPrice,
+                            'naira_value' => abs($varianceValue),
+                            'status' => 'pending_resolution',
+                        ]);
+                        $totalShortageValue += abs($varianceValue);
                         $item->update(['decision' => 'accountability']);
                     } else {
+                        $totalOverageQuantity += $variance;
                         $item->update(['decision' => 'true_up']);
                     }
                 }
@@ -592,6 +616,8 @@ class CountSessionService
             $session->update([
                 'status' => 'reviewed',
                 'reviewed_at' => now(),
+                'total_shortage_value' => $totalShortageValue,
+                'total_overage_quantity' => $totalOverageQuantity,
             ]);
 
             (new BartenderChefShiftService())->completeHandoverBoundary($session->fresh());
@@ -768,9 +794,7 @@ class CountSessionService
             throw new \Exception('There is no accountable user recorded on this session to charge.');
         }
 
-        $unitValue = $item->item_type === 'product'
-            ? (float) (Product::find($item->product_id)?->price ?? 0)
-            : $this->lastPurchasePrice($item->ingredient_id);
+        $unitValue = $this->unitSellingPrice($item);
 
         StaffDebt::create([
             'user_id' => $accountableUserId,
@@ -782,6 +806,19 @@ class CountSessionService
         ]);
     }
 
+    /**
+     * The valuation path shared by the handover seal snapshot and the
+     * main_store_stocktake manager-charge path: selling price for products,
+     * last purchase cost for ingredients (no dedicated "selling price"
+     * column exists on Ingredient).
+     */
+    private function unitSellingPrice(CountSessionItem $item): float
+    {
+        return $item->item_type === 'product'
+            ? (float) (Product::find($item->product_id)?->price ?? 0)
+            : $this->lastPurchasePrice($item->ingredient_id);
+    }
+
     private function lastPurchasePrice(int $ingredientId): float
     {
         return (float) (IngredientTransaction::where('ingredient_id', $ingredientId)
@@ -789,5 +826,241 @@ class CountSessionService
             ->whereNotNull('cost_per_unit')
             ->latest('id')
             ->value('cost_per_unit') ?? 0);
+    }
+
+    /**
+     * Manager orders a witnessed verification recount of a flagged product
+     * — counted by the current on-duty custodian for that role, witnessed
+     * by any PIN holder (mirrors the unwitnessed handover's witness
+     * co-sign: resolved by PIN lookup, not compared against a pre-picked
+     * identity). Adjusts live stock to the new figure via InventoryTransaction/
+     * IngredientTransaction (never a direct write), recomputes the variance
+     * against the session's frozen adjusted_expected_quantity, and always
+     * returns the line to pending_resolution — the manager still has to
+     * pick an outcome afterward, even if the recount cleared the shortfall.
+     * The original snapshot line (unit_selling_price, variance_value on the
+     * CountSessionItem) is never mutated; only this discrepancy's own
+     * shortfall_quantity/naira_value move.
+     */
+    public function recordVerificationRecount(
+        HandoverDiscrepancy $discrepancy,
+        float $newQuantity,
+        string $counterPin,
+        string $witnessPin,
+        int $orderedByUserId,
+        string $throttleKey,
+    ): HandoverDiscrepancy {
+        if (!$discrepancy->isOpen()) {
+            throw new \Exception('This discrepancy has already been resolved.');
+        }
+
+        $item = $discrepancy->item;
+        $session = $item->session;
+        $role = self::ROLE_FOR_HANDOVER[$session->type] ?? null;
+
+        $pinAuth = new PinAuthService();
+
+        $counter = $pinAuth->attempt($counterPin, "{$throttleKey}:counter");
+
+        if (!$counter || ($role && !$counter->hasRole($role))) {
+            throw new \Exception("That PIN does not match a {$role}.");
+        }
+
+        $witness = $pinAuth->attempt($witnessPin, "{$throttleKey}:witness");
+
+        if (!$witness) {
+            throw new \Exception('That PIN does not match anyone.');
+        }
+
+        if ($witness->id === $counter->id) {
+            throw new \Exception('The witness cannot be the same person as the counter.');
+        }
+
+        return DB::transaction(function () use ($discrepancy, $item, $session, $newQuantity, $counter, $witness, $orderedByUserId) {
+            $warehouseId = $session->warehouse_id;
+            $isProduct = $item->item_type === 'product';
+
+            $currentQty = $isProduct
+                ? (float) (InventoryItem::where('product_id', $item->product_id)->where('warehouse_id', $warehouseId)->value('quantity') ?? 0)
+                : (float) (IngredientInventoryItem::where('ingredient_id', $item->ingredient_id)->where('warehouse_id', $warehouseId)->value('quantity') ?? 0);
+
+            $delta = $newQuantity - $currentQty;
+            $inventoryTransactionId = null;
+            $ingredientTransactionId = null;
+
+            if (abs($delta) > 0.0001) {
+                if ($isProduct) {
+                    InventoryItem::updateOrCreate(
+                        ['product_id' => $item->product_id, 'warehouse_id' => $warehouseId],
+                        []
+                    )->update(['quantity' => $newQuantity]);
+
+                    $inventoryTransactionId = InventoryTransaction::create([
+                        'product_id' => $item->product_id,
+                        'warehouse_id' => $warehouseId,
+                        'type' => 'adjustment',
+                        'quantity' => abs($delta),
+                        'reference' => "handover_discrepancy:{$discrepancy->id}:recount",
+                        'user_id' => $orderedByUserId,
+                    ])->id;
+                } else {
+                    IngredientInventoryItem::updateOrCreate(
+                        ['ingredient_id' => $item->ingredient_id, 'warehouse_id' => $warehouseId],
+                        []
+                    )->update(['quantity' => $newQuantity]);
+
+                    $ingredientTransactionId = IngredientTransaction::create([
+                        'ingredient_id' => $item->ingredient_id,
+                        'warehouse_id' => $warehouseId,
+                        'type' => 'adjustment',
+                        'quantity' => abs($delta),
+                        'reference' => "handover_discrepancy:{$discrepancy->id}:recount",
+                        'user_id' => $orderedByUserId,
+                    ])->id;
+                }
+            }
+
+            $recomputedVariance = $newQuantity - (float) $item->adjusted_expected_quantity;
+            $newShortfall = max(0, -$recomputedVariance);
+
+            HandoverDiscrepancyRecount::create([
+                'handover_discrepancy_id' => $discrepancy->id,
+                'new_quantity' => $newQuantity,
+                'recomputed_variance' => $recomputedVariance,
+                'counted_by' => $counter->id,
+                'witnessed_by' => $witness->id,
+                'inventory_transaction_id' => $inventoryTransactionId,
+                'ingredient_transaction_id' => $ingredientTransactionId,
+                'ordered_by' => $orderedByUserId,
+            ]);
+
+            $discrepancy->update([
+                'shortfall_quantity' => $newShortfall,
+                'naira_value' => round($newShortfall * (float) $discrepancy->unit_price, 2),
+                'status' => 'pending_resolution',
+                'investigation_note' => null,
+            ]);
+
+            return $discrepancy->fresh();
+        });
+    }
+
+    public function debitDiscrepancy(HandoverDiscrepancy $discrepancy, int $managerId): HandoverDiscrepancy
+    {
+        if (!$discrepancy->isOpen()) {
+            throw new \Exception('This discrepancy has already been resolved.');
+        }
+
+        return DB::transaction(function () use ($discrepancy, $managerId) {
+            $item = $discrepancy->item;
+            $accountableUserId = $item->session->accountableUserId();
+
+            if (!$accountableUserId) {
+                throw new \Exception('There is no accountable user recorded on this session to charge.');
+            }
+
+            $debt = StaffDebt::create([
+                'user_id' => $accountableUserId,
+                'amount' => $discrepancy->naira_value,
+                'reason' => 'count_session_shortfall',
+                'notes' => "Count session #{$item->count_session_id}, item #{$item->id} ({$item->itemName()}): "
+                    . "{$discrepancy->shortfall_quantity} short at " . number_format((float) $discrepancy->unit_price, 2) . ' per unit.',
+                'created_by' => $managerId,
+            ]);
+
+            $discrepancy->update([
+                'status' => 'debited',
+                'staff_debt_id' => $debt->id,
+                'resolved_by' => $managerId,
+                'resolved_at' => now(),
+            ]);
+
+            return $discrepancy->fresh();
+        });
+    }
+
+    public function pendDiscrepancyInvestigation(HandoverDiscrepancy $discrepancy, string $note, int $managerId): HandoverDiscrepancy
+    {
+        if (!$discrepancy->isOpen()) {
+            throw new \Exception('This discrepancy has already been resolved.');
+        }
+
+        if (trim($note) === '') {
+            throw new \Exception('An investigation note is required.');
+        }
+
+        $discrepancy->update([
+            'status' => 'pending_investigation',
+            'investigation_note' => $note,
+        ]);
+
+        return $discrepancy->fresh();
+    }
+
+    public function writeOffDiscrepancy(HandoverDiscrepancy $discrepancy, string $reason, int $managerId): HandoverDiscrepancy
+    {
+        if (!$discrepancy->isOpen()) {
+            throw new \Exception('This discrepancy has already been resolved.');
+        }
+
+        if (trim($reason) === '') {
+            throw new \Exception('A written reason is required to resolve without a debit.');
+        }
+
+        $discrepancy->update([
+            'status' => 'written_off',
+            'resolution_note' => $reason,
+            'resolved_by' => $managerId,
+            'resolved_at' => now(),
+        ]);
+
+        return $discrepancy->fresh();
+    }
+
+    /**
+     * Bulk-resolve any collection of discrepancies with a single ruling —
+     * used both for "every remaining line on this session" and for an
+     * arbitrary manager-selected set in the discrepancy queue table.
+     * Already-resolved lines in the set are skipped, not fatal.
+     *
+     * @param \Illuminate\Support\Collection<int, HandoverDiscrepancy> $discrepancies
+     * @return array{debited: int, failed: int}
+     */
+    public function bulkDebitRemaining($discrepancies, int $managerId): array
+    {
+        $debited = 0;
+        $failed = 0;
+
+        foreach ($discrepancies as $discrepancy) {
+            try {
+                $this->debitDiscrepancy($discrepancy, $managerId);
+                $debited++;
+            } catch (\Exception $e) {
+                $failed++;
+            }
+        }
+
+        return ['debited' => $debited, 'failed' => $failed];
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, HandoverDiscrepancy> $discrepancies
+     * @return array{written_off: int, failed: int}
+     */
+    public function bulkWriteOffRemaining($discrepancies, string $reason, int $managerId): array
+    {
+        $writtenOff = 0;
+        $failed = 0;
+
+        foreach ($discrepancies as $discrepancy) {
+            try {
+                $this->writeOffDiscrepancy($discrepancy, $reason, $managerId);
+                $writtenOff++;
+            } catch (\Exception $e) {
+                $failed++;
+            }
+        }
+
+        return ['written_off' => $writtenOff, 'failed' => $failed];
     }
 }

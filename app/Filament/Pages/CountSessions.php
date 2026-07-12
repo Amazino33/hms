@@ -9,6 +9,7 @@ use App\Services\CountSessionService;
 use App\Services\PermissionService;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -16,8 +17,10 @@ use Filament\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
 class CountSessions extends Page implements HasTable
@@ -77,6 +80,19 @@ class CountSessions extends Page implements HasTable
                     ->badge()
                     ->color(fn (?string $state) => $state === 'Yes' ? 'danger' : 'success')
                     ->placeholder('—'),
+                TextColumn::make('total_shortage_value')
+                    ->label('Shortage ₦')
+                    ->money('NGN')
+                    ->placeholder('—'),
+                TextColumn::make('unresolved')
+                    ->label('Unresolved')
+                    ->state(fn (CountSession $record) => $record->unresolvedDiscrepancyCount())
+                    ->badge()
+                    ->color(fn (int $state) => $state > 0 ? 'warning' : 'success'),
+                TextColumn::make('unwitnessed')
+                    ->label('Unwitnessed')
+                    ->state(fn (CountSession $record) => $record->isUnwitnessed() ? 'Yes' : '—')
+                    ->color(fn (string $state) => $state === 'Yes' ? 'warning' : 'gray'),
                 TextColumn::make('opened_at')->dateTime('M j, Y g:i A'),
             ])
             ->filters([
@@ -88,6 +104,21 @@ class CountSessions extends Page implements HasTable
                         'kitchen_handover' => 'Kitchen Handover',
                         'main_store_stocktake' => 'Main Store Stocktake',
                     ]),
+                SelectFilter::make('outgoing_user_id')
+                    ->label('Bartender/Chef')
+                    ->relationship('outgoingUser', 'name')
+                    ->searchable()
+                    ->preload(),
+                Filter::make('opened_between')
+                    ->form([
+                        DatePicker::make('from')->label('From'),
+                        DatePicker::make('until')->label('Until'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['from'] ?? null, fn ($q, $date) => $q->whereDate('opened_at', '>=', $date))
+                            ->when($data['until'] ?? null, fn ($q, $date) => $q->whereDate('opened_at', '<=', $date));
+                    }),
             ])
             ->recordUrl(fn (CountSession $record) => "/admin/count-session-detail?session_id={$record->id}")
             ->headerActions([

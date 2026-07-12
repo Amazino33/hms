@@ -169,10 +169,15 @@ it('lets the incoming custodian mark a dispute unresolved, using their figure as
     expect((float) $item->fresh()->counted_quantity)->toEqual(20.0);
     expect((float) InventoryItem::where('product_id', $item->product_id)->value('quantity'))->toEqual(20.0);
 
-    $debt = StaffDebt::first();
-    expect($debt)->not->toBeNull();
-    expect($debt->user_id)->toBe($outgoing->id);
-    expect((float) $debt->amount)->toEqual(4 * 500.0); // 4 short at 500 selling price
+    // No StaffDebt yet — the seal only flags a pending discrepancy; a
+    // manager decides what happens to the shortage afterward.
+    expect(StaffDebt::count())->toBe(0);
+
+    $discrepancy = \App\Models\HandoverDiscrepancy::first();
+    expect($discrepancy)->not->toBeNull();
+    expect($discrepancy->status)->toBe('pending_resolution');
+    expect((float) $discrepancy->shortfall_quantity)->toEqual(4.0);
+    expect((float) $discrepancy->naira_value)->toEqual(4 * 500.0); // 4 short at 500 selling price
 });
 
 it('books the unwitnessed handover shortfall to the named-absent outgoing, with the witness carrying no responsibility for the numbers', function () {
@@ -211,10 +216,19 @@ it('books the unwitnessed handover shortfall to the named-absent outgoing, with 
     expect($session->status)->toBe('reviewed');
     expect(Shift::query()->where('user_id', $incoming->id)->active()->ofType('bartender')->exists())->toBeTrue();
 
-    $debt = StaffDebt::first();
-    expect($debt)->not->toBeNull();
-    expect($debt->user_id)->toBe($absentOutgoing->id); // charged to the absent bartender, not the witness
-    expect((float) $debt->amount)->toEqual(4 * 500.0); // 24 expected - 20 counted = 4 short
+    expect(StaffDebt::count())->toBe(0);
+
+    $discrepancy = \App\Models\HandoverDiscrepancy::first();
+    expect($discrepancy)->not->toBeNull();
+    expect($discrepancy->status)->toBe('pending_resolution');
+    expect((float) $discrepancy->shortfall_quantity)->toEqual(4.0); // 24 expected - 20 counted = 4 short
+    expect((float) $discrepancy->naira_value)->toEqual(4 * 500.0);
+
+    // The eventual debit still targets the absent outgoing custodian, not
+    // the witness — proven via debitDiscrepancy() directly here since the
+    // resolution workflow itself is covered in its own test file.
+    $debited = $service->debitDiscrepancy($discrepancy, $incoming->id);
+    expect($debited->staffDebt->user_id)->toBe($absentOutgoing->id);
 });
 
 it('refuses to seal until every disputed product is either resolved or explicitly marked unresolved', function () {

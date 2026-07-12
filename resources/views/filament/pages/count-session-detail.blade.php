@@ -685,10 +685,24 @@
             @endif
 
             <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-4">
-                <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <h3 class="font-bold text-gray-900 dark:text-white">Final Comparison</h3>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Counted vs. the stock the system expected to be there, per product.</p>
+                <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="font-bold text-gray-900 dark:text-white">Final Comparison</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Counted vs. the stock the system expected to be there, per product.</p>
+                    </div>
+                    <a href="{{ route('handover.pdf', $session->id) }}" target="_blank"
+                        class="shrink-0 px-3 py-2 rounded-lg bg-gray-800 dark:bg-gray-700 text-white text-xs font-bold hover:bg-gray-900">
+                        Download PDF
+                    </a>
                 </div>
+
+                @if($session->isHandoverWithSuccessor() && (float) $session->total_shortage_value > 0)
+                    <div class="px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-sm">
+                        <span class="font-bold text-red-700 dark:text-red-300">Total shortage: ₦{{ number_format((float) $session->total_shortage_value, 2) }}</span>
+                        <span class="text-red-600 dark:text-red-400 text-xs ml-2">— resolved by a manager via Handover Discrepancies</span>
+                    </div>
+                @endif
+
                 <table class="w-full text-sm">
                     <thead class="bg-gray-50 dark:bg-gray-800">
                         <tr>
@@ -696,6 +710,7 @@
                             <th class="text-left px-4 py-2">Expected</th>
                             <th class="text-left px-4 py-2">Counted</th>
                             <th class="text-left px-4 py-2">Variance</th>
+                            <th class="text-left px-4 py-2">Value (₦)</th>
                             <th class="text-left px-4 py-2">Outcome</th>
                             <th class="text-left px-4 py-2">Decision / Notes</th>
                         </tr>
@@ -708,6 +723,13 @@
                                 <td class="px-4 py-2 font-mono">{{ $this->formatQuantity($item->counted_quantity) }}</td>
                                 <td class="px-4 py-2 font-mono font-bold {{ $item->variance < 0 ? 'text-red-600' : ($item->variance > 0 ? 'text-green-600' : 'text-gray-400') }}">
                                     {{ abs($item->variance) < 0.0001 ? 'None' : $this->formatQuantity($item->variance) }}
+                                </td>
+                                <td class="px-4 py-2 font-mono">
+                                    @if($item->variance < 0 && $item->variance_value !== null)
+                                        <span class="text-red-600 font-bold">₦{{ number_format(abs((float) $item->variance_value), 2) }}</span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
                                 </td>
                                 <td class="px-4 py-2">
                                     @if($item->review?->outcome === 'unresolved')
@@ -724,6 +746,24 @@
                                     {{ $item->decision ? ucwords(str_replace('_', ' ', $item->decision)) : '—' }}
                                     @if($item->decision_notes)
                                         <div class="text-xs">{{ $item->decision_notes }}</div>
+                                    @endif
+                                    @if($item->discrepancy)
+                                        <div class="text-xs font-bold mt-1
+                                            {{ match($item->discrepancy->status) {
+                                                'pending_resolution' => 'text-amber-600',
+                                                'pending_investigation' => 'text-gray-500',
+                                                'debited' => 'text-red-600',
+                                                'written_off' => 'text-green-600',
+                                                default => 'text-gray-500',
+                                            } }}">
+                                            {{ match($item->discrepancy->status) {
+                                                'pending_resolution' => 'Pending resolution',
+                                                'pending_investigation' => 'Pending investigation',
+                                                'debited' => 'Debited to outgoing',
+                                                'written_off' => 'Written off',
+                                                default => $item->discrepancy->status,
+                                            } }}
+                                        </div>
                                     @endif
                                 </td>
                             </tr>

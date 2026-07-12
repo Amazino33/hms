@@ -19,6 +19,8 @@ class CountSession extends Model
         'incoming_bound_at' => 'datetime',
         'submitted_for_review_at' => 'datetime',
         'reviewed_at' => 'datetime',
+        'total_shortage_value' => 'decimal:2',
+        'total_overage_quantity' => 'decimal:2',
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -63,6 +65,20 @@ class CountSession extends Model
     public function witnessUser()
     {
         return $this->belongsTo(User::class, 'witness_user_id');
+    }
+
+    /**
+     * Discrepancy lines through this session's items — a handover has none
+     * until sealed (only sealAgreement() creates them, one per shortage).
+     */
+    public function discrepancies()
+    {
+        return $this->hasManyThrough(
+            HandoverDiscrepancy::class,
+            CountSessionItem::class,
+            'count_session_id',
+            'count_session_item_id'
+        );
     }
 
     public function isHandover(): bool
@@ -149,5 +165,10 @@ class CountSession extends Model
     public function accountableUserId(): ?int
     {
         return $this->outgoing_user_id ?? $this->opened_by;
+    }
+
+    public function unresolvedDiscrepancyCount(): int
+    {
+        return $this->discrepancies()->whereIn('status', ['pending_resolution', 'pending_investigation'])->count();
     }
 }

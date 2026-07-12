@@ -17,6 +17,8 @@ class CountSessionItem extends Model
         'counted_quantity' => 'decimal:2',
         'adjusted_expected_quantity' => 'decimal:2',
         'variance' => 'decimal:2',
+        'unit_selling_price' => 'decimal:2',
+        'variance_value' => 'decimal:2',
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -51,6 +53,11 @@ class CountSessionItem extends Model
     public function review()
     {
         return $this->hasOne(CountSessionItemReview::class);
+    }
+
+    public function discrepancy()
+    {
+        return $this->hasOne(HandoverDiscrepancy::class);
     }
 
     public function itemName(): string

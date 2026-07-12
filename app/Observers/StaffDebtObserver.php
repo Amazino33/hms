@@ -30,6 +30,7 @@ class StaffDebtObserver
         $reasonLabel = match ($staffDebt->reason) {
             'shift_shortfall' => 'shift shortfall',
             'unpaid_order_conversion' => 'unpaid order conversion',
+            'count_session_shortfall' => 'handover count shortfall',
             default => 'manual entry',
         };
 
