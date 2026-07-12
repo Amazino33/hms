@@ -40,10 +40,23 @@ class Shift extends Model
         'settled_at',
     ];
 
-    /** A shift open longer than this is presumed abandoned/forgotten, not a
-     *  genuinely still-active custodian — it can no longer satisfy an
-     *  "active shift" guard or be treated as the current shift. */
-    public const STALE_AFTER_HOURS = 20;
+    /**
+     * A shift open longer than this is presumed abandoned/forgotten, not a
+     * genuinely still-active custodian — it can no longer satisfy an
+     * "active shift" guard or be treated as the current shift.
+     *
+     * There is no fixed shift schedule here (bartenders/chefs hand over
+     * whenever, not on a clock) — 20 hours was too tight and falsely
+     * treated a still-legitimate overnight shift as abandoned once it ran
+     * past that mark. That silently broke two things at once: bar orders
+     * (OrderSplitter gates on activeNonStale('bartender')) and the
+     * handover screen itself (MyCount's hasActiveShift()/
+     * otherActiveCustodian() route into the wrong flow once the real
+     * custodian's own shift reads as stale). 72 hours (3 days) only catches
+     * a shift that's genuinely been forgotten, not one still waiting on an
+     * unscheduled handover.
+     */
+    public const STALE_AFTER_HOURS = 72;
 
     protected $casts = [
         'started_at' => 'datetime',

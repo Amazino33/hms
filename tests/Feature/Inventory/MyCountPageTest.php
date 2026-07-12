@@ -211,3 +211,40 @@ it('offers an unwitnessed handover instead of a solo opening count when someone 
     expect($session->witness_user_id)->toBe($witness->id);
     expect($session->isUnwitnessed())->toBeTrue();
 });
+
+/**
+ * Regression for a real production incident: there is no fixed shift
+ * schedule here (handovers happen whenever, not on a clock), so a
+ * bartender's own overnight shift running ~22 hours is completely normal
+ * — not abandoned. With the old 20-hour stale threshold, the outgoing
+ * bartender's own shift silently stopped counting as "active" right as he
+ * tried to hand over, which routed him into a solo opening count (framed
+ * as if there were nobody to hand over to/from) instead of a real
+ * handover, and separately blocked bar orders via the same staleness
+ * check in OrderSplitter.
+ */
+it('still recognizes a bartender own overnight shift as active well past the old 20-hour threshold', function () {
+    grantMyCountPagePermissions();
+    WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'type' => 'consumer']);
+
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+    Shift::create(['user_id' => $outgoing->id, 'type' => 'bartender', 'started_at' => now()->subHours(22), 'status' => 'active']);
+
+    $incoming = User::factory()->create();
+    $incoming->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+
+    Livewire::actingAs($outgoing)
+        ->test(MyCount::class)
+        ->assertSee('Start Your Count')
+        ->assertDontSee('Start an Unwitnessed Handover')
+        ->assertDontSee('Start Your Opening Count')
+        ->set('incomingUserId', $incoming->id)
+        ->call('startCount')
+        ->assertRedirect();
+
+    $session = CountSession::where('type', 'bar_handover')->first();
+    expect($session->outgoing_user_id)->toBe($outgoing->id);
+    expect($session->incoming_user_id)->toBe($incoming->id);
+    expect($session->isUnwitnessed())->toBeFalse();
+});

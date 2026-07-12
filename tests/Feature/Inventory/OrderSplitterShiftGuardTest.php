@@ -111,3 +111,28 @@ it('treats a stale bartender shift as if none exists', function () {
     expect(fn () => $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $waiter->id, []))
         ->toThrow(Exception::class, 'No active bartender session');
 });
+
+/**
+ * Regression: with no fixed shift schedule, a bartender legitimately still
+ * on duty ~22 hours in (an overnight shift not yet handed over) must not
+ * have bar orders blocked — that's the exact production incident that also
+ * broke the handover screen (MyCountPageTest covers that half).
+ */
+it('still allows a bar order from a bartender shift running about 22 hours, past the old 20-hour threshold', function () {
+    seedShiftGuardWarehouses();
+    $waiter = User::factory()->create();
+    $bartender = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+    Shift::create(['user_id' => $bartender->id, 'type' => 'bartender', 'started_at' => now()->subHours(22), 'status' => 'active']);
+
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $beer = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $beer->id, 'warehouse_id' => 4, 'quantity' => 10]);
+
+    DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
+
+    $service = new OrderSplitter();
+    $orders = $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $waiter->id, []);
+
+    expect($orders)->toHaveCount(1);
+});
