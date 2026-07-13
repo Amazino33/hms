@@ -575,14 +575,27 @@ class CountSessionDetail extends Page
             && !$session->items()->whereHas('review', fn ($q) => $q->where('outcome', 'disputed'))->exists();
     }
 
-    public function sealAgreement(string $firstPin, string $secondPin): void
+    /**
+     * Returns whether the seal actually succeeded — the dual-PIN screen's
+     * JS uses this to reset itself back to the first PIN entry on failure.
+     * Previously this always returned void, so a wrong first PIN (the
+     * outgoing/witness signature, captured and held client-side before the
+     * second PIN is even typed) surfaced its error only after the second
+     * PIN was entered, with no way back except a full page reload — the
+     * screen just kept re-submitting the same bad first PIN forever.
+     */
+    public function sealAgreement(string $firstPin, string $secondPin): bool
     {
         try {
             (new CountSessionService())->sealAgreement($this->session, $firstPin, $secondPin, $this->pinThrottleKey('seal'));
             $this->refreshSession();
             Notification::make()->title('Handover sealed')->success()->send();
+
+            return true;
         } catch (\Exception $e) {
             Notification::make()->title('Could not seal')->body($e->getMessage())->danger()->send();
+
+            return false;
         }
     }
 

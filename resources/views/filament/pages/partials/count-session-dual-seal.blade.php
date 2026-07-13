@@ -59,7 +59,16 @@
             }"
             @seal-second-pin="
                 submitting = true
-                $wire.sealAgreement(firstPin, $event.detail).then(() => { submitting = false })
+                $wire.sealAgreement(firstPin, $event.detail).then((ok) => {
+                    submitting = false
+                    // A wrong first PIN (outgoing/witness) only ever
+                    // surfaces here, after the second PIN is typed too —
+                    // without this, the screen just kept re-submitting the
+                    // same bad first PIN forever with no way back short of
+                    // reloading the page. Bounce back to a clean first
+                    // entry on any failure, not just a wrong second PIN.
+                    if (!ok) { step = 'first'; firstPin = null }
+                })
             ">
             <p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-4">{{ $secondLabel }}</p>
             <div class="flex justify-center gap-3 mb-5">
@@ -82,6 +91,10 @@
                     :class="pressed === 'back' ? 'bg-red-300 scale-95' : 'bg-red-100 dark:bg-red-900/30'"
                     class="py-4 rounded-lg text-lg font-bold text-red-700 dark:text-red-400 transition-all duration-100 touch-manipulation">&larr;</button>
             </div>
+            <button type="button" @click="step = 'first'; firstPin = null"
+                class="w-full mt-3 py-2 text-gray-500 dark:text-gray-400 text-sm font-bold touch-manipulation kiosk-tap">
+                &larr; Back, re-enter the first PIN
+            </button>
         </div>
     </template>
 
