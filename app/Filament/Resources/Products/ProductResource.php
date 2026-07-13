@@ -68,6 +68,32 @@ class ProductResource extends Resource
                         ->minValue(0)
                         ->helperText('When the estimated cold stock falls below this, it appears on the bartender\'s restock list.'),
                 ]),
+
+            Section::make('Units & Packaging')
+                ->description('Base unit is what stock is always tracked in. Purchase unit is optional — set it so a storekeeper can enter a procurement or transfer as "2 crates" instead of counting bottles one by one.')
+                ->schema([
+                    Select::make('base_unit')
+                        ->label('Base unit')
+                        ->options(fn () => \App\Models\Unit::pluck('name', 'name'))
+                        ->default('bottle')
+                        ->required()
+                        ->createOptionForm([TextInput::make('name')->required()])
+                        ->createOptionUsing(fn (array $data) => \App\Models\Unit::firstOrCreate(['name' => $data['name']])->name),
+                    Select::make('purchase_unit_name')
+                        ->label('Purchase unit (optional)')
+                        ->options(fn () => \App\Models\Unit::pluck('name', 'name'))
+                        ->createOptionForm([TextInput::make('name')->required()])
+                        ->createOptionUsing(fn (array $data) => \App\Models\Unit::firstOrCreate(['name' => $data['name']])->name)
+                        ->live()
+                        ->helperText('e.g. "crate" or "pack" — leave blank if only ever bought/sold by the base unit.'),
+                    TextInput::make('units_per_purchase_unit')
+                        ->label('Units per purchase unit')
+                        ->numeric()
+                        ->minValue(2)
+                        ->required(fn (callable $get) => filled($get('purchase_unit_name')))
+                        ->visible(fn (callable $get) => filled($get('purchase_unit_name')))
+                        ->helperText('e.g. 12 if a crate holds 12 bottles.'),
+                ])->columns(3),
         ]);
     }
 

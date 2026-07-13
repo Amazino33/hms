@@ -296,6 +296,23 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'Shortage Reports',
                 'role_name' => 'manager',
             ],
+
+            // Manage Units - Managers, Admins, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\ManageUnits',
+                'page_name' => 'Manage Units',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ManageUnits',
+                'page_name' => 'Manage Units',
+                'role_name' => 'admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ManageUnits',
+                'page_name' => 'Manage Units',
+                'role_name' => 'manager',
+            ],
         ];
 
         foreach ($permissions as $permission) {

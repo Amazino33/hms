@@ -27,6 +27,7 @@
                 products: @js($products),
                 ingredients: @js($ingredients),
                 categories: @js($categories),
+                priceRoundingStep: {{ (int) $priceRoundingStep }},
                 type: 'product',
                 selectedId: '',
                 creatingNew: false,
@@ -34,6 +35,8 @@
                 enteredQty: 1,
                 enteredUnit: 'base_unit',
                 lineTotalCost: '',
+                manualPrice: '',
+                applyingPrice: false,
                 get currentList() { return this.type === 'product' ? this.products : this.ingredients; },
                 get selected() { return this.selectedId ? this.currentList.find(i => i.id == this.selectedId) : null; },
                 get unitsPerPurchaseUnit() {
@@ -58,6 +61,62 @@
                 get unitCost() {
                     const total = parseFloat(this.lineTotalCost) || 0;
                     return this.baseQty > 0 ? (total / this.baseQty).toFixed(4) : '0.0000';
+                },
+                // The selling-price panel only applies to an EXISTING
+                // product line with a real cost entered — a brand-new
+                // product has no current price/last_cost_price to suggest
+                // against yet, and ingredients don't have a selling price.
+                get showPricePanel() {
+                    return this.type === 'product' && !this.creatingNew && this.selected && parseFloat(this.lineTotalCost) > 0;
+                },
+                get currentSellingPrice() {
+                    return this.selected ? parseFloat(this.selected.price) : null;
+                },
+                get lastCostPrice() {
+                    return (this.selected && this.selected.last_cost_price) ? parseFloat(this.selected.last_cost_price) : null;
+                },
+                get newUnitCost() {
+                    return parseFloat(this.unitCost) || 0;
+                },
+                get marginNow() {
+                    if (this.currentSellingPrice === null || this.newUnitCost <= 0) return null;
+                    return ((this.currentSellingPrice - this.newUnitCost) / this.newUnitCost) * 100;
+                },
+                get marginBefore() {
+                    if (this.currentSellingPrice === null || !this.lastCostPrice || this.lastCostPrice <= 0) return null;
+                    return ((this.currentSellingPrice - this.lastCostPrice) / this.lastCostPrice) * 100;
+                },
+                get marginColorClass() {
+                    if (this.marginNow === null) return 'text-gray-500';
+                    if (this.marginNow <= 0) return 'text-red-600';
+                    if (this.marginBefore !== null && this.marginNow < this.marginBefore) return 'text-amber-600';
+                    return 'text-emerald-600';
+                },
+                get suggestedPrice() {
+                    if (!this.lastCostPrice || this.lastCostPrice <= 0) return null;
+                    if (this.currentSellingPrice === null || this.newUnitCost <= 0) return null;
+                    const raw = this.newUnitCost * (this.currentSellingPrice / this.lastCostPrice);
+                    const step = this.priceRoundingStep || 50;
+                    const rounded = Math.ceil(raw / step) * step;
+                    return (rounded - this.currentSellingPrice >= step) ? rounded : null;
+                },
+                applySuggested() {
+                    if (!this.suggestedPrice || !this.selected) return;
+                    this.setPrice(this.suggestedPrice);
+                },
+                applyManual() {
+                    const value = parseFloat(this.manualPrice);
+                    if (!value || value <= 0 || !this.selected) return;
+                    this.setPrice(value);
+                },
+                setPrice(value) {
+                    this.applyingPrice = true;
+                    const productId = this.selected.id;
+                    $wire.call('applyPriceSuggestion', productId, value).then(() => {
+                        this.applyingPrice = false;
+                        this.selected.price = value; // reflect locally, no extra round trip needed
+                        this.manualPrice = '';
+                    });
                 },
                 get fuzzyMatches() {
                     if (!this.creatingNew || !this.newItem.name || this.newItem.name.length < 2) return [];
@@ -203,6 +262,54 @@
                 = <span class="font-semibold" x-text="baseQty"></span> <span x-text="baseUnitLabel"></span>
                 · <span class="font-semibold">₦<span x-text="unitCost"></span></span>/<span x-text="baseUnitLabel"></span>
             </div>
+
+            {{-- Selling-price panel: optional, never blocks adding the line
+                 or saving the procurement — pricing is a convenience on
+                 top, not a requirement. --}}
+            <template x-if="showPricePanel">
+                <div class="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3 space-y-2">
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                        <div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Current price</div>
+                            <div class="font-semibold text-gray-900 dark:text-gray-100">
+                                <span x-show="currentSellingPrice !== null && currentSellingPrice > 0">₦<span x-text="currentSellingPrice"></span></span>
+                                <span x-show="currentSellingPrice === null || currentSellingPrice <= 0" class="text-gray-400">no price set</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">New cost/unit</div>
+                            <div class="font-semibold text-gray-900 dark:text-gray-100">₦<span x-text="unitCost"></span></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Margin now</div>
+                            <div class="font-semibold" :class="marginColorClass">
+                                <span x-show="marginNow !== null" x-text="marginNow !== null ? marginNow.toFixed(0) + '%' : ''"></span>
+                                <span x-show="marginNow === null" class="text-gray-400">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <template x-if="suggestedPrice">
+                        <button type="button" @click="applySuggested()" :disabled="applyingPrice"
+                            class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm disabled:opacity-50">
+                            <span x-show="!applyingPrice">Set price → ₦<span x-text="suggestedPrice"></span></span>
+                            <span x-show="applyingPrice">Applying…</span>
+                        </button>
+                    </template>
+                    <template x-if="!suggestedPrice">
+                        <p class="text-xs text-gray-500 dark:text-gray-400" x-text="lastCostPrice ? 'Price OK — no suggestion needed.' : 'No prior cost on record — no suggestion available.'"></p>
+                    </template>
+
+                    <div class="flex items-center gap-2 pt-1">
+                        <input type="number" min="0" step="1" x-model="manualPrice" placeholder="Or set a custom price"
+                            class="flex-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                        <button type="button" @click="applyManual()" :disabled="applyingPrice || !manualPrice"
+                            class="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold disabled:opacity-50">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            </template>
 
             <button type="button" @click="addLine()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm">Add line</button>
         </div>

@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
             PagePermissionsSeeder::class,
             WarehouseTypeSeeder::class,
             ProductSeeder::class,
-            OpeningBalanceSeeder::class,
+            UnitSeeder::class,
         ]);
 
         // Never create a known-password admin account or fake demo rows
