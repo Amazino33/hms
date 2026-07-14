@@ -20,6 +20,8 @@ class DatabaseSeeder extends Seeder
             WarehouseTypeSeeder::class,
             ProductSeeder::class,
             UnitSeeder::class,
+            RoomSeeder::class,
+            IncidentalPriceListSeeder::class,
         ]);
 
         // Never create a known-password admin account or fake demo rows

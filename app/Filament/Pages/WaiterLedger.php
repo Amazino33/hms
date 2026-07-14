@@ -190,7 +190,7 @@ class WaiterLedger extends Page implements HasTable
 
                 SelectFilter::make('waiter')
                     ->label('Waiter')
-                    ->options(fn () => User::whereHas('roles', fn ($q) => $q->whereIn('name', ['waiter', 'porter']))->pluck('name', 'id'))
+                    ->options(fn () => User::whereHas('roles', fn ($q) => $q->whereIn('name', ['waiter']))->pluck('name', 'id'))
                     ->query(fn (Builder $query, array $data): Builder => isset($data['value']) && $data['value'] !== ''
                         ? $query->whereHas('order', fn ($q) => $q->where('user_id', $data['value']))
                         : $query),

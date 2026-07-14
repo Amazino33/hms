@@ -10,6 +10,11 @@ use App\Jobs\CronQueueTestJob;
 // manual delete/edit path anywhere in the UI, by design.
 Schedule::command('activitylog:clean')->daily();
 
+// Releases today's no-deposit reservations once the configured hour
+// passes — hourly is frequent enough that a room frees up promptly
+// without needing a precise minute-level cron entry.
+Schedule::command('hms:auto-release-reservations')->hourly();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

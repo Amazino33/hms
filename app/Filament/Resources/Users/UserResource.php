@@ -98,7 +98,7 @@ class UserResource extends Resource
                                         ->label('Total Commission Earned')
                                         ->prefix('₦')
                                         ->readOnly()
-                                        ->visible(fn ($record) => $record && $record->hasRole(['waiter', 'porter']))
+                                        ->visible(fn ($record) => $record && $record->hasRole(['waiter']))
                                         ->afterStateHydrated(function (TextInput $component, $record) {
                                             if ($record) {
                                                 // Fetch the sum directly from the commissions relationship

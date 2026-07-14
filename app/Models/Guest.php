@@ -12,4 +12,9 @@ class Guest extends Model
     {
         return $this->hasMany(Order::class);
     }
+
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class);
+    }
 }

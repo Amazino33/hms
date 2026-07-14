@@ -55,9 +55,15 @@ class StatOverview extends StatsOverviewWidget
                     ->sum('total_price')
             );
 
-            [$totalRooms, $occupiedRooms] = Cache::remember('stat:rooms', 60, fn () => [
+            [$totalRooms, $occupiedRooms] = Cache::remember("stat:rooms:{$todayKey}", 60, fn () => [
                 Room::count(),
-                Room::where('status', 'occupied')->count(),
+                // Derived from bookings touching today (arriving, occupied,
+                // or due out) — occupancy is never stored on the room
+                // itself, see Room::occupancyState().
+                Booking::where('check_in', '<=', $todayKey)
+                    ->where('check_out', '>=', $todayKey)
+                    ->distinct('room_id')
+                    ->count('room_id'),
             ]);
 
             return [
@@ -96,7 +102,7 @@ class StatOverview extends StatsOverviewWidget
         }
 
         // 🤵 SCENARIO 3: WAITER (See Personal Stats)
-        if ($user->hasRole(['waiter', 'porter'])) {
+        if ($user->hasRole(['waiter'])) {
             
             // 1. "My Ready Orders" (Only show orders created by THIS waiter that are ready)
             $cacheKeyReady = "stat:waiter:ready:{$user->id}";

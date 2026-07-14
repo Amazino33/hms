@@ -107,9 +107,11 @@ require __DIR__.'/settings.php';
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\FloorPlanController;
 use App\Http\Controllers\HandoverPdfController;
+use App\Http\Controllers\FolioReceiptController;
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/handover/{session}/pdf', [HandoverPdfController::class, 'download'])->name('handover.pdf');
+    Route::get('/folio/{booking}/pdf', [FolioReceiptController::class, 'download'])->name('folio.pdf');
     Route::post('/stock-transfers', [StockTransferController::class, 'store']);
     Route::post('/stock-transfers/{stockTransfer}/send', [StockTransferController::class, 'send']);
     Route::post('/stock-transfers/{stockTransfer}/receive', [StockTransferController::class, 'receive']);

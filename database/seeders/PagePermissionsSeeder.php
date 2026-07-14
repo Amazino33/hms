@@ -21,11 +21,6 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'POS Page',
                 'role_name' => 'waiter',
             ],
-            [
-                'page_class' => 'App\Filament\Pages\PosPage',
-                'page_name' => 'POS Page',
-                'role_name' => 'porter',
-            ],
 
             // Floor Plan - Managers, Waiters, Super Admin
             [
@@ -42,11 +37,6 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\FloorPlan',
                 'page_name' => 'Floor Plan',
                 'role_name' => 'waiter',
-            ],
-            [
-                'page_class' => 'App\Filament\Pages\FloorPlan',
-                'page_name' => 'Floor Plan',
-                'role_name' => 'porter',
             ],
 
             // Kitchen Display - Chefs and Super Admin
@@ -93,11 +83,6 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\MyHistory',
                 'page_name' => 'My History',
                 'role_name' => 'waiter',
-            ],
-            [
-                'page_class' => 'App\Filament\Pages\MyHistory',
-                'page_name' => 'My History',
-                'role_name' => 'porter',
             ],
             [
                 'page_class' => 'App\Filament\Pages\MyHistory',
@@ -193,11 +178,6 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\MyShiftReport',
                 'page_name' => 'My Shift Report',
                 'role_name' => 'storekeeper',
-            ],
-            [
-                'page_class' => 'App\Filament\Pages\MyShiftReport',
-                'page_name' => 'My Shift Report',
-                'role_name' => 'porter',
             ],
 
             // Waiter Ledger - Managers, Admins, Super Admin only
@@ -312,6 +292,114 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\ManageUnits',
                 'page_name' => 'Manage Units',
                 'role_name' => 'manager',
+            ],
+            // Reservations Timeline - Receptionists, Managers, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\ReservationsTimeline',
+                'page_name' => 'Reservations Timeline',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ReservationsTimeline',
+                'page_name' => 'Reservations Timeline',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ReservationsTimeline',
+                'page_name' => 'Reservations Timeline',
+                'role_name' => 'receptionist',
+            ],
+
+            // Folio Detail - Receptionists, Managers, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\FolioDetail',
+                'page_name' => 'Folio Detail',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\FolioDetail',
+                'page_name' => 'Folio Detail',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\FolioDetail',
+                'page_name' => 'Folio Detail',
+                'role_name' => 'receptionist',
+            ],
+
+            // Transfer Verification (hotel folio payments) - Managers, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\TransferVerification',
+                'page_name' => 'Transfer Verification',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\TransferVerification',
+                'page_name' => 'Transfer Verification',
+                'role_name' => 'manager',
+            ],
+
+            // Room Order - Receptionists, Managers, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\RoomOrder',
+                'page_name' => 'Room Order',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\RoomOrder',
+                'page_name' => 'Room Order',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\RoomOrder',
+                'page_name' => 'Room Order',
+                'role_name' => 'receptionist',
+            ],
+
+            // Porter Deliveries - Porters, Managers, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\PorterDeliveries',
+                'page_name' => 'Porter Deliveries',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PorterDeliveries',
+                'page_name' => 'Porter Deliveries',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PorterDeliveries',
+                'page_name' => 'Porter Deliveries',
+                'role_name' => 'porter',
+            ],
+
+            // Receptionist Shift - Receptionists, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\ReceptionistShift',
+                'page_name' => 'Receptionist Shift',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ReceptionistShift',
+                'page_name' => 'Receptionist Shift',
+                'role_name' => 'receptionist',
+            ],
+
+            // Room Board - Receptionists, Managers, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\RoomBoard',
+                'page_name' => 'Room Board',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\RoomBoard',
+                'page_name' => 'Room Board',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\RoomBoard',
+                'page_name' => 'Room Board',
+                'role_name' => 'receptionist',
             ],
         ];
 

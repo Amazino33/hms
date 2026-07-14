@@ -100,6 +100,6 @@ class WaiterCommissionWidget extends BaseWidget
             return false;
         }
 
-        return $user->hasAnyRole(['waiter', 'porter', 'super_admin', 'admin', 'manager']);
+        return $user->hasAnyRole(['waiter', 'super_admin', 'admin', 'manager']);
     }
 }

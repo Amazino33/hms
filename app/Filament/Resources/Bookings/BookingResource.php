@@ -55,7 +55,7 @@ class BookingResource extends Resource
                 ->required(),
 
             Select::make('room_id')
-                ->options(Room::where('status', 'available')->pluck('number', 'id'))
+                ->options(fn () => Room::available()->get()->reject(fn (Room $room) => $room->isOccupiedToday())->pluck('number', 'id'))
                 ->required()
                 ->live() // Watch for changes
                 ->afterStateUpdated(function (Get $get, Set $set) {

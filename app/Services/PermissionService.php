@@ -72,7 +72,7 @@ class PermissionService
         }
 
         // Check roles
-        if ($user->hasRole(['super_admin', 'manager', 'waiter', 'porter'])) {
+        if ($user->hasRole(['super_admin', 'manager', 'waiter'])) {
             return true;
         }
 
@@ -133,7 +133,7 @@ class PermissionService
             return false;
         }
 
-        return $user->hasRole(['super_admin', 'waiter', 'porter']);
+        return $user->hasRole(['super_admin', 'waiter']);
     }
 
     /**
@@ -147,7 +147,7 @@ class PermissionService
             return false;
         }
 
-        return $user->hasRole(['super_admin', 'manager', 'waiter', 'porter']);
+        return $user->hasRole(['super_admin', 'manager', 'waiter']);
     }
 
     /**

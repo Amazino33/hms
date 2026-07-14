@@ -52,12 +52,21 @@ class RoomResource extends Resource
                 ->required(),
 
             Select::make('status')
+                ->label('Maintenance status')
                 ->options([
                     'available' => 'Available',
-                    'occupied' => 'Occupied',
                     'maintenance' => 'Maintenance',
                 ])
                 ->default('available')
+                ->required()
+                ->helperText('Occupancy is shown separately below, derived from bookings — this is only a manual out-of-service flag.'),
+
+            Select::make('housekeeping')
+                ->options([
+                    'clean' => 'Clean',
+                    'dirty' => 'Dirty',
+                ])
+                ->default('clean')
                 ->required(),
         ]);
     }
@@ -71,11 +80,25 @@ class RoomResource extends Resource
             TextColumn::make('price_per_night')->money('NGN')->sortable(),
             
             TextColumn::make('status')
+                ->label('Maintenance')
                 ->badge()
                 ->color(fn (string $state): string => match ($state) {
                     'available' => 'success',
-                    'occupied' => 'danger',
                     'maintenance' => 'warning',
+                    default => 'gray',
+                }),
+            TextColumn::make('housekeeping')
+                ->badge()
+                ->color(fn (string $state): string => $state === 'clean' ? 'success' : 'gray'),
+            TextColumn::make('occupancy')
+                ->label('Occupancy (today)')
+                ->state(fn (Room $record): string => str($record->occupancyState())->replace('_', ' ')->title())
+                ->badge()
+                ->color(fn (Room $record): string => match ($record->occupancyState()) {
+                    'vacant' => 'success',
+                    'occupied' => 'primary',
+                    'due_out_today' => 'warning',
+                    'arriving_today' => 'info',
                     default => 'gray',
                 }),
         ])
