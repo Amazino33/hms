@@ -90,7 +90,11 @@ class OrderSplitter
             $orderStatus = $options['status'] ?? 'pending';
 
             foreach ($groups as $destination => $items) {
-                self::assertShiftsActive($destination, $userId);
+                // Room orders are placed by a receptionist, not a waiter —
+                // there is no "waiter shift" to require. The per-destination
+                // bartender/chef checks still apply unchanged: someone
+                // actually has to be on duty at the bar/kitchen to make it.
+                self::assertShiftsActive($destination, $userId, skipWaiterShiftCheck: (bool) ($options['booking_id'] ?? false));
 
                 $groupTotal = collect($items)->sum(fn($i) => $i['price'] * $i['quantity']);
 
@@ -126,6 +130,7 @@ class OrderSplitter
                     'guest_id' => $options['guest_id'] ?? null,
                     'destination' => $destination,
                     'kiosk_device_id' => $options['kiosk_device_id'] ?? null,
+                    'booking_id' => $options['booking_id'] ?? null,
                 ]);
 
                 foreach ($items as $item) {
@@ -165,8 +170,15 @@ class OrderSplitter
                     }
                 }
 
-                // Deduct inventory for all items in this order
-                InventoryService::deductInventoryForOrderItems($order);
+                // Room orders defer this to the moment the kitchen/bar
+                // display marks the order Ready (see markAsReady() in
+                // KitchenDisplay/BarDisplay) instead of deducting eagerly
+                // here — a guest's room order can be a while away from
+                // actually being made, and stock shouldn't leave the shelf
+                // on paper before it physically does.
+                if (empty($options['defer_stock_deduction'])) {
+                    InventoryService::deductInventoryForOrderItems($order);
+                }
 
                 // ── Commission: now that all OrderItems exist, calculate ────────
                 if ($orderStatus === 'paid' && $order->user_id) {
@@ -210,9 +222,9 @@ class OrderSplitter
      *
      * @throws \Exception
      */
-    private static function assertShiftsActive(string $destination, int $waiterUserId): void
+    private static function assertShiftsActive(string $destination, int $waiterUserId, bool $skipWaiterShiftCheck = false): void
     {
-        if (!Shift::query()->where('user_id', $waiterUserId)->activeNonStale('waiter')->exists()) {
+        if (!$skipWaiterShiftCheck && !Shift::query()->where('user_id', $waiterUserId)->activeNonStale('waiter')->exists()) {
             throw new \Exception('You must start a shift before creating orders.');
         }
 
