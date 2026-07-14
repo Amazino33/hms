@@ -79,4 +79,40 @@ class Order extends Model
     {
         return $this->hasOne(Commission::class);
     }
+
+    public function booking()
+    {
+        return $this->belongsTo(Booking::class);
+    }
+
+    public function pickedUpBy()
+    {
+        return $this->belongsTo(User::class, 'picked_up_by');
+    }
+
+    /**
+     * Table name for a dine-in order, "Room N" for a room order, else
+     * "Takeaway" — the single place that resolves an order's origin so
+     * every display/notification collapses to one call instead of
+     * repeating the table-vs-room fallback chain everywhere.
+     */
+    public function getOriginLabelAttribute(): string
+    {
+        // Deliberately not $this->table — Eloquent's own protected $table
+        // property (the DB table name, "orders") shadows the table()
+        // relation for direct in-class access; getRelationValue() is what
+        // __get() itself delegates to, so it correctly resolves the
+        // relation the same way external callers like Blade views do.
+        $table = $this->getRelationValue('table');
+
+        if ($table) {
+            return $table->name;
+        }
+
+        if ($this->booking_id) {
+            return 'Room ' . ($this->booking?->room?->number ?? '?');
+        }
+
+        return 'Takeaway';
+    }
 }

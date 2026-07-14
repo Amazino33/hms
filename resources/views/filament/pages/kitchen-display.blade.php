@@ -39,7 +39,7 @@
                 <div class="p-4 flex-1 overflow-y-auto max-h-64 space-y-2">                   
                     {{-- 👇 NEW: Show Table Name --}}
                     <div class="text-indigo-600 dark:text-indigo-400 font-bold text-sm mt-1">
-                        {{ $order->table->name ?? 'Takeaway' }}
+                        {{ $order->origin_label }}
                     </div>
 
                     {{-- 👇 NEW: Waiter Name --}}
@@ -121,7 +121,7 @@
                                 <div>
                                     <div class="font-medium text-gray-900 dark:text-white">{{ $order->order_number }}</div>
                                     <div class="text-sm text-gray-500 dark:text-gray-400">{{ $order->created_at->format('H:i') }}</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ $order->table->name ?? 'Takeaway' }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ $order->origin_label }}</div>
                                 </div>
                                 <div class="text-right">
                                     <div class="text-sm font-medium text-green-600 dark:text-green-400">{{ $order->status }}</div>

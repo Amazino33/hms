@@ -46,7 +46,7 @@
                                     <div class="flex justify-between items-start border-b border-gray-100 dark:border-gray-700 pb-2">
                                         <div>
                                             <div class="text-gray-900 dark:text-white font-black text-sm uppercase tracking-wide">
-                                                {{ $order->table->name ?? 'Takeaway' }}
+                                                {{ $order->origin_label }}
                                             </div>
                                             <div class="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5 flex items-center gap-1">
                                                 <x-heroicon-o-user class="w-3 h-3"/>
@@ -101,7 +101,7 @@
                                     <div class="flex justify-between items-start border-b border-gray-100 dark:border-gray-700 pb-2">
                                         <div>
                                             <div class="text-indigo-600 dark:text-indigo-400 font-black text-sm uppercase tracking-wide">
-                                                {{ $order->table->name ?? 'Takeaway' }}
+                                                {{ $order->origin_label }}
                                             </div>
                                             <div class="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5 flex items-center gap-1">
                                                 <x-heroicon-o-user class="w-3 h-3"/>
@@ -197,7 +197,7 @@
                             <div class="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 font-medium">
                                 <span class="flex items-center gap-1">
                                     <x-heroicon-o-map-pin class="w-3 h-3"/>
-                                    {{ $order->table->name ?? 'Takeaway' }}
+                                    {{ $order->origin_label }}
                                 </span>
                                 <span>{{ $order->created_at->format('H:i') }}</span>
                             </div>

@@ -7,6 +7,7 @@ use BackedEnum;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use App\Services\InventoryService;
 use App\Services\PermissionService;
 use App\Services\ReturnConfirmationService;
 use App\Models\Order;
@@ -27,7 +28,7 @@ class KitchenDisplay extends Page
 
         // Short caches keep UI fresh while easing DB load
         $recentHistory = Cache::remember('kitchen_display:recent_history', 10, function () use ($now) {
-            return Order::with(['items.product', 'items.menuItem.recipes.ingredient'])
+            return Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'user', 'booking.room'])
                 ->where('destination', 'kitchen')
                 ->whereIn('status', ['ready', 'served', 'paid'])
                 ->where('created_at', '>=', $now->copy()->subDays(7)->startOfDay())
@@ -53,7 +54,7 @@ class KitchenDisplay extends Page
 
         return [
             'orders' => Cache::remember('kitchen_display:active_orders', 5, function () {
-                return Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table'])
+                return Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table', 'user', 'booking.room'])
                     ->where('status', 'pending')
                     ->where('destination', 'kitchen')
                     ->oldest()
@@ -66,28 +67,53 @@ class KitchenDisplay extends Page
 
     public function markAsReady($orderId)
     {
-        // Use findOrFail so the editor knows it found a real record
-        $order = Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table'])->findOrFail($orderId);
-        
-        $order->update([
-            'status' => 'ready',
-            'processed_by_user_id' => auth()->id()
-        ]);
+        // Scoped to pending+kitchen, not a bare findOrFail — Livewire
+        // methods are callable with any arguments from the client, and
+        // without this guard, calling markAsReady() on an already-ready/
+        // served/paid order (or a BAR-destination one) would silently
+        // flip its status back and re-fire the "Ready!" notification.
+        // Row-locked inside a transaction because a room order's stock
+        // deduction now happens right here — two concurrent clicks must
+        // not deduct twice.
+        $order = DB::transaction(function () use ($orderId) {
+            $order = Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table', 'booking.room'])
+                ->where('status', 'pending')
+                ->where('destination', 'kitchen')
+                ->lockForUpdate()
+                ->findOrFail($orderId);
+
+            $order->update([
+                'status' => 'ready',
+                'processed_by_user_id' => auth()->id()
+            ]);
+
+            // Every other destination already deducted stock at order
+            // creation (OrderSplitter::handle()); a room order deferred it
+            // until now, this exact transition.
+            if ($order->booking_id) {
+                InventoryService::deductInventoryForOrderItems($order);
+            }
+
+            return $order;
+        });
+
+        Cache::forget('kitchen_display:active_orders');
+        Cache::forget('kitchen_display:recent_history');
 
         // 1. Get the list of items (e.g., "2x Rice, 1x Coke")
         $itemList = $order->items->map(function ($item) {
             return "{$item->quantity}x {$item->product_name}";
         })->join(', ');
-        
+
         // Send database notification to all staff users
         $staffUsers = \App\Models\User::whereHas('roles', function($q) {
             $q->whereIn('name', ['super_admin', 'chef', 'waiter', 'porter']);
         })->get();
-        
+
         foreach ($staffUsers as $staffUser) {
             Notification::make()
                 ->title("Order #{$order->order_number} Ready!")
-                ->body("Order #{$order->id} for {$order->table->name}\n\rItems: {$itemList}\n\r is ready for pickup.")
+                ->body("Order #{$order->id} for {$order->origin_label}\n\rItems: {$itemList}\n\r is ready for pickup.")
                 ->success()
                 ->actions([
                     // Add a button to the notification to jump to the order
