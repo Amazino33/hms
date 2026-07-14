@@ -163,6 +163,10 @@ class User extends Authenticatable implements FilamentUser
             return 'chef';
         }
 
+        if ($this->hasRole('receptionist')) {
+            return 'receptionist';
+        }
+
         return 'waiter';
     }
 
@@ -177,6 +181,12 @@ class User extends Authenticatable implements FilamentUser
                 $role = ucfirst($shift->type);
                 throw new \Exception(
                     "{$role} shifts can only end through a declared, dual-PIN-sealed handover count — use My Handover Count, not this control."
+                );
+            }
+
+            if ($shift->type === 'receptionist') {
+                throw new \Exception(
+                    'Receptionist shifts end through the Receptionist Shift page (declares cash/POS totals), not this control.'
                 );
             }
 

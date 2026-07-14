@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ShiftManagement\Tables;
 
 use App\Models\Shift;
+use App\Services\ReceptionistShiftService;
 use App\Services\ShiftAccountingService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
@@ -78,7 +79,11 @@ class ShiftManagementTable
                         && auth()->user()->hasRole(['manager', 'admin', 'super_admin']))
                     ->authorize(fn (): bool => auth()->user()->hasRole(['manager', 'admin', 'super_admin']))
                     ->form(function (Shift $record): array {
-                        $service = new ShiftAccountingService();
+                        // Receptionist shifts have their own settlement math
+                        // (a till float baseline, folio payments instead of
+                        // orders) — ShiftAccountingService itself, and the
+                        // waiter/bartender/chef path below, are untouched.
+                        $service = $record->type === 'receptionist' ? new ReceptionistShiftService() : new ShiftAccountingService();
                         $expectedCash = $service->expectedCashRemittance($record);
                         $expectedPos = $service->expectedPosTotal($record);
 
@@ -105,7 +110,8 @@ class ShiftManagementTable
                     })
                     ->action(function (Shift $record, array $data): void {
                         try {
-                            $debt = (new ShiftAccountingService())->applyShiftSettlement(
+                            $service = $record->type === 'receptionist' ? new ReceptionistShiftService() : new ShiftAccountingService();
+                            $debt = $service->applyShiftSettlement(
                                 $record,
                                 auth()->user(),
                                 (float) $data['supervisor_confirmed_cash'],

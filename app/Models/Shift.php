@@ -24,6 +24,7 @@ class Shift extends Model
     protected $fillable = [
         'user_id',
         'type',
+        'starting_float',
         'opening_count_session_id',
         'started_at',
         'ended_at',
@@ -61,6 +62,7 @@ class Shift extends Model
     protected $casts = [
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
+        'starting_float' => 'decimal:2',
         'declared_cash' => 'decimal:2',
         'declared_pos' => 'decimal:2',
         'supervisor_confirmed_cash' => 'decimal:2',
