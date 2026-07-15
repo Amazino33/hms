@@ -58,14 +58,21 @@ class HandoverDiscrepancies extends Page implements HasTable
                     ->label('Session')
                     ->state(fn (HandoverDiscrepancy $record) => '#' . $record->item->count_session_id)
                     ->url(fn (HandoverDiscrepancy $record) => "/admin/count-session-detail?session_id={$record->item->count_session_id}"),
+                TextColumn::make('direction')
+                    ->label('Type')
+                    ->badge()
+                    ->color(fn (HandoverDiscrepancy $record) => $record->isOverage() ? 'warning' : 'gray')
+                    ->formatStateUsing(fn (HandoverDiscrepancy $record) => $record->isOverage() ? 'Overage' : 'Shortage'),
                 TextColumn::make('accountable')
-                    ->label('Outgoing')
-                    ->state(fn (HandoverDiscrepancy $record) => $record->item->session->outgoingUser?->name ?? '—'),
+                    ->label('Accountable')
+                    ->state(fn (HandoverDiscrepancy $record) => $record->item->session->accountableUserId()
+                        ? \App\Models\User::find($record->item->session->accountableUserId())?->name ?? '—'
+                        : '—'),
                 TextColumn::make('item_name')
                     ->label('Item')
                     ->state(fn (HandoverDiscrepancy $record) => $record->item->itemName()),
                 TextColumn::make('shortfall_quantity')
-                    ->label('Short')
+                    ->label('Qty')
                     ->numeric(2),
                 TextColumn::make('naira_value')
                     ->label('Value')
@@ -78,6 +85,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                         $record->status === 'pending_investigation' => 'gray',
                         $record->status === 'debited' => 'danger',
                         $record->status === 'written_off' => 'success',
+                        $record->status === 'acknowledged' => 'success',
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (HandoverDiscrepancy $record) => match (true) {
@@ -86,6 +94,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                         $record->status === 'pending_investigation' => 'Pending investigation',
                         $record->status === 'debited' => 'Debited',
                         $record->status === 'written_off' => 'Written off',
+                        $record->status === 'acknowledged' => 'Acknowledged',
                         default => $record->status,
                     }),
                 TextColumn::make('resolvedBy.name')->label('Resolved by')->default('—'),
@@ -98,22 +107,31 @@ class HandoverDiscrepancies extends Page implements HasTable
                         'pending_investigation' => 'Pending investigation',
                         'debited' => 'Debited',
                         'written_off' => 'Written off',
+                        'acknowledged' => 'Acknowledged',
                     ]),
+                SelectFilter::make('direction')
+                    ->options(['shortage' => 'Shortage', 'overage' => 'Overage']),
                 SelectFilter::make('accountable_user')
-                    ->label('Outgoing custodian')
-                    ->options(fn () => \App\Models\User::whereHas('roles', fn ($q) => $q->whereIn('name', ['bartender', 'chef']))->pluck('name', 'id'))
+                    ->label('Accountable')
+                    ->options(fn () => \App\Models\User::whereHas('roles', fn ($q) => $q->whereIn('name', ['bartender', 'chef', 'storekeeper']))->pluck('name', 'id'))
                     ->query(function (Builder $query, array $data) {
                         if (! $data['value']) {
                             return;
                         }
-                        $query->whereHas('item.session', fn ($q) => $q->where('outgoing_user_id', $data['value']));
+                        // accountableUserId() is outgoing_user_id normally, or
+                        // opened_by when there's no outgoing (a solo store
+                        // count) — matching that here, not just outgoing_user_id,
+                        // is what makes this filter find storekeeper rows at all.
+                        $query->whereHas('item.session', fn ($q) => $q
+                            ->where('outgoing_user_id', $data['value'])
+                            ->orWhere(fn ($q2) => $q2->whereNull('outgoing_user_id')->where('opened_by', $data['value'])));
                     }),
             ])
             ->recordActions([
                 Action::make('recount')
                     ->label('Recount')
                     ->color('info')
-                    ->visible(fn (HandoverDiscrepancy $record) => $record->isOpen())
+                    ->visible(fn (HandoverDiscrepancy $record) => $record->isShortage() && $record->isOpen())
                     ->form([
                         TextInput::make('new_quantity')->numeric()->required()->minValue(0)->label('Recounted quantity'),
                         TextInput::make('counter_pin')->label('Counter PIN')->password()->numeric()->length(4)->required(),
@@ -135,10 +153,10 @@ class HandoverDiscrepancies extends Page implements HasTable
                         }
                     }),
                 Action::make('debit')
-                    ->label('Debit outgoing')
+                    ->label('Debit')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->visible(fn (HandoverDiscrepancy $record) => $record->isOpen())
+                    ->visible(fn (HandoverDiscrepancy $record) => $record->isShortage() && $record->isOpen())
                     ->action(function (HandoverDiscrepancy $record) {
                         try {
                             app(CountSessionService::class)->debitDiscrepancy($record, Auth::id());
@@ -165,7 +183,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                 Action::make('writeOff')
                     ->label('Resolve without debit')
                     ->color('success')
-                    ->visible(fn (HandoverDiscrepancy $record) => $record->isOpen())
+                    ->visible(fn (HandoverDiscrepancy $record) => $record->isShortage() && $record->isOpen())
                     ->form([
                         Textarea::make('reason')->label('Written reason')->required(),
                     ])
@@ -175,6 +193,20 @@ class HandoverDiscrepancies extends Page implements HasTable
                             Notification::make()->success()->title('Resolved without a debit')->send();
                         } catch (\Throwable $e) {
                             Notification::make()->danger()->title('Could not resolve')->body($e->getMessage())->send();
+                        }
+                    }),
+                Action::make('acknowledge')
+                    ->label('Acknowledge')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalDescription('Nothing was lost — the extra stock has already been added to the count. This just closes the line out.')
+                    ->visible(fn (HandoverDiscrepancy $record) => $record->isOverage() && $record->isOpen())
+                    ->action(function (HandoverDiscrepancy $record) {
+                        try {
+                            app(CountSessionService::class)->acknowledgeOverage($record, Auth::id());
+                            Notification::make()->success()->title('Overage acknowledged')->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()->danger()->title('Could not acknowledge')->body($e->getMessage())->send();
                         }
                     }),
             ])

@@ -31,7 +31,11 @@ class MyHandoverHistory extends Page implements HasTable
         return $table
             ->query(
                 CountSession::query()
-                    ->where(fn ($q) => $q->where('outgoing_user_id', $userId)->orWhere('incoming_user_id', $userId))
+                    ->where(fn ($q) => $q->where('outgoing_user_id', $userId)
+                        ->orWhere('incoming_user_id', $userId)
+                        // A solo count (store stocktake) never sets outgoing/
+                        // incoming — opened_by is the only identity it has.
+                        ->orWhere(fn ($q2) => $q2->whereNull('outgoing_user_id')->where('opened_by', $userId)))
                     ->whereIn('status', ['reviewed', 'declared', 'counting'])
                     ->with(['warehouse', 'outgoingUser', 'incomingUser'])
             )
@@ -42,12 +46,17 @@ class MyHandoverHistory extends Page implements HasTable
                     ->formatStateUsing(fn (string $state) => match ($state) {
                         'bar_handover' => 'Bar Handover',
                         'kitchen_handover' => 'Kitchen Handover',
+                        'main_store_stocktake' => 'Store Count',
                         default => $state,
                     }),
                 TextColumn::make('warehouse.name')->label('Warehouse'),
                 TextColumn::make('role')
                     ->label('My Role')
-                    ->state(fn (CountSession $record) => $record->outgoing_user_id === $userId ? 'Outgoing' : 'Incoming'),
+                    ->state(fn (CountSession $record) => match (true) {
+                        $record->outgoing_user_id === $userId => 'Outgoing',
+                        $record->incoming_user_id === $userId => 'Incoming',
+                        default => 'Counter',
+                    }),
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state) => ucwords(str_replace('_', ' ', $state))),
