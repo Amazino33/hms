@@ -15,6 +15,11 @@ class OrderPayment extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'paid_at' => 'datetime',
+        'verified' => 'boolean',
+        'verified_at' => 'datetime',
+        'flagged' => 'boolean',
+        'flagged_at' => 'datetime',
+        'ruled_at' => 'datetime',
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -38,5 +43,25 @@ class OrderPayment extends Model
     public function shift()
     {
         return $this->belongsTo(Shift::class);
+    }
+
+    public function verifiedBy()
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function flaggedBy()
+    {
+        return $this->belongsTo(User::class, 'flagged_by');
+    }
+
+    public function ruledBy()
+    {
+        return $this->belongsTo(User::class, 'ruled_by');
+    }
+
+    public function isResolved(): bool
+    {
+        return $this->verified || $this->ruling !== null;
     }
 }

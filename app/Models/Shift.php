@@ -39,7 +39,29 @@ class Shift extends Model
         'surplus_amount',
         'settlement_notes',
         'settled_at',
+        'cashier_counted_cash',
+        'cash_confirmed_by',
+        'cash_confirmed_at',
+        'pos_machine_confirmed_amount',
+        'pos_confirmed_by',
+        'pos_confirmed_at',
+        'pos_flagged',
+        'pos_flag_note',
+        'pos_ruling',
+        'pos_ruling_note',
+        'pos_ruled_by',
+        'pos_ruled_at',
     ];
+
+    /**
+     * Statuses that mean "not yet confirmed" — a prior shift for the same
+     * user sitting in one of these is what the shift-start gate blocks on
+     * (Shift::hasUnsettledFor()). 'active' is deliberately excluded here:
+     * a still-open shift isn't a settlement problem, it's just in progress
+     * (though starting a new one while one is still active is its own,
+     * separately-guarded case — see User::startShift()).
+     */
+    public const UNSETTLED_STATUSES = ['awaiting_cashier'];
 
     /**
      * A shift open longer than this is presumed abandoned/forgotten, not a
@@ -72,6 +94,12 @@ class Shift extends Model
         'cash_variance' => 'decimal:2',
         'surplus_amount' => 'decimal:2',
         'settled_at' => 'datetime',
+        'cashier_counted_cash' => 'decimal:2',
+        'cash_confirmed_at' => 'datetime',
+        'pos_machine_confirmed_amount' => 'decimal:2',
+        'pos_confirmed_at' => 'datetime',
+        'pos_flagged' => 'boolean',
+        'pos_ruled_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -97,6 +125,55 @@ class Shift extends Model
     public function openingCountSession(): BelongsTo
     {
         return $this->belongsTo(CountSession::class, 'opening_count_session_id');
+    }
+
+    public function cashConfirmedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cash_confirmed_by');
+    }
+
+    public function posConfirmedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pos_confirmed_by');
+    }
+
+    public function posRuledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pos_ruled_by');
+    }
+
+    /**
+     * An open (unresolved) transfer dispute among this shift's own
+     * OrderPayments — resolving one (any ruling) clears it here too,
+     * since "ruling" being set is what "resolved" means.
+     */
+    public function hasOpenTransferFlag(): bool
+    {
+        return $this->payments()->where('flagged', true)->whereNull('ruling')->exists();
+    }
+
+    /**
+     * The "parallel blocking condition" from the settlement spec — a
+     * flagged POS-machine dispute or any unresolved flagged transfer for
+     * this shift, either of which blocks confirmation and the owning
+     * staff member's next shift-start (see Shift::hasUnsettledFor()).
+     */
+    public function hasOpenFlag(): bool
+    {
+        return $this->pos_flagged || $this->hasOpenTransferFlag();
+    }
+
+    /**
+     * The shift-start gate: a prior settlement of this user's that is
+     * still awaiting cashier confirmation (with or without an open flag —
+     * a flag doesn't change the shift's own status, it's an orthogonal
+     * signal checked via hasOpenFlag() elsewhere) blocks a new shift.
+     */
+    public static function hasUnsettledFor(int $userId): bool
+    {
+        return static::where('user_id', $userId)
+            ->whereIn('status', self::UNSETTLED_STATUSES)
+            ->exists();
     }
 
     // Check if shift is currently active

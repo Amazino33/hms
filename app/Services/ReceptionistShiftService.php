@@ -4,24 +4,34 @@ namespace App\Services;
 
 use App\Models\FolioLine;
 use App\Models\Shift;
-use App\Models\StaffDebt;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 
 /**
- * Mirrors ShiftAccountingService's waiter pattern (declare -> pending
- * supervisor -> supervisor confirms actual counted amounts -> variance
- * frozen, shortfall becomes a StaffDebt) but is a fully separate service —
- * waiter settlement math is untouched. The one real difference: a
- * receptionist starts with a till float, so "expected cash" is the float
- * plus what they collected, not just what they collected.
+ * Start/declare-end only. Confirmation (cash blind-count, POS-machine
+ * check, transfer auto-complete, StaffDebt on shortfall) is now
+ * CashierSettlementService's job for every shift type, waiter and
+ * receptionist alike — the old single-step applyShiftSettlement() here
+ * (and its ShiftAccountingService twin) is gone; nothing closes a
+ * settlement anymore except the cashier's own channel-by-channel
+ * confirmation. Only expectedCashRemittance()/expectedPosTotal() remain,
+ * since those stay genuinely different per type (a receptionist's
+ * expected cash includes her starting till float and is sourced from
+ * FolioLine, not OrderPayment).
  */
 class ReceptionistShiftService
 {
     public function startShift(User $user, float $startingFloat): Shift
     {
         if ($current = $user->currentShift()) {
-            $current->update(['ended_at' => now(), 'status' => 'closed']);
+            if ($current->type === 'receptionist') {
+                return $current;
+            }
+
+            throw new \Exception("You have an active {$current->type} shift — end it before starting a receptionist shift.");
+        }
+
+        if (Shift::hasUnsettledFor($user->id) && ! SettingsService::getBool('allow_shift_start_with_unsettled')) {
+            throw new \Exception('Your last settlement is awaiting cashier confirmation and must be resolved before you can start a new shift.');
         }
 
         return $user->shifts()->create([
@@ -46,7 +56,7 @@ class ReceptionistShiftService
             'declared_cash' => $declaredCash,
             'declared_pos' => $declaredPos,
             'ended_at' => now(),
-            'status' => 'pending_supervisor',
+            'status' => 'awaiting_cashier',
         ]);
 
         return $shift->fresh();
@@ -71,47 +81,16 @@ class ReceptionistShiftService
     }
 
     /**
-     * @return StaffDebt|null the shortfall debt, if the confirmed cash fell short
+     * Physical POS terminal batch only, excluding transfers — those are
+     * reconciled through the existing hotel folio TransferVerification
+     * page (FolioLine.verified), not the cashier's per-channel POS-machine
+     * confirmation.
      */
-    public function applyShiftSettlement(Shift $shift, User $supervisor, float $confirmedCash, float $confirmedPos, ?string $notes): ?StaffDebt
+    public function expectedPosMachineTotal(Shift $shift): float
     {
-        return DB::transaction(function () use ($shift, $supervisor, $confirmedCash, $confirmedPos, $notes) {
-            $shift = Shift::where('id', $shift->id)->lockForUpdate()->firstOrFail();
-
-            if ($shift->status !== 'pending_supervisor') {
-                throw new \Exception('This shift is not awaiting supervisor review.');
-            }
-
-            $expectedCash = $this->expectedCashRemittance($shift);
-            $expectedPos = $this->expectedPosTotal($shift);
-            $variance = round($confirmedCash - $expectedCash, 2);
-
-            $shift->update([
-                'supervisor_confirmed_cash' => $confirmedCash,
-                'supervisor_confirmed_pos' => $confirmedPos,
-                'expected_cash' => $expectedCash,
-                'expected_pos' => $expectedPos,
-                'cash_variance' => $variance,
-                'surplus_amount' => $variance > 0 ? $variance : 0,
-                'settlement_notes' => $notes,
-                'settled_at' => now(),
-                'status' => 'closed',
-            ]);
-
-            $debt = null;
-
-            if ($variance < -0.01) {
-                $debt = StaffDebt::create([
-                    'user_id' => $shift->user_id,
-                    'shift_id' => $shift->id,
-                    'amount' => abs($variance),
-                    'reason' => 'reception_shortfall',
-                    'status' => 'open',
-                    'created_by' => $supervisor->id,
-                ]);
-            }
-
-            return $debt;
-        });
+        return abs((float) FolioLine::where('shift_id', $shift->id)
+            ->where('type', 'payment')
+            ->where('payment_method', 'pos_terminal')
+            ->sum('amount'));
     }
 }

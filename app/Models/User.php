@@ -8,6 +8,7 @@ use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use App\Models\Order;
 use App\Services\ShiftAccountingService;
+use App\Services\SettingsService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -124,16 +125,44 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * Start a new shift for the user
+     * Start a new shift for the user.
+     *
+     * Three guards, deliberately different in shape:
+     *  - Already on an active shift of the SAME type being requested:
+     *    return it unchanged (idempotent) — this used to force-close the
+     *    still-open shift straight to 'closed', bypassing settlement
+     *    entirely (no expected-cash calc, no shortfall debt, ever, for
+     *    real losses on that shift). A double-click/page-refresh calling
+     *    this twice must never destroy settlement data.
+     *  - Already on an active shift of a DIFFERENT type (e.g. clocked in
+     *    as a waiter, now trying to start a receptionist shift): blocked
+     *    outright — silently returning the wrong-typed shift would ignore
+     *    what was actually requested, and silently force-closing it is
+     *    the exact data-destroying bug above. Must end the current shift
+     *    through its own proper flow first.
+     *  - A prior shift is 'awaiting_cashier' (submitted, not yet
+     *    confirmed): blocked outright unless the
+     *    allow_shift_start_with_unsettled setting is on, in which case
+     *    this proceeds and the caller is responsible for showing the
+     *    warning banner (Shift::hasUnsettledFor() is cheap to re-check
+     *    from the UI layer for that).
+     *
+     * @throws \Exception
      */
     public function startShift(): Shift
     {
-        // End any existing active shift first
         if ($currentShift = $this->currentShift()) {
-            $currentShift->update([
-                'ended_at' => now(),
-                'status' => 'closed',
-            ]);
+            $requestedType = $this->shiftTypeFromRole();
+
+            if ($currentShift->type === $requestedType) {
+                return $currentShift;
+            }
+
+            throw new \Exception("You have an active {$currentShift->type} shift — end it before starting a {$requestedType} shift.");
+        }
+
+        if (Shift::hasUnsettledFor($this->id) && ! SettingsService::getBool('allow_shift_start_with_unsettled')) {
+            throw new \Exception('Your last settlement is awaiting cashier confirmation and must be resolved before you can start a new shift.');
         }
 
         return $this->shifts()->create([
@@ -220,7 +249,7 @@ class User extends Authenticatable implements FilamentUser
 
             $shift->update([
                 'ended_at' => $endedAt,
-                'status' => 'pending_supervisor',
+                'status' => 'awaiting_cashier',
                 'declared_cash' => (float) ($orders->paid_cash ?? 0),
                 'declared_pos' => (float) ($orders->paid_pos ?? 0),
             ]);
@@ -254,12 +283,26 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        // Allow super admins unconditionally
+        // Allow super admins unconditionally, on every panel.
         if ($this->hasRole('super_admin')) {
             return true;
         }
 
-        // Allow any user with at least one role
+        // The CEO panel is a separate, read-only surface — only the ceo
+        // role (and super_admin, above) may ever enter it, regardless of
+        // what other roles a user holds.
+        if ($panel->getId() === 'ceo') {
+            return $this->hasRole('ceo');
+        }
+
+        // A ceo-only user must never fall through to the generic "any role"
+        // grant below — that would hand them the operational admin panel,
+        // which the CEO module explicitly must never expose.
+        if ($this->hasRole('ceo')) {
+            return false;
+        }
+
+        // Allow any (non-ceo) user with at least one role.
         if ($this->roles()->exists()) {
             return true;
         }

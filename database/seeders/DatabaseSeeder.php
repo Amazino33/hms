@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             UnitSeeder::class,
             RoomSeeder::class,
             IncidentalPriceListSeeder::class,
+            SettingsSeeder::class,
         ]);
 
         // Never create a known-password admin account or fake demo rows

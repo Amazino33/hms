@@ -42,12 +42,12 @@ class ReceptionistShift extends Page
     /**
      * Not User::currentShift() (whereNull('ended_at')) — once declareEnd()
      * stamps ended_at, that would stop finding the shift at all, and the
-     * page needs to keep showing it while it's pending_supervisor.
+     * page needs to keep showing it while it's awaiting_cashier.
      */
     public function currentShift()
     {
         return auth()->user()?->shifts()
-            ->whereIn('status', ['active', 'pending_supervisor'])
+            ->whereIn('status', ['active', 'awaiting_cashier'])
             ->latest('started_at')
             ->first();
     }

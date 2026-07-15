@@ -9,7 +9,6 @@ use App\Models\Shift;
 use App\Models\StaffDebt;
 use App\Models\User;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class ShiftAccountingService
 {
@@ -40,67 +39,6 @@ class ShiftAccountingService
         ]);
 
         return $debt;
-    }
-
-    /**
-     * Supervisor approves a shift close: freezes server-computed expected
-     * totals against what the supervisor physically confirmed, and — only
-     * on a shortfall — opens a staff debt for the difference. A surplus is
-     * recorded but never generates a (negative) debt.
-     */
-    /**
-     * @throws \Exception
-     */
-    public function applyShiftSettlement(
-        Shift $shift,
-        User $supervisor,
-        float $confirmedCash,
-        float $confirmedPos,
-        ?string $notes = null,
-    ): ?StaffDebt {
-        return DB::transaction(function () use ($shift, $supervisor, $confirmedCash, $confirmedPos, $notes) {
-            // Locked and re-checked inside the transaction — the Filament
-            // action's ->visible() check only hides the button on the
-            // NEXT page load, it doesn't stop a double-click or two
-            // supervisors reviewing the same shift within milliseconds
-            // from both submitting. Without this, both requests could
-            // independently compute the same shortfall and both create a
-            // StaffDebt — charging the waiter twice for one real shortfall.
-            $shift = Shift::query()->lockForUpdate()->findOrFail($shift->id);
-
-            if ($shift->status !== 'pending_supervisor') {
-                throw new \Exception('This shift has already been settled.');
-            }
-
-            $expectedCash = $this->expectedCashRemittance($shift);
-            $expectedPos = $this->expectedPosTotal($shift);
-            $variance = round($confirmedCash - $expectedCash, 2);
-
-            $shift->update([
-                'supervisor_confirmed_cash' => $confirmedCash,
-                'supervisor_confirmed_pos' => $confirmedPos,
-                'expected_cash' => $expectedCash,
-                'expected_pos' => $expectedPos,
-                'cash_variance' => $variance,
-                'surplus_amount' => $variance > 0 ? $variance : 0,
-                'settlement_notes' => $notes,
-                'settled_at' => now(),
-                'status' => 'closed',
-            ]);
-
-            if ($variance < -0.01) {
-                return StaffDebt::create([
-                    'user_id' => $shift->user_id,
-                    'shift_id' => $shift->id,
-                    'amount' => abs($variance),
-                    'reason' => 'shift_shortfall',
-                    'status' => 'open',
-                    'created_by' => $supervisor->id,
-                ]);
-            }
-
-            return null;
-        });
     }
 
     /**
@@ -149,6 +87,24 @@ class ShiftAccountingService
         return (float) $this->shiftPayments($shift)->sum(function (OrderPayment $payment) {
             return match ($payment->method) {
                 'pos', 'transfer' => (float) $payment->amount,
+                'split' => (float) ($payment->order->paid_pos ?? 0),
+                default => 0.0,
+            };
+        });
+    }
+
+    /**
+     * The physical POS terminal's expected batch total specifically —
+     * unlike expectedPosTotal() (which also folds in transfers, for
+     * general reporting), this deliberately excludes transfer payments,
+     * since those never touch the machine and are reconciled one-by-one
+     * in the cashier's transfer queue instead.
+     */
+    public function expectedPosMachineTotal(Shift $shift): float
+    {
+        return (float) $this->shiftPayments($shift)->sum(function (OrderPayment $payment) {
+            return match ($payment->method) {
+                'pos' => (float) $payment->amount,
                 'split' => (float) ($payment->order->paid_pos ?? 0),
                 default => 0.0,
             };
