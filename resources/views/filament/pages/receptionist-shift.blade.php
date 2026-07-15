@@ -43,10 +43,10 @@
         </div>
     @else
         <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-800 max-w-md">
-            <div class="font-bold text-amber-700 dark:text-amber-400">Awaiting supervisor confirmation</div>
+            <div class="font-bold text-amber-700 dark:text-amber-400">Awaiting cashier confirmation</div>
             <p class="text-sm text-amber-800 dark:text-amber-300 mt-1">
                 You declared ₦{{ number_format($shift->declared_cash, 2) }} cash and ₦{{ number_format($shift->declared_pos, 2) }} POS/transfer.
-                A manager or admin needs to confirm this before your shift fully closes.
+                A cashier needs to confirm this (or a supervisor, as fallback) before your shift fully closes.
             </p>
         </div>
     @endif

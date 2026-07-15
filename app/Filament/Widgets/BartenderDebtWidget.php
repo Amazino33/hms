@@ -79,7 +79,7 @@ class BartenderDebtWidget extends BaseWidget
                 ->color($outstanding > 0 ? 'danger' : 'success'),
 
             Stat::make('Pending Shortages', '₦' . number_format($pendingShortages, 2))
-                ->description($pendingCount > 0 ? "{$pendingCount} awaiting manager decision" : 'Nothing pending')
+                ->description($pendingCount > 0 ? "{$pendingCount} awaiting supervisor decision" : 'Nothing pending')
                 ->descriptionIcon($pendingShortages > 0 ? 'heroicon-m-clock' : 'heroicon-m-check-circle')
                 ->color($pendingShortages > 0 ? 'warning' : 'success'),
 

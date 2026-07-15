@@ -465,7 +465,7 @@ class CountSessionDetail extends Page
         try {
             (new CountSessionService())->markUnresolved($item, $this->session->incoming_user_id);
             $this->refreshSession();
-            Notification::make()->title('Marked unresolved — a manager has been notified')->warning()->send();
+            Notification::make()->title('Marked unresolved — a supervisor has been notified')->warning()->send();
         } catch (\Exception $e) {
             Notification::make()->title('Could not mark unresolved')->body($e->getMessage())->danger()->send();
         }
@@ -666,7 +666,7 @@ class CountSessionDetail extends Page
         try {
             (new CountSessionService())->submitForReview($this->session);
             $this->refreshSession();
-            Notification::make()->title('Submitted for manager review')->success()->send();
+            Notification::make()->title('Submitted for supervisor review')->success()->send();
         } catch (\Exception $e) {
             Notification::make()->title('Could not submit')->body($e->getMessage())->danger()->send();
         }

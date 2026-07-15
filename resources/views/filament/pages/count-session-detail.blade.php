@@ -437,7 +437,7 @@
                     @if($session->incoming_user_id && !$session->confirmed_by_incoming_at)
                         <button wire:click="confirmIncoming" class="px-4 py-2 rounded-lg bg-amber-500 text-white font-bold text-sm">Confirm as Incoming Custodian</button>
                     @endif
-                    <button wire:click="submitForReview" wire:confirm="Submit this count for manager review? You cannot add more counts afterwards."
+                    <button wire:click="submitForReview" wire:confirm="Submit this count for supervisor review? You cannot add more counts afterwards."
                         class="px-4 py-2 rounded-lg bg-primary-600 text-white font-bold text-sm">Submit for Review</button>
                 </div>
             @elseif($this->isUnwitnessedSession())
@@ -713,7 +713,7 @@
 
                             <template x-if="current.outcome === 'unresolved'">
                                 <div class="rounded-xl bg-gray-100 dark:bg-gray-800 p-3 text-sm text-gray-600 dark:text-gray-300">
-                                    Marked unresolved — your count is being used, and a manager has been notified.
+                                    Marked unresolved — your count is being used, and a supervisor has been notified.
                                 </div>
                             </template>
 
@@ -797,7 +797,7 @@
                                 </div>
                             @elseif($this->iAmReviewer())
                                 <button wire:click="markItemUnresolved({{ $disputedItem->id }})"
-                                    wire:confirm="Still disagree after recounting? Your figure will be used, and a manager will be notified."
+                                    wire:confirm="Still disagree after recounting? Your figure will be used, and a supervisor will be notified."
                                     class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold">
                                     Still disagree — use my count
                                 </button>
@@ -891,7 +891,7 @@
                 @if($session->isHandoverWithSuccessor() && (float) $session->total_shortage_value > 0)
                     <div class="px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-sm">
                         <span class="font-bold text-red-700 dark:text-red-300">Total shortage: ₦{{ number_format((float) $session->total_shortage_value, 2) }}</span>
-                        <span class="text-red-600 dark:text-red-400 text-xs ml-2">— resolved by a manager via Handover Discrepancies</span>
+                        <span class="text-red-600 dark:text-red-400 text-xs ml-2">— resolved by a supervisor via Handover Discrepancies</span>
                     </div>
                 @endif
 

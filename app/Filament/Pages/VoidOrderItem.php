@@ -30,7 +30,7 @@ class VoidOrderItem extends Page implements HasForms
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-receipt-refund';
     protected static string|UnitEnum|null $navigationGroup = 'Restaurant Management';
     protected static ?string $navigationLabel = 'Void Order Item';
-    protected static ?string $title = 'Void Order Item (Manager Only)';
+    protected static ?string $title = 'Void Order Item (Supervisor Only)';
     protected string $view = 'filament.pages.void-order-item';
 
     public array $data = [];

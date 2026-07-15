@@ -126,7 +126,7 @@
                     @if($paymentMethod === 'transfer')
                         <input type="text" wire:model="paymentReference" placeholder="Transfer reference / sender name"
                             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                        <p class="text-xs text-amber-600">Transfer payments post as pending until a manager verifies the alert.</p>
+                        <p class="text-xs text-amber-600">Transfer payments post as pending until a supervisor verifies the alert.</p>
                     @endif
 
                     <button type="button" wire:click="recordPayment" class="w-full px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
