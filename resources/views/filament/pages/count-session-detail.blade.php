@@ -55,9 +55,13 @@
                     to finish counting{{ $this->isUnwitnessedSession() ? '' : ' and declare' }}.
                 </p>
             </div>
+        @elseif($session->status === 'counting' && $this->isSoloCount() && !$this->iAmCounter())
+            <div class="max-w-md mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center">
+                <p class="text-gray-600 dark:text-gray-300">This count belongs to someone else — only they can count it.</p>
+            </div>
         @endif
 
-        @if($session->status === 'counting' && (!$this->isHandoverWithSuccessor() || $this->iAmCounter()))
+        @if($session->status === 'counting' && $this->iAmCounter())
             {{-- wire:ignore is load-bearing, not decorative: every recordCount()
                  call re-renders the component server-side, and since this
                  element's own x-data attribute embeds @js($this->safeCountItems())
@@ -80,6 +84,8 @@
                     catchStep: false,
                     currentIndex: 0,
                     activeSubLocation: null,
+                    packMode: false,
+                    packEntry: '',
                     saving: false,
                     justSaved: false,
                     saveError: false,
@@ -131,10 +137,24 @@
                         this.finished = false
                         this.currentIndex = idx
                         this.activeSubLocation = this.current?.subLocations?.[0] ?? null
+                        this.packMode = false
+                        this.packEntry = ''
                     },
 
                     selectSlot(loc) {
                         this.activeSubLocation = loc
+                        this.packEntry = ''
+                    },
+
+                    // Pack-mode is a data-entry convenience only, never a
+                    // persisted display mode — current.values always holds
+                    // the true base-unit figure (what recordCount() saves
+                    // and what a reload shows back), so switching modes
+                    // never needs to reverse-engineer a prior pack/remainder
+                    // split, it just starts fresh entry for this slot.
+                    togglePackMode(on) {
+                        this.packMode = on
+                        this.packEntry = ''
                     },
 
                     flash(key) {
@@ -156,6 +176,14 @@
                         if (!this.activeSubLocation || !this.current) return
                         if (d === '.' && this.isIntegerOnly) return
                         this.flash(d)
+                        if (this.packMode) {
+                            const existingPack = (this.packEntry ?? '').toString()
+                            if (d === '.' && existingPack.includes('.')) return
+                            this.packEntry = existingPack + d
+                            const packs = parseFloat(this.packEntry) || 0
+                            this.current.values[this.activeSubLocation] = this.packEntry === '' ? '' : String(packs * this.current.unitsPerPack)
+                            return
+                        }
                         const existing = (this.current.values[this.activeSubLocation] ?? '').toString()
                         if (d === '.' && existing.includes('.')) return
                         this.current.values[this.activeSubLocation] = existing + d
@@ -164,6 +192,12 @@
                     backspace() {
                         if (!this.activeSubLocation || !this.current) return
                         this.flash('back')
+                        if (this.packMode) {
+                            this.packEntry = (this.packEntry ?? '').toString().slice(0, -1)
+                            const packs = parseFloat(this.packEntry) || 0
+                            this.current.values[this.activeSubLocation] = this.packEntry === '' ? '' : String(packs * this.current.unitsPerPack)
+                            return
+                        }
                         const existing = (this.current.values[this.activeSubLocation] ?? '').toString()
                         this.current.values[this.activeSubLocation] = existing.slice(0, -1)
                     },
@@ -222,6 +256,8 @@
                         if (!ok) return
                         this.saveError = false
                         this.pendingDirection = null
+                        this.packMode = false
+                        this.packEntry = ''
                         if (direction === 'next') {
                             if (!this.isLast) {
                                 this.currentIndex++
@@ -355,6 +391,26 @@
                         <!-- Product name -->
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white text-center mb-2 shrink-0" x-text="current.name"></h2>
 
+                        <!-- Pack-conversion toggle: only offered when this product
+                             has a configured purchase unit (crate/pack/carton).
+                             Switching never rewrites what's already on screen —
+                             it only changes what the number pad writes to next. -->
+                        <template x-if="current.unitsPerPack">
+                            <div class="flex items-center justify-center gap-2 mb-2 shrink-0">
+                                <button type="button" @click="togglePackMode(false)"
+                                    :class="!packMode ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-bold touch-manipulation">Base units</button>
+                                <button type="button" @click="togglePackMode(true)"
+                                    :class="packMode ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-bold touch-manipulation">
+                                    <span x-text="current.packLabel || 'Packs'"></span>
+                                </button>
+                                <span x-show="packMode && packEntry" x-cloak class="text-xs text-gray-500 dark:text-gray-400">
+                                    entered: <span x-text="packEntry"></span> <span x-text="current.packLabel || 'pack'"></span> — shown below in base units
+                                </span>
+                            </div>
+                        </template>
+
                         <!-- Sub-location slots: real inputs (keyboard + Tab/Enter on
                              desktop; inputmode="none" suppresses the mobile virtual
                              keyboard so the custom pad below is the only touch input) -->
@@ -429,7 +485,22 @@
                 }
             </script>
 
-            @if(!$this->isHandoverWithSuccessor())
+            @if($this->isSoloCount())
+                {{-- A store count (or any future non-handover session type):
+                     no successor, no witness — closes with a single PIN
+                     confirming the counter's own identity, mirroring the
+                     dual-PIN seal's flush-then-show-keypad shape but with
+                     one signature instead of two. --}}
+                <div class="max-w-md mx-auto mt-4" x-data="{ show: false }">
+                    <button type="button" @click="if (await hmsRequestCountFlush()) show = true" x-show="!show"
+                        class="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-lg font-bold touch-manipulation kiosk-tap kiosk-primary-pulse">
+                        Finish Counting &rarr; Submit
+                    </button>
+                    <div x-show="show" x-cloak>
+                        @include('filament.pages.partials.count-session-solo-submit')
+                    </div>
+                </div>
+            @elseif(!$this->isHandoverWithSuccessor())
                 <div class="flex flex-wrap gap-2 mt-4 max-w-md mx-auto">
                     @if($session->outgoing_user_id && !$session->confirmed_by_outgoing_at)
                         <button wire:click="confirmOutgoing" class="px-4 py-2 rounded-lg bg-amber-500 text-white font-bold text-sm">Confirm as Outgoing Custodian</button>
@@ -888,10 +959,17 @@
                     </a>
                 </div>
 
-                @if($session->isHandoverWithSuccessor() && (float) $session->total_shortage_value > 0)
+                @if((float) $session->total_shortage_value > 0)
                     <div class="px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-sm">
                         <span class="font-bold text-red-700 dark:text-red-300">Total shortage: ₦{{ number_format((float) $session->total_shortage_value, 2) }}</span>
-                        <span class="text-red-600 dark:text-red-400 text-xs ml-2">— resolved by a supervisor via Handover Discrepancies</span>
+                        <span class="text-red-600 dark:text-red-400 text-xs ml-2">— resolved via Handover Discrepancies</span>
+                    </div>
+                @endif
+
+                @if($this->isSoloCount() && (float) $session->total_overage_quantity > 0)
+                    <div class="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-sm">
+                        <span class="font-bold text-amber-700 dark:text-amber-300">Overage found</span>
+                        <span class="text-amber-600 dark:text-amber-400 text-xs ml-2">— pending review via Handover Discrepancies</span>
                     </div>
                 @endif
 
@@ -919,6 +997,8 @@
                                 <td class="px-4 py-2 font-mono">
                                     @if($item->variance < 0 && $item->variance_value !== null)
                                         <span class="text-red-600 font-bold">₦{{ number_format(abs((float) $item->variance_value), 2) }}</span>
+                                    @elseif($item->variance > 0 && $item->discrepancy)
+                                        <span class="text-amber-600 font-bold">₦{{ number_format(abs((float) $item->variance_value), 2) }}</span>
                                     @else
                                         <span class="text-gray-400">—</span>
                                     @endif
@@ -946,13 +1026,15 @@
                                                 'pending_investigation' => 'text-gray-500',
                                                 'debited' => 'text-red-600',
                                                 'written_off' => 'text-green-600',
+                                                'acknowledged' => 'text-green-600',
                                                 default => 'text-gray-500',
                                             } }}">
                                             {{ match($item->discrepancy->status) {
-                                                'pending_resolution' => 'Pending resolution',
+                                                'pending_resolution' => $item->discrepancy->isOverage() ? 'Overage — pending review' : 'Pending resolution',
                                                 'pending_investigation' => 'Pending investigation',
-                                                'debited' => 'Debited to outgoing',
+                                                'debited' => 'Debited',
                                                 'written_off' => 'Written off',
+                                                'acknowledged' => 'Acknowledged',
                                                 default => $item->discrepancy->status,
                                             } }}
                                         </div>

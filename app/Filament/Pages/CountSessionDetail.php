@@ -128,6 +128,13 @@ class CountSessionDetail extends Page
             return [];
         }
 
+        // Pack-conversion entry (crate/pack chips + live base-unit math) is
+        // only offered on a solo count — bar/kitchen handovers count in
+        // whole bottles/portions already and never had this. units_per_
+        // purchase_unit/purchase_unit_name are plain product attributes,
+        // not expected-quantity data, so sending them is no blindness leak.
+        $offerPackEntry = $this->isSoloCount();
+
         return $this->session->items->map(fn ($item) => [
             'id' => $item->id,
             'name' => $item->itemName(),
@@ -135,6 +142,12 @@ class CountSessionDetail extends Page
             'values' => $item->subCounts->pluck('quantity', 'sub_location')
                 ->map(fn ($q) => $q > 0 ? $this->formatQuantity($q) : '')
                 ->all(),
+            'unitsPerPack' => ($offerPackEntry && $item->item_type === 'product')
+                ? $item->product?->units_per_purchase_unit
+                : null,
+            'packLabel' => ($offerPackEntry && $item->item_type === 'product')
+                ? $item->product?->purchase_unit_name
+                : null,
         ])->values()->all();
     }
 
@@ -498,9 +511,48 @@ class CountSessionDetail extends Page
             return false;
         }
 
+        // A solo session (no outgoing AND no incoming — a store stocktake)
+        // has nobody to fall back to but whoever opened it; the
+        // outgoing/incoming branch below would otherwise compare against
+        // incoming_user_id, which is never set for this type at all.
+        if (!$session->isHandover()) {
+            return $session->accountableUserId() === auth()->id();
+        }
+
         return ($session->isUnwitnessed() || $session->outgoing_user_id === null)
             ? $session->incoming_user_id === auth()->id()
             : $session->outgoing_user_id === auth()->id();
+    }
+
+    /**
+     * A solo count has no successor and no witness — main_store_stocktake
+     * today, but written against isHandover() rather than the literal type
+     * so any future non-handover session type gets the same single-PIN
+     * submit path for free.
+     */
+    public function isSoloCount(): bool
+    {
+        return $this->session ? !$this->session->isHandover() : false;
+    }
+
+    /**
+     * Returns whether the submit actually succeeded, same reasoning as
+     * sealAgreement()'s bool return — the PIN screen needs to know whether
+     * to reset itself.
+     */
+    public function submitSoloCount(string $pin): bool
+    {
+        try {
+            (new CountSessionService())->submitSoloCount($this->session, $pin, $this->pinThrottleKey('solo-submit'));
+            $this->refreshSession();
+            Notification::make()->title('Count submitted')->success()->send();
+
+            return true;
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not submit')->body($e->getMessage())->danger()->send();
+
+            return false;
+        }
     }
 
     /**
