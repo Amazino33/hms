@@ -59,6 +59,22 @@ class HandoverDiscrepancy extends Model
     }
 
     /**
+     * An overage row (solo store counts only — a handover never creates
+     * one) has no debtor and nothing to write off; the stock was already
+     * trued up the moment this row was created. Its only real actions are
+     * acknowledge (close it out, nothing wrong) or pend for investigation.
+     */
+    public function isOverage(): bool
+    {
+        return $this->direction === 'overage';
+    }
+
+    public function isShortage(): bool
+    {
+        return $this->direction === 'shortage';
+    }
+
+    /**
      * A pending_investigation line is loudly flagged once it's sat longer
      * than 2 days without a manager coming back to it — see
      * HandoverDiscrepancies::table()'s aging filter/badge.
