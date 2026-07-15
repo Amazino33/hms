@@ -46,7 +46,6 @@ new class extends Component {
 
     // Cash Drop Properties
     public $showCashDropModal = false;
-    public $cashDropReceiverId = null;
     public $cashDropAmount = 0;
     public $cashDropNote = '';
 
@@ -1039,14 +1038,8 @@ new class extends Component {
         Notification::make()->title('Return Request Sent')->body('Awaiting bar/kitchen confirmation before the bill changes.')->success()->send();
     }
 
-    public function getCashDropReceiversProperty()
-    {
-        return \App\Models\User::whereHas('roles', fn ($q) => $q->whereIn('name', ['manager', 'admin', 'super_admin']))->get();
-    }
-
     public function openCashDropModal(): void
     {
-        $this->cashDropReceiverId = null;
         $this->cashDropAmount = 0;
         $this->cashDropNote = '';
         $this->showCashDropModal = true;
@@ -1054,21 +1047,21 @@ new class extends Component {
 
     /**
      * Declares only — nothing about this waiter's expected remittance
-     * changes until the named receiver confirms it from their own login.
+     * changes until a cashier (or supervisor, fallback) confirms it from
+     * the shared drop queue. No named recipient anymore: it routes to
+     * whoever's on duty, not a person the waiter has to pick.
      */
     public function declareCashDrop(): void
     {
         $this->validate([
-            'cashDropReceiverId' => 'required|integer',
             'cashDropAmount' => 'required|numeric|min:0.01',
         ]);
 
         try {
-            $receiver = \App\Models\User::findOrFail($this->cashDropReceiverId);
-            (new \App\Services\CashDropService())->declare(auth()->user(), $receiver, (float) $this->cashDropAmount, $this->cashDropNote ?: null);
+            (new \App\Services\CashDropService())->declare(auth()->user(), (float) $this->cashDropAmount, $this->cashDropNote ?: null);
 
             $this->showCashDropModal = false;
-            Notification::make()->title('Cash Drop Declared')->body("Awaiting {$receiver->name}'s confirmation.")->success()->send();
+            Notification::make()->title('Cash Drop Declared')->body('Awaiting cashier confirmation.')->success()->send();
         } catch (\Exception $e) {
             Notification::make()->title('Could Not Declare Drop')->body($e->getMessage())->danger()->send();
         }
@@ -2700,16 +2693,7 @@ new class extends Component {
                     <button @click="$wire.set('showCashDropModal', false)" class="text-gray-400 hover:text-emerald-500 p-2"><span class="text-2xl">&times;</span></button>
                 </div>
                 <div class="p-6 space-y-4">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Handing Cash To</label>
-                        <select wire:model="cashDropReceiverId" class="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600">
-                            <option value="">Select…</option>
-                            @foreach($this->cashDropReceivers as $receiver)
-                                <option value="{{ $receiver->id }}">{{ $receiver->name }}</option>
-                            @endforeach
-                        </select>
-                        @error('cashDropReceiverId') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
-                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Routes to whichever cashier is on duty — no need to pick a person.</p>
                     <div>
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Amount</label>
                         <input type="number" wire:model="cashDropAmount" min="0.01" step="0.01" class="w-full p-3 text-lg border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600">

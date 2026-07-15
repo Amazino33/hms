@@ -17,8 +17,11 @@ use Filament\Tables\Table;
 use UnitEnum;
 
 /**
- * A manager only ever sees (and can act on) drops declared to THEM
- * specifically — not every drop in the system.
+ * A shared queue, not a per-recipient inbox — a drop used to be declared
+ * to one specific named manager and only that person could ever see or
+ * confirm it. Now it routes to whoever's on duty (cashier, or a
+ * supervisor as fallback): first to act wins the row-lock in
+ * CashDropService::confirm(), no named ownership.
  */
 class PendingCashDrops extends Page implements HasTable
 {
@@ -38,7 +41,7 @@ class PendingCashDrops extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(CashDrop::query()->where('received_by', auth()->id())->with(['waiter', 'shift']))
+            ->query(CashDrop::query()->with(['waiter', 'shift']))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('waiter.name')->label('From'),

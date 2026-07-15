@@ -6,40 +6,36 @@ use App\Models\CashDrop;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Cash drops route to a shared cashier queue, not a waiter-chosen named
+ * recipient — this used to require picking a specific manager, and only
+ * that exact person could ever confirm it (PendingCashDrops scoped every
+ * manager to just their own inbox). Now: any on-duty cashier (or a
+ * supervisor, as fallback) can pick it up from the shared queue and
+ * confirm — first to act wins the row-lock, no named ownership.
+ */
 class CashDropService
 {
-    private const RECEIVER_ROLES = ['manager', 'admin', 'super_admin'];
+    private const RECEIVER_ROLES = ['cashier', 'manager', 'admin', 'super_admin'];
 
     /**
-     * Waiter hands cash to a specific named person and declares the amount.
-     * Nothing about the waiter's expected remittance changes yet — only a
-     * confirmation from that exact person does that.
-     *
      * @throws \Exception
      */
-    public function declare(User $waiter, User $receivedBy, float $amount, ?string $note = null): CashDrop
+    public function declare(User $waiter, float $amount, ?string $note = null): CashDrop
     {
         if ($amount <= 0) {
             throw new \Exception('Amount must be greater than zero.');
         }
 
-        if ($receivedBy->id === $waiter->id) {
-            throw new \Exception('You cannot declare a cash drop to yourself.');
-        }
-
-        if (!$receivedBy->hasRole(self::RECEIVER_ROLES)) {
-            throw new \Exception('The selected person is not able to receive cash drops.');
-        }
-
         $shift = $waiter->currentShift();
 
-        if (!$shift) {
+        if (! $shift) {
             throw new \Exception('You must be on an active shift to drop cash.');
         }
 
         return CashDrop::create([
             'waiter_id' => $waiter->id,
-            'received_by' => $receivedBy->id,
+            'received_by' => null,
             'shift_id' => $shift->id,
             'declared_amount' => $amount,
             'status' => 'pending',
@@ -48,10 +44,12 @@ class CashDropService
     }
 
     /**
-     * Only the exact person the waiter named can confirm — not just any
-     * manager. If what they actually counted differs from the waiter's
-     * declared figure, that gets recorded too rather than silently
-     * overwriting the declaration.
+     * Any eligible role can confirm — whoever actually does becomes the
+     * recorded receiver at this point, not before. If what they counted
+     * differs from the waiter's declared figure, that's recorded too
+     * (the cashier's count is what actually reduces the waiter's expected
+     * cash — see ShiftAccountingService::confirmedDropsTotal()) rather
+     * than silently overwriting the declaration.
      *
      * @throws \Exception
      */
@@ -59,24 +57,16 @@ class CashDropService
     {
         return DB::transaction(function () use ($drop, $confirmingUser, $actualAmount) {
             // Locked + re-checked inside the transaction so two near-
-            // simultaneous confirm clicks can't both observe 'pending' and
-            // both apply — the second waits for the lock, then sees
-            // 'confirmed' and is rejected instead of double-confirming.
+            // simultaneous confirm clicks (two cashiers both tapping the
+            // same queue row) can't both observe 'pending' and both apply.
             $drop = CashDrop::query()->lockForUpdate()->findOrFail($drop->id);
 
-            if (!$drop->isPending()) {
+            if (! $drop->isPending()) {
                 throw new \Exception('This drop has already been confirmed.');
             }
 
-            if ($drop->received_by !== $confirmingUser->id) {
-                throw new \Exception('Only the person this drop was made to can confirm it.');
-            }
-
-            // Re-check the role at confirmation time too, not just at
-            // declaration — a demotion between the two moments must not
-            // leave a stale "still a manager" assumption in place.
-            if (!$confirmingUser->hasRole(self::RECEIVER_ROLES)) {
-                throw new \Exception('You are no longer able to confirm cash drops.');
+            if (! $confirmingUser->hasRole(self::RECEIVER_ROLES)) {
+                throw new \Exception('You are not able to confirm cash drops.');
             }
 
             $confirmedAmount = $actualAmount ?? (float) $drop->declared_amount;
@@ -86,6 +76,7 @@ class CashDropService
             }
 
             $drop->update([
+                'received_by' => $confirmingUser->id,
                 'confirmed_amount' => $confirmedAmount,
                 'status' => 'confirmed',
                 'confirmed_at' => now(),
