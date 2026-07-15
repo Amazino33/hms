@@ -45,7 +45,7 @@ class CashierSettlementsQueue extends Page implements HasTable
             ->defaultSort('ended_at')
             ->columns([
                 TextColumn::make('user.name')->label('Staff'),
-                TextColumn::make('type')->badge()->formatStateUsing(fn (string $s) => ucfirst($s)),
+                TextColumn::make('type')->badge()->formatStateUsing(fn (string $state) => ucfirst($state)),
                 TextColumn::make('ended_at')->label('Ended')->dateTime('M j, g:ia')->sortable(),
                 TextColumn::make('declared_cash')->label('Declared Cash')->money('NGN'),
             ])

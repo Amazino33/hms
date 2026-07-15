@@ -1,6 +1,7 @@
 <?php
 
 use App\Filament\Pages\CashierSessionPage;
+use App\Filament\Pages\CashierSettlementsQueue;
 use App\Filament\Pages\SettlementDetail;
 use App\Filament\Pages\SupervisorDashboard;
 use App\Filament\Pages\TransferQueue;
@@ -65,6 +66,26 @@ it('flags a transfer through the real transfer queue page with a required reason
 
     expect($payment->fresh()->flagged)->toBeTrue();
     expect($payment->fresh()->flag_reason)->toBe('not_found');
+});
+
+/**
+ * Regression: formatStateUsing(fn (string $s) => ...) 500'd in production
+ * the moment a real awaiting_cashier shift existed — Filament resolves
+ * closure params by name, and $s isn't one it recognizes, so every render
+ * of this table threw. No prior test ever actually rendered this page's
+ * table with a row in it, so it shipped. Fixed to $state; this pins the
+ * table actually rendering end to end with real data present.
+ */
+it('renders the cashier settlements queue with an awaiting-cashier shift in it, without erroring', function () {
+    $waiter = User::factory()->create();
+    Shift::create([
+        'user_id' => $waiter->id, 'type' => 'waiter',
+        'started_at' => now()->subHours(9), 'ended_at' => now(),
+        'status' => 'awaiting_cashier', 'declared_cash' => 5000, 'declared_pos' => 0,
+    ]);
+    $cashier = actingCashier3();
+
+    Livewire::actingAs($cashier)->test(CashierSettlementsQueue::class)->assertOk();
 });
 
 it('never exposes the staff-declared cash figure on the settlement page before the cashier confirms', function () {
