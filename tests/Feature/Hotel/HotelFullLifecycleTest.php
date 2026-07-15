@@ -8,6 +8,7 @@ use App\Models\Shift;
 use App\Models\User;
 use App\Models\WareHouse;
 use App\Services\BookingService;
+use App\Services\CashierSettlementService;
 use App\Services\FolioService;
 use App\Services\InventoryService;
 use App\Services\PorterDeliveryService;
@@ -90,15 +91,17 @@ it('walks one guest through reservation, stay, room order, and checkout, with a 
     expect(fn () => (new FolioService())->postIncidental($booking->folio->fresh(), 'Late fee', 100, $receptionist->id))
         ->toThrow(Exception::class);
 
-    // ── 8. Receptionist closes their shift; cash reconciles clean ──────
+    // ── 8. Receptionist closes their shift; cashier confirms clean ─────
     // Expected cash = 5000 float + 3000 deposit + (outstanding settlement, which was cash).
     $expectedCash = (new ReceptionistShiftService())->expectedCashRemittance($shift->fresh());
     expect($expectedCash)->toBe(5000.0 + 3000.0 + $outstanding);
 
     (new ReceptionistShiftService())->declareEnd($shift->fresh(), $expectedCash, 0);
-    $manager = User::factory()->create();
-    $debt = (new ReceptionistShiftService())->applyShiftSettlement($shift->fresh(), $manager, $expectedCash, 0, null);
+    $cashier = User::factory()->create();
+    $settlement = new CashierSettlementService();
+    $settlement->confirmCash($shift->fresh(), $expectedCash, $cashier->id);
+    $confirmed = $settlement->confirmPos($shift->fresh(), 0, $cashier->id);
 
-    expect($debt)->toBeNull(); // declared exactly what was expected — no shortfall
-    expect($shift->fresh()->status)->toBe('closed');
+    expect(\App\Models\StaffDebt::where('shift_id', $shift->id)->exists())->toBeFalse(); // declared exactly what was expected — no shortfall
+    expect($confirmed->status)->toBe('confirmed');
 });

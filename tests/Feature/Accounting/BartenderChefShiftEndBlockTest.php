@@ -36,7 +36,7 @@ it('still allows a waiter to end their shift through the generic control, unaffe
 
     $ended = $waiter->endShift();
 
-    expect($ended->status)->toBe('pending_supervisor');
+    expect($ended->status)->toBe('awaiting_cashier');
 });
 
 it('still ends a bartender shift correctly through the dedicated handover-confirmation flow', function () {
