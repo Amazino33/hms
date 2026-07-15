@@ -243,7 +243,7 @@ class PagePermissionsSeeder extends Seeder
                 'role_name' => 'manager',
             ],
 
-            // My Handover History - Bartenders and Chefs (own sessions only)
+            // My Handover History - Bartenders, Chefs, and Storekeeper (own sessions only)
             [
                 'page_class' => 'App\Filament\Pages\MyHandoverHistory',
                 'page_name' => 'My Handover History',
@@ -257,6 +257,62 @@ class PagePermissionsSeeder extends Seeder
             [
                 'page_class' => 'App\Filament\Pages\MyHandoverHistory',
                 'page_name' => 'My Handover History',
+                'role_name' => 'chef',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyHandoverHistory',
+                'page_name' => 'My Handover History',
+                'role_name' => 'storekeeper',
+            ],
+
+            // My Store Count - Storekeeper's solo count entry point
+            [
+                'page_class' => 'App\Filament\Pages\MyStoreCount',
+                'page_name' => 'My Store Count',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyStoreCount',
+                'page_name' => 'My Store Count',
+                'role_name' => 'storekeeper',
+            ],
+
+            // Count Session Detail - reached via MyCount/MyStoreCount's own
+            // redirect, same reasoning as MyCount's own canAccess() docblock:
+            // this page checks its own permission, not CountSessions'.
+            [
+                'page_class' => 'App\Filament\Pages\CountSessionDetail',
+                'page_name' => 'Count Session Detail',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\CountSessionDetail',
+                'page_name' => 'Count Session Detail',
+                'role_name' => 'bartender',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\CountSessionDetail',
+                'page_name' => 'Count Session Detail',
+                'role_name' => 'chef',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\CountSessionDetail',
+                'page_name' => 'Count Session Detail',
+                'role_name' => 'storekeeper',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyCount',
+                'page_name' => 'My Handover Count',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyCount',
+                'page_name' => 'My Handover Count',
+                'role_name' => 'bartender',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyCount',
+                'page_name' => 'My Handover Count',
                 'role_name' => 'chef',
             ],
 
