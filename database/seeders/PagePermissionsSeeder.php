@@ -327,7 +327,7 @@ class PagePermissionsSeeder extends Seeder
                 'role_name' => 'receptionist',
             ],
 
-            // Transfer Verification (hotel folio payments) - Managers, Super Admin
+            // Transfer Verification (hotel folio payments) - Managers, Super Admin, Cashiers
             [
                 'page_class' => 'App\Filament\Pages\TransferVerification',
                 'page_name' => 'Transfer Verification',
@@ -337,6 +337,11 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\TransferVerification',
                 'page_name' => 'Transfer Verification',
                 'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\TransferVerification',
+                'page_name' => 'Transfer Verification',
+                'role_name' => 'cashier',
             ],
 
             // Room Order - Receptionists, Managers, Super Admin
@@ -400,6 +405,95 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\RoomBoard',
                 'page_name' => 'Room Board',
                 'role_name' => 'receptionist',
+            ],
+
+            // Transfer Queue (POS transfer payments) - Cashiers, Managers, Super Admin
+            [
+                'page_class' => 'App\Filament\Pages\TransferQueue',
+                'page_name' => 'Transfer Queue',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\TransferQueue',
+                'page_name' => 'Transfer Queue',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\TransferQueue',
+                'page_name' => 'Transfer Queue',
+                'role_name' => 'cashier',
+            ],
+
+            // Settlement Detail (shared cashier confirm / supervisor fallback)
+            [
+                'page_class' => 'App\Filament\Pages\SettlementDetail',
+                'page_name' => 'Settlement Detail',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\SettlementDetail',
+                'page_name' => 'Settlement Detail',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\SettlementDetail',
+                'page_name' => 'Settlement Detail',
+                'role_name' => 'cashier',
+            ],
+
+            // My Session (cashier's own custody-chain session)
+            [
+                'page_class' => 'App\Filament\Pages\CashierSessionPage',
+                'page_name' => 'My Session',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\CashierSessionPage',
+                'page_name' => 'My Session',
+                'role_name' => 'cashier',
+            ],
+
+            // Settlements (cashier's own queue)
+            [
+                'page_class' => 'App\Filament\Pages\CashierSettlementsQueue',
+                'page_name' => 'Settlements',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\CashierSettlementsQueue',
+                'page_name' => 'Settlements',
+                'role_name' => 'cashier',
+            ],
+
+            // Supervisor Dashboard - Managers, Super Admin only (not cashier)
+            [
+                'page_class' => 'App\Filament\Pages\SupervisorDashboard',
+                'page_name' => 'Supervisor Dashboard',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\SupervisorDashboard',
+                'page_name' => 'Supervisor Dashboard',
+                'role_name' => 'manager',
+            ],
+
+            // Cash Drops - Cashiers, Managers, Super Admin (previously had
+            // no seeded grants at all — a pre-existing gap this touches
+            // incidentally while making the page cashier-primary)
+            [
+                'page_class' => 'App\Filament\Pages\PendingCashDrops',
+                'page_name' => 'Cash Drops',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PendingCashDrops',
+                'page_name' => 'Cash Drops',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PendingCashDrops',
+                'page_name' => 'Cash Drops',
+                'role_name' => 'cashier',
             ],
         ];
 
