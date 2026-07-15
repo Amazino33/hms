@@ -3,17 +3,20 @@
 namespace App\Filament\Resources\ShiftManagement\Tables;
 
 use App\Models\Shift;
-use App\Services\ReceptionistShiftService;
-use App\Services\ShiftAccountingService;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
+/**
+ * The old single-step "Review & Confirm" action lived here — a supervisor
+ * confirming and closing a shift in one click. Removed: the cashier is
+ * now the primary confirmer for every settlement (CashierSettlementService),
+ * channel by channel, and no settlement closes without her. A supervisor's
+ * remaining settlement powers (fallback confirmation, flag rulings) use
+ * the identical confirmation screen the cashier uses — linked below —
+ * rather than a separate one-shot form.
+ */
 class ShiftManagementTable
 {
     public static function configure(Table $table): Table
@@ -21,9 +24,12 @@ class ShiftManagementTable
         return $table
             ->columns([
                 TextColumn::make('user.name')
-                    ->label('Waiter')
+                    ->label('Staff')
                     ->sortable()
                     ->searchable(),
+                TextColumn::make('type')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => ucfirst($state)),
                 TextColumn::make('started_at')
                     ->label('Shift Date')
                     ->dateTime('M d, Y g:i A')
@@ -32,12 +38,12 @@ class ShiftManagementTable
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'active' => 'info',
-                        'pending_supervisor' => 'warning',
-                        'closed' => 'success',
+                        'awaiting_cashier' => 'warning',
+                        'confirmed' => 'success',
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'pending_supervisor' => 'Pending Supervisor',
+                        'awaiting_cashier' => 'Awaiting Cashier',
                         default => ucfirst(str_replace('_', ' ', $state)),
                     }),
                 TextColumn::make('declared_cash')
@@ -45,8 +51,8 @@ class ShiftManagementTable
                     ->money('NGN')
                     ->sortable()
                     ->placeholder('—'),
-                TextColumn::make('declared_pos')
-                    ->label('Declared POS')
+                TextColumn::make('cashier_counted_cash')
+                    ->label('Cashier-Counted Cash')
                     ->money('NGN')
                     ->sortable()
                     ->placeholder('—'),
@@ -66,76 +72,17 @@ class ShiftManagementTable
                 SelectFilter::make('status')
                     ->options([
                         'active' => 'Active',
-                        'pending_supervisor' => 'Pending Supervisor',
-                        'closed' => 'Closed',
+                        'awaiting_cashier' => 'Awaiting Cashier',
+                        'confirmed' => 'Confirmed',
                     ]),
             ])
             ->recordActions([
-                Action::make('reviewShift')
-                    ->label('Review & Confirm')
+                Action::make('viewSettlement')
+                    ->label('View / Confirm')
                     ->color('primary')
                     ->icon('heroicon-o-check-badge')
-                    ->visible(fn (Shift $record): bool => $record->status === 'pending_supervisor'
-                        && auth()->user()->hasRole(['manager', 'admin', 'super_admin']))
-                    ->authorize(fn (): bool => auth()->user()->hasRole(['manager', 'admin', 'super_admin']))
-                    ->form(function (Shift $record): array {
-                        // Receptionist shifts have their own settlement math
-                        // (a till float baseline, folio payments instead of
-                        // orders) — ShiftAccountingService itself, and the
-                        // waiter/bartender/chef path below, are untouched.
-                        $service = $record->type === 'receptionist' ? new ReceptionistShiftService() : new ShiftAccountingService();
-                        $expectedCash = $service->expectedCashRemittance($record);
-                        $expectedPos = $service->expectedPosTotal($record);
-
-                        return [
-                            Placeholder::make('expected_summary')
-                                ->label('System-computed expectations')
-                                ->content("Expected cash: ₦" . number_format($expectedCash, 2) . " · Expected POS: ₦" . number_format($expectedPos, 2)),
-                            TextInput::make('supervisor_confirmed_cash')
-                                ->label('Supervisor Confirmed Cash')
-                                ->numeric()
-                                ->required()
-                                ->minValue(0)
-                                ->default($record->declared_cash),
-                            TextInput::make('supervisor_confirmed_pos')
-                                ->label('Supervisor Confirmed POS')
-                                ->numeric()
-                                ->required()
-                                ->minValue(0)
-                                ->default($record->declared_pos),
-                            Textarea::make('settlement_notes')
-                                ->label('Notes')
-                                ->columnSpanFull(),
-                        ];
-                    })
-                    ->action(function (Shift $record, array $data): void {
-                        try {
-                            $service = $record->type === 'receptionist' ? new ReceptionistShiftService() : new ShiftAccountingService();
-                            $debt = $service->applyShiftSettlement(
-                                $record,
-                                auth()->user(),
-                                (float) $data['supervisor_confirmed_cash'],
-                                (float) $data['supervisor_confirmed_pos'],
-                                $data['settlement_notes'] ?? null,
-                            );
-                        } catch (\Exception $e) {
-                            Notification::make()->title('Could not close shift')->body($e->getMessage())->danger()->send();
-                            return;
-                        }
-
-                        if ($debt) {
-                            Notification::make()
-                                ->title('Shift closed with a shortfall')
-                                ->body('₦' . number_format($debt->amount, 2) . ' recorded as a staff debt for ' . $record->user->name)
-                                ->warning()
-                                ->send();
-                        } else {
-                            Notification::make()
-                                ->title('Shift closed')
-                                ->success()
-                                ->send();
-                        }
-                    }),
+                    ->visible(fn (Shift $record): bool => $record->status === 'awaiting_cashier')
+                    ->url(fn (Shift $record): string => '/admin/settlement?shift=' . $record->id),
             ]);
     }
 }

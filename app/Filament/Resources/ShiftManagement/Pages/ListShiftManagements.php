@@ -22,10 +22,13 @@ class ListShiftManagements extends ListRecords
     {
         return [
             'All' => Tab::make(),
-            'Requires Review' => Tab::make()
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'pending_supervisor')),
+            'Awaiting Cashier' => Tab::make()
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'awaiting_cashier')),
+            // Bartender/chef shifts never reach 'awaiting_cashier' (their
+            // dual-PIN handover seal writes 'closed' directly) — both
+            // terminal strings count as done here.
             'Completed' => Tab::make()
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'closed')),
+                ->modifyQueryUsing(fn (Builder $query) => $query->whereIn('status', ['confirmed', 'closed'])),
         ];
     }
 }
