@@ -232,5 +232,7 @@ it('wires the Declare and Seal buttons to flush a pending edit before opening', 
     expect($view)->toContain("window.addEventListener('request-count-flush'");
     expect($view)->toContain("window.dispatchEvent(new CustomEvent('count-flush-result'");
     expect($view)->toContain('async flushPendingEdit()');
-    expect(substr_count($view, '@click="if (await hmsRequestCountFlush()) show = true"'))->toBe(2);
+    // 3, not 2: the unwitnessed-seal and declare-flow buttons, plus the
+    // solo store-count's single-PIN submit button added alongside them.
+    expect(substr_count($view, '@click="if (await hmsRequestCountFlush()) show = true"'))->toBe(3);
 });
