@@ -279,6 +279,18 @@ class CountSessionService
             }
         }
 
+        // A solo count (no successor at all — e.g. a store stocktake) has
+        // nobody else to defer to: whoever opened it is the counter, full
+        // stop. Without this, anyone who could reach the page at all could
+        // write over someone else's in-progress solo count.
+        if ($callerUserId !== null && !$session->isHandover()) {
+            $expectedCounterId = $session->accountableUserId();
+
+            if ($expectedCounterId !== null && $callerUserId !== $expectedCounterId) {
+                throw new \Exception('Only the person who opened this count can record it.');
+            }
+        }
+
         $validLocations = $item->subCounts()->pluck('sub_location')->all();
 
         $this->assertIntegerCounts($session, $quantitiesBySubLocation);
@@ -695,67 +707,10 @@ class CountSessionService
                 $session->update(['witness_user_id' => $firstUser->id]);
             }
 
-            $totalShortageValue = 0.0;
-            $totalOverageQuantity = 0.0;
-
-            foreach ($session->items as $item) {
-                $review = $item->review;
-
-                $finalQuantity = ($review && $review->isUnresolved())
-                    ? (float) array_sum($review->incoming_quantities ?? [])
-                    : (float) ($item->counted_quantity ?? 0);
-
-                $currentQty = $item->item_type === 'product'
-                    ? (float) (InventoryItem::where('product_id', $item->product_id)->where('warehouse_id', $session->warehouse_id)->value('quantity') ?? 0)
-                    : (float) (IngredientInventoryItem::where('ingredient_id', $item->ingredient_id)->where('warehouse_id', $session->warehouse_id)->value('quantity') ?? 0);
-
-                $variance = $finalQuantity - $currentQty;
-
-                // Frozen here, at seal time, from the exact same price source
-                // chargeAccountability() always used — never recomputed from
-                // a live price afterward, so a later price change can't alter
-                // this session's historic naira figures.
-                $unitPrice = $this->unitSellingPrice($item);
-                $varianceValue = round($variance * $unitPrice, 2);
-
-                $item->update([
-                    'adjusted_expected_quantity' => $currentQty,
-                    'counted_quantity' => $finalQuantity,
-                    'variance' => $variance,
-                    'unit_selling_price' => $unitPrice,
-                    'variance_value' => $varianceValue,
-                ]);
-
-                if (abs($variance) > 0.0001) {
-                    $this->trueUpStock($item, $variance, $secondUser->id);
-
-                    if ($variance < 0) {
-                        // No StaffDebt yet — the manager decides what happens
-                        // to each shortage afterward (recount / debit / pend
-                        // / write off) via the HandoverDiscrepancies queue.
-                        // The dual-PIN seal never gates on that decision.
-                        HandoverDiscrepancy::create([
-                            'count_session_item_id' => $item->id,
-                            'shortfall_quantity' => abs($variance),
-                            'unit_price' => $unitPrice,
-                            'naira_value' => abs($varianceValue),
-                            'status' => 'pending_resolution',
-                        ]);
-                        $totalShortageValue += abs($varianceValue);
-                        $item->update(['decision' => 'accountability']);
-                    } else {
-                        $totalOverageQuantity += $variance;
-                        $item->update(['decision' => 'true_up']);
-                    }
-                }
-            }
-
-            $session->update([
-                'status' => 'reviewed',
-                'reviewed_at' => now(),
-                'total_shortage_value' => $totalShortageValue,
-                'total_overage_quantity' => $totalOverageQuantity,
-            ]);
+            // trackOverages: false — unchanged from the original behavior
+            // here, an overage never gets a discrepancy row for a handover,
+            // only the session-level total_overage_quantity.
+            $session = $this->closeSessionAndReconcile($session, $secondUser->id, trackOverages: false);
 
             (new BartenderChefShiftService())->completeHandoverBoundary($session->fresh());
 
@@ -770,6 +725,174 @@ class CountSessionService
 
             return $session->fresh();
         });
+    }
+
+    /**
+     * The reconciliation core shared by the dual-PIN handover seal and the
+     * solo store-count submit: freeze each item's expected/counted/
+     * variance against LIVE stock, true up the book to match, and move the
+     * session straight to 'reviewed' — there is nothing left at the
+     * session level once every line is trued up, only the discrepancy rows
+     * this creates (if any) are still open for a manager/super-admin to
+     * rule on. Never creates a StaffDebt itself; that only happens later,
+     * on a resolution decision.
+     *
+     * A shortage always creates a HandoverDiscrepancy — unchanged from the
+     * original handover-only behavior. An overage only creates one when
+     * $trackOverages is true: a handover keeps its original behavior
+     * (rolled into total_overage_quantity only, no row, no approval step),
+     * while a solo count treats an overage the same way a shortage is
+     * treated — nobody but the counter ever saw this session while it was
+     * blind, so a surplus deserves the same look a shortfall gets.
+     */
+    private function closeSessionAndReconcile(CountSession $session, int $actingUserId, bool $trackOverages): CountSession
+    {
+        $totalShortageValue = 0.0;
+        $totalOverageQuantity = 0.0;
+
+        foreach ($session->items as $item) {
+            $review = $item->review;
+
+            $finalQuantity = ($review && $review->isUnresolved())
+                ? (float) array_sum($review->incoming_quantities ?? [])
+                : (float) ($item->counted_quantity ?? 0);
+
+            $currentQty = $item->item_type === 'product'
+                ? (float) (InventoryItem::where('product_id', $item->product_id)->where('warehouse_id', $session->warehouse_id)->value('quantity') ?? 0)
+                : (float) (IngredientInventoryItem::where('ingredient_id', $item->ingredient_id)->where('warehouse_id', $session->warehouse_id)->value('quantity') ?? 0);
+
+            $variance = $finalQuantity - $currentQty;
+
+            // Frozen here, at close time, from the exact same price source
+            // chargeAccountability() always used — never recomputed from a
+            // live price afterward, so a later price change can't alter
+            // this session's historic naira figures.
+            $unitPrice = $this->unitSellingPrice($item);
+            $varianceValue = round($variance * $unitPrice, 2);
+
+            $item->update([
+                'adjusted_expected_quantity' => $currentQty,
+                'counted_quantity' => $finalQuantity,
+                'variance' => $variance,
+                'unit_selling_price' => $unitPrice,
+                'variance_value' => $varianceValue,
+            ]);
+
+            if (abs($variance) > 0.0001) {
+                $this->trueUpStock($item, $variance, $actingUserId);
+
+                if ($variance < 0) {
+                    // No StaffDebt yet — the manager/super-admin decides what
+                    // happens to each shortage afterward (recount / debit /
+                    // pend / write off) via the HandoverDiscrepancies queue.
+                    // Closing never gates on that decision.
+                    HandoverDiscrepancy::create([
+                        'count_session_item_id' => $item->id,
+                        'direction' => 'shortage',
+                        'shortfall_quantity' => abs($variance),
+                        'unit_price' => $unitPrice,
+                        'naira_value' => abs($varianceValue),
+                        'status' => 'pending_resolution',
+                    ]);
+                    $totalShortageValue += abs($varianceValue);
+                    $item->update(['decision' => 'accountability']);
+                } else {
+                    $totalOverageQuantity += $variance;
+
+                    if ($trackOverages) {
+                        HandoverDiscrepancy::create([
+                            'count_session_item_id' => $item->id,
+                            'direction' => 'overage',
+                            'shortfall_quantity' => abs($variance),
+                            'unit_price' => $unitPrice,
+                            'naira_value' => abs($varianceValue),
+                            'status' => 'pending_resolution',
+                        ]);
+                    }
+
+                    $item->update(['decision' => 'true_up']);
+                }
+            }
+        }
+
+        $session->update([
+            'status' => 'reviewed',
+            'reviewed_at' => now(),
+            'total_shortage_value' => $totalShortageValue,
+            'total_overage_quantity' => $totalOverageQuantity,
+        ]);
+
+        return $session->fresh();
+    }
+
+    /**
+     * The storekeeper's single-PIN close: same reconciliation shape as the
+     * dual-PIN handover seal (closeSessionAndReconcile()), but signed by
+     * one person — whoever actually did the counting (accountableUserId(),
+     * which for a solo session with no outgoing custodian is opened_by) —
+     * instead of two, and tracking overages the same way shortages already
+     * are, per closeSessionAndReconcile()'s $trackOverages.
+     */
+    public function submitSoloCount(CountSession $session, string $pin, string $throttleKey): CountSession
+    {
+        if ($session->isHandover()) {
+            throw new \Exception('A handover count is submitted through the dual-PIN seal, not this.');
+        }
+
+        if (!$session->isDraft()) {
+            throw new \Exception('This count has already been submitted.');
+        }
+
+        $expectedUserId = $session->accountableUserId();
+
+        if (!$expectedUserId) {
+            throw new \Exception('This session has nobody recorded as the counter to confirm against.');
+        }
+
+        $pinAuth = new PinAuthService();
+        $user = $pinAuth->attempt($pin, $throttleKey);
+
+        if (!$user || $user->id !== $expectedUserId) {
+            throw new \Exception('That PIN does not match the person who counted.');
+        }
+
+        return DB::transaction(function () use ($session, $user) {
+            $session = $this->closeSessionAndReconcile($session, $user->id, trackOverages: true);
+
+            activity('count_session')
+                ->performedOn($session)
+                ->withProperties(['submitted_by' => $user->id, 'solo' => true])
+                ->log('Solo count submitted and sealed');
+
+            return $session;
+        });
+    }
+
+    /**
+     * The super-admin/manager's ruling on an overage line: nothing was
+     * lost, there's no debtor and nothing to write off (the stock was
+     * already trued up the moment this row was created), so the only real
+     * decision is "nothing wrong here" — this closes it out the same way
+     * debitDiscrepancy()/writeOffDiscrepancy() close a shortage, just
+     * without either of their side effects.
+     */
+    public function acknowledgeOverage(HandoverDiscrepancy $discrepancy, int $userId): HandoverDiscrepancy
+    {
+        if (!$discrepancy->isOverage()) {
+            throw new \Exception('Only an overage line is acknowledged this way — a shortage needs a debit or write-off decision.');
+        }
+
+        if (!$discrepancy->isOpen()) {
+            throw new \Exception('This line has already been resolved.');
+        }
+
+        $discrepancy->update([
+            'status' => 'acknowledged',
+            'resolved_by' => $userId,
+            'resolved_at' => now(),
+        ]);
+
+        return $discrepancy->fresh();
     }
 
     /**
@@ -1084,6 +1207,10 @@ class CountSessionService
 
     public function debitDiscrepancy(HandoverDiscrepancy $discrepancy, int $managerId): HandoverDiscrepancy
     {
+        if ($discrepancy->isOverage()) {
+            throw new \Exception('An overage has no debtor — use acknowledge or pend investigation instead.');
+        }
+
         if (!$discrepancy->isOpen()) {
             throw new \Exception('This discrepancy has already been resolved.');
         }
@@ -1136,6 +1263,10 @@ class CountSessionService
 
     public function writeOffDiscrepancy(HandoverDiscrepancy $discrepancy, string $reason, int $managerId): HandoverDiscrepancy
     {
+        if ($discrepancy->isOverage()) {
+            throw new \Exception('An overage has nothing to write off — use acknowledge or pend investigation instead.');
+        }
+
         if (!$discrepancy->isOpen()) {
             throw new \Exception('This discrepancy has already been resolved.');
         }
