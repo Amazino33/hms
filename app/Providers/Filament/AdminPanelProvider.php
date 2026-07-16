@@ -34,7 +34,13 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->globalSearch(false)
             ->databaseNotifications()
-            ->databaseNotificationsPolling('5s')
+            // Every logged-in user pays this cost on every page, regardless
+            // of what they're doing — on a hosting plan with a hard cap on
+            // simultaneous PHP processes, 5s here was a much bigger
+            // contributor to hitting that ceiling than any single
+            // page's own polling. A notification badge doesn't need
+            // near-instant refresh the way a live kitchen/bar display does.
+            ->databaseNotificationsPolling('20s')
             ->colors([
                 'primary' => '#E5353A',
             ])

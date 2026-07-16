@@ -1,6 +1,6 @@
 <x-filament-panels::page>
-    <div wire:poll.5s class="mb-6 flex justify-end">
-        <a href="{{ \App\Filament\Pages\MyHistory::getUrl() }}" 
+    <div class="mb-6 flex justify-end">
+        <a href="{{ \App\Filament\Pages\MyHistory::getUrl() }}"
            class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
             <x-heroicon-o-clock class="w-4 h-4 mr-2"/>
             View Full History

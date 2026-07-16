@@ -8,9 +8,9 @@
         // scans rendered HTML for the real page's closing body tag to
         // insert into) matched THAT occurrence instead, splicing a script
         // tag into the middle of this one and breaking it \u2014 this page's
-        // wire:poll.1s made it especially exposed. Avoiding that literal
-        // tag text entirely removes the hazard regardless of the exact
-        // injection mechanism.
+        // frequent wire:poll re-renders made it especially exposed. Avoiding
+        // that literal tag text entirely removes the hazard regardless of
+        // the exact injection mechanism.
         window.printPOSBill = function (d) {
             const win = window.open('', '_blank', 'width=440,height=680,scrollbars=yes,resizable=yes');
             if (!win) { alert('Please allow pop-ups to print the bill.'); return; }
@@ -75,7 +75,7 @@
     </script>
     @endscript
 
-    <div wire:poll.1s>
+    <div wire:poll.5s>
         <!-- Page Header -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 md:p-4 mx-3 md:mx-6 my-4 md:my-6 mb-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
