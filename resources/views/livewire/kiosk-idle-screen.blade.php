@@ -197,8 +197,8 @@ new class extends Component {
                         this.submitting = true
                         // finally, not just then(): a genuine network/419/500
                         // failure here used to leave submitting=true forever,
-                        // permanently covering the pad behind the "Logging
-                        // in…" overlay with no way out but a hard reload —
+                        // permanently covering the pad behind the 'Logging
+                        // in…' overlay with no way out but a hard reload —
                         // the global request-failure handler now also shows
                         // a visible banner/toast for the same failure, but
                         // that alone doesn't unstick this component's own
