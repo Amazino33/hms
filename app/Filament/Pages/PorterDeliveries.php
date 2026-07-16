@@ -52,7 +52,7 @@ class PorterDeliveries extends Page
 
             Notification::make()->title('Order picked up')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not pick up')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not pick up')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -63,7 +63,7 @@ class PorterDeliveries extends Page
 
             Notification::make()->title('Delivery confirmed')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not confirm delivery')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not confirm delivery')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 }

@@ -16,7 +16,7 @@
                                     <li>{{ $item->quantity }}x {{ $item->product_name }}</li>
                                 @endforeach
                             </ul>
-                            <button type="button" wire:click="pickUp({{ $order->id }})" class="w-full px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm">
+                            <button type="button" wire:click="pickUp({{ $order->id }})" class="w-full min-h-[48px] px-3 py-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm touch-manipulation">
                                 Pick Up
                             </button>
                         </div>
@@ -42,7 +42,7 @@
                                     <li>{{ $item->quantity }}x {{ $item->product_name }}</li>
                                 @endforeach
                             </ul>
-                            <button type="button" wire:click="confirmDelivered({{ $order->id }})" class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm">
+                            <button type="button" wire:click="confirmDelivered({{ $order->id }})" class="w-full min-h-[48px] px-3 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm touch-manipulation">
                                 Confirm Delivered
                             </button>
                         </div>

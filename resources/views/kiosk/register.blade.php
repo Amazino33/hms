@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Register This Device</title>
     @vite(['resources/css/app.css'])
 </head>
@@ -22,14 +22,14 @@
             <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Device Name</label>
                 <input type="text" name="device_name" value="{{ old('device_name') }}" placeholder="e.g. Bar Kiosk 1"
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg" required>
+                    class="w-full min-h-[48px] px-4 py-3 border border-gray-300 rounded-lg text-lg touch-manipulation" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Registration Code</label>
                 <input type="text" name="code" placeholder="ABCD1234" autocapitalize="characters"
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg uppercase tracking-widest" required>
+                    class="w-full min-h-[48px] px-4 py-3 border border-gray-300 rounded-lg text-lg uppercase tracking-widest touch-manipulation" required>
             </div>
-            <button type="submit" class="w-full py-3 bg-primary-600 text-white font-bold rounded-lg text-lg">
+            <button type="submit" class="w-full min-h-[48px] py-3 bg-primary-600 text-white font-bold rounded-lg text-lg touch-manipulation">
                 Register Device
             </button>
         </form>

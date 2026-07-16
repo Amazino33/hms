@@ -6,6 +6,7 @@ use App\Filament\Resources\Warehouses\Pages\CreateWarehouse;
 use App\Filament\Resources\Warehouses\Pages\EditWarehouse;
 use App\Filament\Resources\Warehouses\Pages\ListWarehouses;
 use App\Models\WareHouse;
+use App\Services\UserFeedback;
 use BackedEnum;
 use UnitEnum;
 use Filament\Resources\Resource;
@@ -110,7 +111,15 @@ class WarehouseResource extends Resource
                     ->label('Delete')
                     ->icon('heroicon-o-trash')
                     ->color('danger')
-                    ->action(fn (WareHouse $record) => $record->delete()),
+                    ->action(function (WareHouse $record) {
+                        try {
+                            $record->delete();
+                            UserFeedback::succeeded('Warehouse deleted');
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::blocked('Cannot delete warehouse', 'This warehouse still has stock or transfer records on it. Clear its inventory first.');
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkAction::make('delete')
@@ -118,7 +127,15 @@ class WarehouseResource extends Resource
                     ->label('Delete Selected')
                     ->requiresConfirmation()
                     ->color('danger')
-                    ->action(fn (array $records) => WareHouse::whereIn('id', $records)->delete()),
+                    ->action(function (array $records) {
+                        try {
+                            $count = WareHouse::whereIn('id', $records)->delete();
+                            UserFeedback::succeeded("{$count} warehouse(s) deleted");
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::blocked('Could not delete', 'One or more selected warehouses still have stock or transfer records on them.');
+                        }
+                    }),
             ]);
     }   
 

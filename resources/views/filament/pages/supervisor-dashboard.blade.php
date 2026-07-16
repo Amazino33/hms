@@ -81,16 +81,16 @@
 
     @if($closingSessionId)
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" wire:click.self="$set('closingSessionId', null)">
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md space-y-4">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md space-y-4"
+                x-data="{ supervisorCountedCash: @entangle('supervisorCountedCash') }">
                 <h3 class="font-bold text-lg text-gray-900 dark:text-white">Confirm cashier close-out</h3>
                 <p class="text-xs text-gray-500">Count the physical cash yourself before entering a figure — her declared closing amount is not shown until after you confirm.</p>
-                <input type="number" step="0.01" wire:model="supervisorCountedCash" placeholder="Amount counted"
-                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                <div class="flex justify-end gap-2">
-                    <button type="button" wire:click="$set('closingSessionId', null)" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-bold">
+                <x-mobile.numeric-pad model="supervisorCountedCash" :currency="true" label="Amount counted" />
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" wire:click="$set('closingSessionId', null)" class="min-h-[48px] px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-bold touch-manipulation">
                         Cancel
                     </button>
-                    <button type="button" wire:click="confirmSessionClose" class="px-4 py-2 rounded-lg bg-red-600 text-white font-bold">
+                    <button type="button" wire:click="confirmSessionClose" class="min-h-[48px] px-4 py-3 rounded-lg bg-red-600 text-white font-bold touch-manipulation">
                         Confirm Close
                     </button>
                 </div>

@@ -220,8 +220,13 @@ class UserResource extends Resource
                     ->requiresConfirmation()
                     ->modalDescription('Clears their kiosk PIN entirely — you never see or choose it, they must set a brand new one next time.')
                     ->action(function (User $record) {
-                        (new \App\Services\PinAuthService())->forceReset($record, auth()->user());
-                        \Filament\Notifications\Notification::make()->title('PIN reset')->body("{$record->name} must set a new PIN next time.")->success()->send();
+                        try {
+                            (new \App\Services\PinAuthService())->forceReset($record, auth()->user());
+                            \App\Services\UserFeedback::succeeded('PIN reset', "{$record->name} must set a new PIN next time.");
+                        } catch (\Throwable $e) {
+                            report($e);
+                            \App\Services\UserFeedback::failed('Could not reset PIN');
+                        }
                     }),
                 Action::make('delete')
                     ->label('Delete')

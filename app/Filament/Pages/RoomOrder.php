@@ -184,7 +184,7 @@ class RoomOrder extends Page
 
             Notification::make()->title('Room order sent to kitchen/bar')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not place order')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not place order')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

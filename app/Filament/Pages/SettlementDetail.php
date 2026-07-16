@@ -96,7 +96,7 @@ class SettlementDetail extends Page
             $this->cashierCountedCash = null;
             Notification::make()->title('Cash confirmed')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not confirm cash')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not confirm cash')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -108,7 +108,7 @@ class SettlementDetail extends Page
             $this->posMachineAmount = null;
             Notification::make()->title('POS total confirmed')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not confirm POS')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not confirm POS')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

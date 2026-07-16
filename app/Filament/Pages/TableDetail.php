@@ -85,6 +85,7 @@ class TableDetail extends Page
             \Filament\Notifications\Notification::make()
                 ->title('Order not found')
                 ->danger()
+                ->persistent()
                 ->send();
             return;
         }
@@ -96,6 +97,7 @@ class TableDetail extends Page
                 ->title('Could Not Confirm')
                 ->body($e->getMessage())
                 ->danger()
+                ->persistent()
                 ->send();
             return;
         }

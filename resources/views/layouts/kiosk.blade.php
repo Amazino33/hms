@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <title>@yield('title', 'Kiosk')</title>
     @vite(['resources/css/app.css'])
     {{-- Notification::make()->send() toasts are Filament's, not a generic
@@ -19,6 +19,18 @@
          layer — without this, a notification fired while any of those
          modals is open renders invisibly behind it. --}}
     <style>.fi-no { z-index: 9999 !important; }</style>
+    {{-- Alpine's x-cloak needs this rule to actually hide anything — Alpine
+         ships the attribute but not the CSS. pos.blade.php already relies on
+         x-cloak in 4 places; it just never had this until now (a pre-existing
+         flash-of-unstyled-content gap, not something introduced here). The
+         admin panel gets this from AdminPanelProvider's own render hook, but
+         this layout never goes through that pipeline. --}}
+    <style>[x-cloak] { display: none !important; }</style>
+    {{-- Visual-only: kills the browser's pull-to-refresh gesture on these
+         entry-heavy screens — an accidental refresh mid-count/mid-order was
+         a real way to lose in-progress taps. Draft persistence itself is
+         separate, existing logic; this is just the gesture. --}}
+    <style>html, body { overscroll-behavior-y: contain; }</style>
 </head>
 <body class="bg-gray-900">
     @yield('content')
@@ -94,6 +106,7 @@
     </script>
 
     <livewire:notifications />
+    @include('partials.livewire-failure-handler')
     {{-- @filamentScripts(withCore: true) already bundles and boots
          Livewire's core JS — Filament's own panel layout never also calls
          @livewireScripts alongside it. Having both loaded Livewire twice,

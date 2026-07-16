@@ -106,6 +106,7 @@ class ProductsTable
                                 ->title('Import failed')
                                 ->body($e->getMessage())
                                 ->danger()
+                                ->persistent()
                                 ->send();
                         }
                     })

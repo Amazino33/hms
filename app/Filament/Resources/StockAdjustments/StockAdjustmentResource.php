@@ -141,7 +141,7 @@ class StockAdjustmentResource extends Resource
 
                             Notification::make()->title('Adjustment approved')->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not approve')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not approve')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
 
@@ -161,7 +161,7 @@ class StockAdjustmentResource extends Resource
 
                             Notification::make()->title('Adjustment rejected')->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not reject')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not reject')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
             ])

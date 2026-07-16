@@ -149,7 +149,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                             );
                             Notification::make()->success()->title('Recount recorded')->send();
                         } catch (\Throwable $e) {
-                            Notification::make()->danger()->title('Could not record recount')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Could not record recount')->body($e->getMessage())->persistent()->send();
                         }
                     }),
                 Action::make('debit')
@@ -162,7 +162,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                             app(CountSessionService::class)->debitDiscrepancy($record, Auth::id());
                             Notification::make()->success()->title('Debited to outgoing custodian')->send();
                         } catch (\Throwable $e) {
-                            Notification::make()->danger()->title('Could not debit')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Could not debit')->body($e->getMessage())->persistent()->send();
                         }
                     }),
                 Action::make('pend')
@@ -177,7 +177,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                             app(CountSessionService::class)->pendDiscrepancyInvestigation($record, $data['note'], Auth::id());
                             Notification::make()->success()->title('Marked pending investigation')->send();
                         } catch (\Throwable $e) {
-                            Notification::make()->danger()->title('Could not pend')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Could not pend')->body($e->getMessage())->persistent()->send();
                         }
                     }),
                 Action::make('writeOff')
@@ -192,7 +192,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                             app(CountSessionService::class)->writeOffDiscrepancy($record, $data['reason'], Auth::id());
                             Notification::make()->success()->title('Resolved without a debit')->send();
                         } catch (\Throwable $e) {
-                            Notification::make()->danger()->title('Could not resolve')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Could not resolve')->body($e->getMessage())->persistent()->send();
                         }
                     }),
                 Action::make('acknowledge')
@@ -206,7 +206,7 @@ class HandoverDiscrepancies extends Page implements HasTable
                             app(CountSessionService::class)->acknowledgeOverage($record, Auth::id());
                             Notification::make()->success()->title('Overage acknowledged')->send();
                         } catch (\Throwable $e) {
-                            Notification::make()->danger()->title('Could not acknowledge')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Could not acknowledge')->body($e->getMessage())->persistent()->send();
                         }
                     }),
             ])

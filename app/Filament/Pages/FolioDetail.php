@@ -97,7 +97,7 @@ class FolioDetail extends Page
 
             Notification::make()->title('Charge added')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not add charge')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not add charge')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -120,7 +120,7 @@ class FolioDetail extends Page
 
             Notification::make()->title('Payment recorded')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not record payment')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not record payment')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -133,7 +133,7 @@ class FolioDetail extends Page
 
             Notification::make()->title('Guest checked in')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not check in')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not check in')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -146,7 +146,7 @@ class FolioDetail extends Page
 
             Notification::make()->title('Guest checked out')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not check out')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not check out')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

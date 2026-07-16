@@ -1,5 +1,8 @@
 <x-filament-panels::page>
-    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+    {{-- 2-up at phone width (was 3 — cramped enough at 360px to threaten the
+         at-a-glance color-coded read this board exists for), same tile
+         format just bigger; unchanged from md up. --}}
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
         @foreach($tiles as $tile)
             @php
                 $room = $tile['room'];
@@ -26,15 +29,15 @@
             @endphp
 
             @if($href)
-                <a href="{{ $href }}" class="block rounded-lg border-2 p-3 text-center hover:opacity-80 {{ $styles[$occupancy] }}">
+                <a href="{{ $href }}" class="block min-h-[72px] rounded-lg border-2 p-3 text-center hover:opacity-80 touch-manipulation flex flex-col items-center justify-center {{ $styles[$occupancy] }}">
                     <div class="text-xl font-bold">{{ $room->number }}</div>
                     <div class="text-xs font-semibold mt-1">{{ $labels[$occupancy] }}</div>
                     @if($booking)
-                        <div class="text-xs truncate mt-1">{{ $booking->guest->name }}</div>
+                        <div class="text-xs truncate mt-1 w-full">{{ $booking->guest->name }}</div>
                     @endif
                 </a>
             @else
-                <div class="block rounded-lg border-2 p-3 text-center {{ $styles[$occupancy] }}">
+                <div class="min-h-[72px] rounded-lg border-2 p-3 text-center flex flex-col items-center justify-center {{ $styles[$occupancy] }}">
                     <div class="text-xl font-bold">{{ $room->number }}</div>
                     <div class="text-xs font-semibold mt-1">{{ $labels[$occupancy] }}</div>
                 </div>

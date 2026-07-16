@@ -37,6 +37,7 @@ class MyShiftReport extends Page
                 ->title('Not authorized')
                 ->body('Only a supervisor can convert an unpaid order to a staff debt.')
                 ->danger()
+                ->persistent()
                 ->send();
             return;
         }
@@ -44,7 +45,7 @@ class MyShiftReport extends Page
         $order = Order::find($orderId);
 
         if (!$order) {
-            Notification::make()->title('Order not found')->danger()->send();
+            Notification::make()->title('Order not found')->danger()->persistent()->send();
             return;
         }
 

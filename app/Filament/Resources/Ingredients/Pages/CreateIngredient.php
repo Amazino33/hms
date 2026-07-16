@@ -6,7 +6,9 @@ use App\Filament\Resources\Ingredients\IngredientResource;
 use App\Models\IngredientInventoryItem;
 use App\Models\IngredientTransaction;
 use App\Models\WareHouse;
+use App\Services\UserFeedback;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Exceptions\Halt;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -25,30 +27,37 @@ class CreateIngredient extends CreateRecord
     {
         $openingStock = (float) ($data['quantity'] ?? 0);
 
-        return DB::transaction(function () use ($data, $openingStock) {
-            $ingredient = static::getModel()::create($data);
+        try {
+            return DB::transaction(function () use ($data, $openingStock) {
+                $ingredient = static::getModel()::create($data);
 
-            if ($openingStock > 0) {
-                $mainStoreId = WareHouse::where('type', 'storage')->orderBy('id')->value('id') ?? 1;
+                if ($openingStock > 0) {
+                    $mainStoreId = WareHouse::where('type', 'storage')->orderBy('id')->value('id') ?? 1;
 
-                IngredientInventoryItem::create([
-                    'ingredient_id' => $ingredient->id,
-                    'warehouse_id' => $mainStoreId,
-                    'quantity' => $openingStock,
-                ]);
+                    IngredientInventoryItem::create([
+                        'ingredient_id' => $ingredient->id,
+                        'warehouse_id' => $mainStoreId,
+                        'quantity' => $openingStock,
+                    ]);
 
-                IngredientTransaction::create([
-                    'ingredient_id' => $ingredient->id,
-                    'warehouse_id' => $mainStoreId,
-                    'type' => 'purchase',
-                    'quantity' => $openingStock,
-                    'cost_per_unit' => $data['cost_per_unit'] ?? null,
-                    'reference' => 'opening_stock',
-                    'user_id' => auth()->id(),
-                ]);
-            }
+                    IngredientTransaction::create([
+                        'ingredient_id' => $ingredient->id,
+                        'warehouse_id' => $mainStoreId,
+                        'type' => 'purchase',
+                        'quantity' => $openingStock,
+                        'cost_per_unit' => $data['cost_per_unit'] ?? null,
+                        'reference' => 'opening_stock',
+                        'user_id' => auth()->id(),
+                    ]);
+                }
 
-            return $ingredient;
-        });
+                return $ingredient;
+            });
+        } catch (\Throwable $e) {
+            report($e);
+            UserFeedback::blocked('Could not create ingredient', 'A duplicate SKU or other data conflict blocked this. Check the details and try again.');
+
+            throw new Halt();
+        }
     }
 }

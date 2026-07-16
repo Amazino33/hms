@@ -93,7 +93,7 @@ class NewProcurement extends Page
     public function save(): void
     {
         if (empty($this->productLines) && empty($this->ingredientLines)) {
-            Notification::make()->danger()->title('Add at least one line before saving')->send();
+            Notification::make()->danger()->title('Add at least one line before saving')->persistent()->send();
 
             return;
         }
@@ -112,7 +112,7 @@ class NewProcurement extends Page
                 Auth::id(),
             );
         } catch (\Throwable $e) {
-            Notification::make()->danger()->title('Could not save procurement')->body($e->getMessage())->send();
+            Notification::make()->danger()->title('Could not save procurement')->body($e->getMessage())->persistent()->send();
 
             return;
         }
@@ -135,7 +135,7 @@ class NewProcurement extends Page
     public function applyPriceSuggestion(int $productId, float $newPrice): void
     {
         if (!auth()->user()->can('update-price-via-procurement') && !auth()->user()->can('Update:Product')) {
-            Notification::make()->danger()->title('You are not allowed to change prices')->send();
+            Notification::make()->danger()->title('You are not allowed to change prices')->persistent()->send();
 
             return;
         }

@@ -75,7 +75,7 @@ class ReceptionistShift extends Page
 
             Notification::make()->title('Shift started')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not start shift')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not start shift')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -96,7 +96,7 @@ class ReceptionistShift extends Page
 
             Notification::make()->title('Shift end declared — awaiting supervisor confirmation')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not end shift')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not end shift')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 }

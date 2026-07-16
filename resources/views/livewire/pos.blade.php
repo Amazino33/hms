@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Filament\Notifications\Notification;
 use App\Services\OrderSplitter;
+use App\Services\UserFeedback;
 
 new class extends Component {
     public $categories;
@@ -524,7 +525,15 @@ new class extends Component {
                 Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
                 return false;
             }
-            throw $e;
+            // Previously re-thrown — the Alpine caller's empty catch block
+            // swallowed it with no visible feedback at all, on a money-
+            // handling action. Logged normally (report()), notified
+            // generically (the specific cause isn't one of the two
+            // recognized/expected cases above).
+            report($e);
+            UserFeedback::failed('Could not process payment');
+
+            return false;
         }
 
         if ($paidAmount > 0 && !empty($orders)) {
@@ -621,7 +630,10 @@ new class extends Component {
                 Notification::make()->title('No Active Shift')->body($e->getMessage())->danger()->send();
                 return false;
             }
-            throw $e;
+            report($e);
+            UserFeedback::failed('Could not send order');
+
+            return false;
         }
 
         \App\Models\Table::find($tableId)->update(['status' => 'occupied']);
@@ -2068,17 +2080,7 @@ new class extends Component {
                 </div>
 
                 <div x-show="paymentType === 'single'">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Amount
-                            Received</label>
-                        <div class="relative">
-                            <span
-                                class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
-                            <input type="number" x-model="paidAmount" inputmode="decimal"
-                                class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
-                                placeholder="0.00">
-                        </div>
-                    </div>
+                    <x-mobile.numeric-pad model="paidAmount" :currency="true" label="Amount Received" />
 
                     {{-- Change display (Alpine-driven) --}}
                     <div x-show="balance < 0"
@@ -2116,40 +2118,13 @@ new class extends Component {
                     <div>
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Payment
                             Method</label>
-                        <div class="grid grid-cols-3 gap-2">
-                            @foreach(['cash' => '💵 Cash', 'pos' => '💳 POS', 'transfer' => '🏦 Transfer'] as $key => $label)
-                                <button @click="paymentMethod = '{{ $key }}'"
-                                    :class="paymentMethod === '{{ $key }}' ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600'"
-                                    class="p-3 border rounded-lg font-bold text-sm transition-colors touch-manipulation">{{ $label }}</button>
-                            @endforeach
-                        </div>
+                        <x-mobile.chip-select model="paymentMethod" :options="['cash' => '💵 Cash', 'pos' => '💳 POS', 'transfer' => '🏦 Transfer']" />
                     </div>
                 </div>
 
                 <div x-show="paymentType === 'split'" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">💵 Cash
-                            Amount</label>
-                        <div class="relative">
-                            <span
-                                class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
-                            <input type="number" x-model.number="splitCashAmount" inputmode="decimal"
-                                class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
-                                placeholder="0.00">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">💳 POS
-                            Amount</label>
-                        <div class="relative">
-                            <span
-                                class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
-                            <input type="number" x-model.number="splitPosAmount" inputmode="decimal"
-                                class="w-full pl-8 pr-4 py-4 text-xl font-bold border rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white touch-manipulation"
-                                placeholder="0.00">
-                        </div>
-                    </div>
+                    <x-mobile.numeric-pad model="splitCashAmount" :currency="true" label="💵 Cash Amount" />
+                    <x-mobile.numeric-pad model="splitPosAmount" :currency="true" label="💳 POS Amount" />
 
                     <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                         <div class="flex justify-between text-sm mb-2">
@@ -2246,6 +2221,7 @@ new class extends Component {
                         <input type="tel" wire:model="newGuestPhone" inputmode="tel"
                             class="w-full p-3 text-base border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 touch-manipulation"
                             placeholder="e.g. 08012345678">
+                        @error('newGuestPhone') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
                     </div>
                 </div>
 
@@ -2648,16 +2624,7 @@ new class extends Component {
                     </div>
 
                     <div x-data="{ qty: @entangle('returnQuantity'), maxQty: @entangle('maxReturnQuantity') }">
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Quantity to
-                            Return</label>
-                        <div class="flex items-center gap-3">
-                            <button type="button" @click="if(qty > 1) qty--"
-                                class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-3 rounded-lg font-bold text-xl text-gray-700 dark:text-gray-300 transition">-</button>
-                            <input type="number" wire:model="returnQuantity" min="1" :max="maxQty" readonly
-                                class="w-full text-center p-3 text-lg border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 font-bold">
-                            <button type="button" @click="if(qty < maxQty) qty++"
-                                class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-3 rounded-lg font-bold text-xl text-gray-700 dark:text-gray-300 transition">+</button>
-                        </div>
+                        <x-mobile.stepper model="qty" min="1" max="maxQty" :integer="true" label="Quantity to Return" />
                         <div class="text-xs text-gray-500 mt-1 text-center font-medium">Max returnable: <span
                                 x-text="maxQty"></span></div>
                         @error('returnQuantity') <span class="text-xs text-red-600 font-bold">{{ $message }}</span>
@@ -2694,9 +2661,8 @@ new class extends Component {
                 </div>
                 <div class="p-6 space-y-4">
                     <p class="text-xs text-gray-500 dark:text-gray-400">Routes to whichever cashier is on duty — no need to pick a person.</p>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Amount</label>
-                        <input type="number" wire:model="cashDropAmount" min="0.01" step="0.01" class="w-full p-3 text-lg border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600">
+                    <div x-data="{ cashDropAmount: @entangle('cashDropAmount') }">
+                        <x-mobile.numeric-pad model="cashDropAmount" :currency="true" label="Amount" :min="0.01" />
                         @error('cashDropAmount') <span class="text-xs text-red-600 font-bold">{{ $message }}</span> @enderror
                     </div>
                     <div>

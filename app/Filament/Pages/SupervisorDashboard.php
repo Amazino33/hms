@@ -91,7 +91,7 @@ class SupervisorDashboard extends Page
             $this->closeRuling();
             Notification::make()->title('Ruling recorded')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not rule')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not rule')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -109,7 +109,7 @@ class SupervisorDashboard extends Page
             $this->closeRuling();
             Notification::make()->title('Ruling recorded')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not rule')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not rule')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -133,7 +133,7 @@ class SupervisorDashboard extends Page
             $this->supervisorCountedCash = null;
             Notification::make()->title('Cashier session closed')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not close session')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not close session')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 }

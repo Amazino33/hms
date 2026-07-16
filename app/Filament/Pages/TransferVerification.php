@@ -55,7 +55,7 @@ class TransferVerification extends Page
 
             Notification::make()->title('Transfer verified')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not verify')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not verify')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -84,7 +84,7 @@ class TransferVerification extends Page
 
             Notification::make()->title('Transfer rejected')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not reject')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not reject')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 }

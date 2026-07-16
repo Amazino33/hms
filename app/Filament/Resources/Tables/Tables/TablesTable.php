@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Tables\Tables;
 
+use App\Services\UserFeedback;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -51,37 +52,75 @@ class TablesTable
                 SelectFilter::make('status'),
             ])
             ->recordActions([
+                // Note: none of the three quick-status actions below guard
+                // against flipping a table's status while it has an active
+                // order — that's a real, pre-existing gap this pass does not
+                // fix (adding that guard would be new business logic, not a
+                // communication fix — out of scope here). Only the missing
+                // success/failure feedback is added.
                 Action::make('quick_available')
                     ->label('Mark Available')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn ($record) => $record->status !== 'available')
-                    ->action(fn ($record) => $record->update(['status' => 'available'])),
-                
+                    ->action(function ($record) {
+                        try {
+                            $record->update(['status' => 'available']);
+                            UserFeedback::succeeded("{$record->name} marked available");
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::failed('Could not update table status');
+                        }
+                    }),
+
                 Action::make('quick_cleaning')
                     ->label('Start Cleaning')
                     ->icon('heroicon-o-sparkles')
                     ->color('info')
                     ->visible(fn ($record) => $record->status !== 'cleaning')
-                    ->action(fn ($record) => $record->update(['status' => 'cleaning'])),
-                
+                    ->action(function ($record) {
+                        try {
+                            $record->update(['status' => 'cleaning']);
+                            UserFeedback::succeeded("{$record->name} marked cleaning");
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::failed('Could not update table status');
+                        }
+                    }),
+
                 Action::make('quick_maintenance')
                     ->label('Maintenance')
                     ->icon('heroicon-o-wrench-screwdriver')
                     ->color('gray')
                     ->visible(fn ($record) => $record->status !== 'maintenance')
-                    ->action(fn ($record) => $record->update(['status' => 'maintenance'])),
-                
+                    ->action(function ($record) {
+                        try {
+                            $record->update(['status' => 'maintenance']);
+                            UserFeedback::succeeded("{$record->name} marked maintenance");
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::failed('Could not update table status');
+                        }
+                    }),
+
                 Action::make('edit')
                     ->label('Edit')
                     ->icon('heroicon-o-pencil')
                     ->url(fn ($record) => url("/admin/tables/{$record->id}/edit")),
-                
+
                 Action::make('delete')
                     ->label('Delete')
                     ->icon('heroicon-o-trash')
                     ->color('danger')
-                    ->action(fn ($record) => $record->delete()),
+                    ->action(function ($record) {
+                        try {
+                            $record->delete();
+                            UserFeedback::succeeded('Table deleted');
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::blocked('Cannot delete table', 'This table still has orders on record.');
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -89,23 +128,59 @@ class TablesTable
                         ->label('Mark as Available')
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
-                        ->action(fn ($records) => $records->each->update(['status' => 'available'])),
-                    
+                        ->action(function ($records) {
+                            try {
+                                $count = $records->count();
+                                $records->each->update(['status' => 'available']);
+                                UserFeedback::succeeded("{$count} table(s) marked available");
+                            } catch (\Throwable $e) {
+                                report($e);
+                                UserFeedback::failed('Could not update table status');
+                            }
+                        }),
+
                     \Filament\Actions\BulkAction::make('mark_cleaning')
                         ->label('Mark as Cleaning')
                         ->icon('heroicon-o-sparkles')
                         ->color('info')
-                        ->action(fn ($records) => $records->each->update(['status' => 'cleaning'])),
-                    
+                        ->action(function ($records) {
+                            try {
+                                $count = $records->count();
+                                $records->each->update(['status' => 'cleaning']);
+                                UserFeedback::succeeded("{$count} table(s) marked cleaning");
+                            } catch (\Throwable $e) {
+                                report($e);
+                                UserFeedback::failed('Could not update table status');
+                            }
+                        }),
+
                     \Filament\Actions\BulkAction::make('mark_maintenance')
                         ->label('Mark as Maintenance')
                         ->icon('heroicon-o-wrench-screwdriver')
                         ->color('gray')
-                        ->action(fn ($records) => $records->each->update(['status' => 'maintenance'])),
-                    
+                        ->action(function ($records) {
+                            try {
+                                $count = $records->count();
+                                $records->each->update(['status' => 'maintenance']);
+                                UserFeedback::succeeded("{$count} table(s) marked maintenance");
+                            } catch (\Throwable $e) {
+                                report($e);
+                                UserFeedback::failed('Could not update table status');
+                            }
+                        }),
+
                     DeleteBulkAction::make()
                         ->label('Delete Selected')
-                        ->action(fn ($records) => $records->each->delete())
+                        ->action(function ($records) {
+                            try {
+                                $count = $records->count();
+                                $records->each->delete();
+                                UserFeedback::succeeded("{$count} table(s) deleted");
+                            } catch (\Throwable $e) {
+                                report($e);
+                                UserFeedback::blocked('Could not delete', 'One or more selected tables still have orders on record.');
+                            }
+                        })
                         ->color('danger'),
                 ]),
             ]);

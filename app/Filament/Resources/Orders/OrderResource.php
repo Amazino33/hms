@@ -6,6 +6,7 @@ use App\Filament\Resources\Orders\Pages\EditOrder;
 use App\Filament\Resources\Orders\Pages\ListOrders;
 use App\Filament\Resources\Orders\Pages\ViewOrder;
 use App\Models\Order;
+use App\Services\UserFeedback;
 use BackedEnum;
 use UnitEnum;
 use Filament\Actions\Action;
@@ -294,7 +295,15 @@ class OrderResource extends Resource
                     ->label('Delete')
                     ->icon('heroicon-o-trash')
                     ->color('danger')
-                    ->action(fn(Order $record) => $record->delete()),
+                    ->action(function (Order $record) {
+                        try {
+                            $record->delete();
+                            UserFeedback::succeeded('Order deleted');
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::blocked('Cannot delete order', 'This order still has items or payments on record.');
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkAction::make('delete')
@@ -303,7 +312,13 @@ class OrderResource extends Resource
                     ->requiresConfirmation()
                     ->color('danger')
                     ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
-                        Order::whereIn('id', $records->pluck('id')->toArray())->delete();
+                        try {
+                            $count = Order::whereIn('id', $records->pluck('id')->toArray())->delete();
+                            UserFeedback::succeeded("{$count} order(s) deleted");
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::blocked('Could not delete', 'One or more selected orders still have items or payments on record.');
+                        }
                     }),
             ])
             ->filters([

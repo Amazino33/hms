@@ -72,11 +72,13 @@ it('includes pack fields for a product that has them, on the transfer page', fun
     expect($products[$withoutPack->id]->purchase_unit_name)->toBeNull();
 });
 
-it('wires the procurement unit select to only offer the purchase-unit option when pack data exists', function () {
+it('wires the procurement unit toggle to only offer the purchase-unit button when pack data exists', function () {
+    // Mobile pass: this is now a tap-target button pair, not a <select>, but
+    // the same conditional-on-pack-data guard still governs the second option.
     $view = file_get_contents(resource_path('views/filament/pages/new-procurement.blade.php'));
 
     expect($view)->toContain('x-if="unitsPerPurchaseUnit"');
-    expect($view)->toContain("option value=\"purchase_unit\"");
+    expect($view)->toContain("enteredUnit = 'purchase_unit'");
 });
 
 it('wires the transfer line entry to only offer the purchase-unit option when pack data exists', function () {

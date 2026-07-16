@@ -65,10 +65,12 @@ class QuickInventoryUpdate extends Page implements HasTable
                     ->sortable()
                     ->weight('bold'),
 
-                // Product SKU
+                // Product SKU — least essential at a glance on a phone;
+                // still searchable/reachable via the column toggle.
                 TextColumn::make('sku')
                     ->label('SKU')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 // Current Stock (Read-only)
                 TextColumn::make('inventory.quantity')
@@ -77,11 +79,14 @@ class QuickInventoryUpdate extends Page implements HasTable
                     ->numeric()
                     ->color('primary'),
 
-                // Reorder Level
+                // Reorder Level — the one column that's genuinely useful to
+                // hide on a narrow screen without losing the "is this low"
+                // signal, since Current Stock's own color already carries it.
                 TextColumn::make('reorder_level')
                     ->label('Reorder Level')
                     ->numeric()
-                    ->color(fn ($record) => $record->inventory->first()?->quantity <= $record->reorder_level ? 'danger' : 'success'),
+                    ->color(fn ($record) => $record->inventory->first()?->quantity <= $record->reorder_level ? 'danger' : 'success')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 // Unit Price
                 TextColumn::make('price')

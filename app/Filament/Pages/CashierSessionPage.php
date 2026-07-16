@@ -66,7 +66,7 @@ class CashierSessionPage extends Page
             $this->outflowNote = '';
             Notification::make()->title('Outflow logged')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not log outflow')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not log outflow')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -78,7 +78,7 @@ class CashierSessionPage extends Page
             $this->declaredClosingCash = null;
             Notification::make()->title('Close declared — awaiting supervisor confirmation')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not declare close')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not declare close')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 }

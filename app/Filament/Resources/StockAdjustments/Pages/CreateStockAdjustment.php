@@ -4,7 +4,9 @@ namespace App\Filament\Resources\StockAdjustments\Pages;
 
 use App\Filament\Resources\StockAdjustments\StockAdjustmentResource;
 use App\Services\StockAdjustmentService;
+use App\Services\UserFeedback;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Exceptions\Halt;
 use Illuminate\Database\Eloquent\Model;
 
 class CreateStockAdjustment extends CreateRecord
@@ -18,6 +20,13 @@ class CreateStockAdjustment extends CreateRecord
      */
     protected function handleRecordCreation(array $data): Model
     {
-        return (new StockAdjustmentService())->request($data, auth()->id());
+        try {
+            return (new StockAdjustmentService())->request($data, auth()->id());
+        } catch (\Throwable $e) {
+            report($e);
+            UserFeedback::blocked('Could not submit adjustment request', 'Check the product/ingredient and quantity, then try again.');
+
+            throw new Halt();
+        }
     }
 }

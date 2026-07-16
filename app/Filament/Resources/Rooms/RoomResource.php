@@ -6,6 +6,7 @@ use App\Filament\Resources\Rooms\Pages\CreateRoom;
 use App\Filament\Resources\Rooms\Pages\EditRoom;
 use App\Filament\Resources\Rooms\Pages\ListRooms;
 use App\Models\Room;
+use App\Services\UserFeedback;
 use BackedEnum;
 use UnitEnum;
 use Filament\Actions\Action;
@@ -115,7 +116,15 @@ class RoomResource extends Resource
                 ->label('Delete')
                 ->icon('heroicon-o-trash')
                 ->color('danger')
-                ->action(fn (Room $record) => $record->delete()),
+                ->action(function (Room $record) {
+                    try {
+                        $record->delete();
+                        UserFeedback::succeeded('Room deleted');
+                    } catch (\Throwable $e) {
+                        report($e);
+                        UserFeedback::blocked('Cannot delete room', 'This room still has bookings on record. Remove or reassign them first.');
+                    }
+                }),
         ])
         ->toolbarActions([
             BulkAction::make('delete')
@@ -123,7 +132,15 @@ class RoomResource extends Resource
                 ->label('Delete Selected')
                 ->requiresConfirmation()
                 ->color('danger')
-                ->action(fn (array $records) => Room::whereIn('id', $records)->delete()),
+                ->action(function (array $records) {
+                    try {
+                        $count = Room::whereIn('id', $records)->delete();
+                        UserFeedback::succeeded("{$count} room(s) deleted");
+                    } catch (\Throwable $e) {
+                        report($e);
+                        UserFeedback::blocked('Could not delete', 'One or more selected rooms still have bookings on record. Remove or reassign them first.');
+                    }
+                }),
         ]);
     }
 

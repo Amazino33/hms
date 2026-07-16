@@ -83,6 +83,16 @@ class AdminPanelProvider extends PanelProvider
 
     public function boot(): void
     {
+        // ─── Body End: Global Livewire request-failure handler ───────────────────
+        // Same partial the kiosk layout includes — one script, one behavior,
+        // registered once per layout rather than left to each component's own
+        // (frequently missing) error handling. This is what actually fixes a
+        // page going fully unresponsive on a 419/500/dropped connection.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn () => view('partials.livewire-failure-handler')->render()
+        );
+
         // ─── Sidebar: Mobile close button ────────────────────────────────────────
         FilamentView::registerRenderHook(
             PanelsRenderHook::SIDEBAR_NAV_START,

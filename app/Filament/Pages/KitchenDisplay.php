@@ -149,6 +149,7 @@ class KitchenDisplay extends Page
                 ->title('Could Not Confirm Return')
                 ->body($e->getMessage())
                 ->danger()
+                ->persistent()
                 ->send();
         }
     }
@@ -168,7 +169,7 @@ class KitchenDisplay extends Page
 
             Notification::make()->title('Return Rejected')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could Not Reject Return')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could Not Reject Return')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

@@ -62,7 +62,7 @@ class PendingCashDrops extends Page implements HasTable
                             (new CashDropService())->confirm($record, auth()->user());
                             Notification::make()->title('Drop confirmed')->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
 
@@ -79,7 +79,7 @@ class PendingCashDrops extends Page implements HasTable
                             (new CashDropService())->confirm($record, auth()->user(), (float) $data['actual_amount']);
                             Notification::make()->title('Drop confirmed with corrected amount')->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
             ]);

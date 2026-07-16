@@ -77,7 +77,7 @@ class TransferQueue extends Page implements HasTable
                             (new OrderPaymentVerificationService())->verify($record, auth()->id());
                             Notification::make()->title('Verified')->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not verify')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not verify')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
                 Action::make('flag')
@@ -100,7 +100,7 @@ class TransferQueue extends Page implements HasTable
                             (new OrderPaymentVerificationService())->flag($record, $data['note'], $data['reason_code'], auth()->id());
                             Notification::make()->title('Flagged for supervisor')->warning()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not flag')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not flag')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
             ])

@@ -6,6 +6,7 @@ use App\Filament\Resources\KioskDevices\Pages\ListKioskDevices;
 use App\Models\KioskDevice;
 use App\Models\User;
 use App\Services\KioskDeviceService;
+use App\Services\UserFeedback;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -57,8 +58,13 @@ class KioskDeviceResource extends Resource
                     ])
                     ->fillForm(fn (KioskDevice $record) => ['name' => $record->name])
                     ->action(function (KioskDevice $record, array $data) {
-                        (new KioskDeviceService())->rename($record, $data['name']);
-                        Notification::make()->title('Device renamed')->success()->send();
+                        try {
+                            (new KioskDeviceService())->rename($record, $data['name']);
+                            UserFeedback::succeeded('Device renamed');
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::failed('Could not rename device');
+                        }
                     }),
 
                 Action::make('revoke')
@@ -68,8 +74,13 @@ class KioskDeviceResource extends Resource
                     ->requiresConfirmation()
                     ->visible(fn (KioskDevice $record) => !$record->isRevoked())
                     ->action(function (KioskDevice $record) {
-                        (new KioskDeviceService())->revoke($record, auth()->user());
-                        Notification::make()->title('Device revoked')->body('This device can no longer reach any kiosk route.')->success()->send();
+                        try {
+                            (new KioskDeviceService())->revoke($record, auth()->user());
+                            UserFeedback::succeeded('Device revoked', 'This device can no longer reach any kiosk route.');
+                        } catch (\Throwable $e) {
+                            report($e);
+                            UserFeedback::failed('Could not revoke device');
+                        }
                     }),
             ])
             ->headerActions([

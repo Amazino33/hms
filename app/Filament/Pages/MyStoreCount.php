@@ -59,7 +59,7 @@ class MyStoreCount extends Page
         $warehouseId = $this->warehouseId();
 
         if (!$warehouseId) {
-            Notification::make()->title('No storage warehouse is configured')->danger()->send();
+            Notification::make()->title('No storage warehouse is configured')->danger()->persistent()->send();
             return;
         }
 
@@ -72,7 +72,7 @@ class MyStoreCount extends Page
 
             $this->redirect("/admin/count-session-detail?session_id={$session->id}");
         } catch (\Exception $e) {
-            Notification::make()->title('Could not start count')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not start count')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

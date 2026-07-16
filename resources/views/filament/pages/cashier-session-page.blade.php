@@ -9,26 +9,23 @@
         </div>
 
         @if($session->status === 'open')
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3"
+                x-data="{ outflowAmount: @entangle('outflowAmount'), outflowType: @entangle('outflowType') }">
                 <h3 class="font-bold text-gray-900 dark:text-white">Log an outflow</h3>
-                <input type="number" step="0.01" wire:model="outflowAmount" placeholder="Amount"
-                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                <select wire:model="outflowType" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-                    <option value="deposit">Bank deposit</option>
-                    <option value="handover">Handover</option>
-                </select>
+                <x-mobile.numeric-pad model="outflowAmount" :currency="true" label="Amount" />
+                <x-mobile.chip-select model="outflowType" :options="['deposit' => 'Bank deposit', 'handover' => 'Handover']" />
                 <input type="text" wire:model="outflowNote" placeholder="Note"
-                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                <button type="button" wire:click="logOutflow" class="w-full px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-bold">
+                    class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white min-h-[48px]" />
+                <button type="button" wire:click="logOutflow" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-bold touch-manipulation">
                     Log Outflow
                 </button>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3"
+                x-data="{ declaredClosingCash: @entangle('declaredClosingCash') }">
                 <h3 class="font-bold text-gray-900 dark:text-white">Declare close</h3>
-                <input type="number" step="0.01" wire:model="declaredClosingCash" placeholder="Cash counted at close"
-                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                <button type="button" wire:click="declareClose" class="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold">
+                <x-mobile.numeric-pad model="declaredClosingCash" :currency="true" label="Cash counted at close" />
+                <button type="button" wire:click="declareClose" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold touch-manipulation">
                     Declare Close
                 </button>
             </div>

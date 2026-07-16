@@ -46,11 +46,12 @@
                         <div class="text-sm text-gray-500">Expected: ₦{{ number_format($this->expectedCash(), 2) }}</div>
                     @else
                         <p class="text-xs text-gray-500">Count the physical cash yourself before entering a figure — the staff member's own declaration is not shown until after you confirm.</p>
-                        <input type="number" step="0.01" wire:model="cashierCountedCash" placeholder="Amount counted"
-                            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                        <button type="button" wire:click="confirmCash" class="w-full px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
-                            Confirm Cash
-                        </button>
+                        <div x-data="{ cashierCountedCash: @entangle('cashierCountedCash') }" class="space-y-3">
+                            <x-mobile.numeric-pad model="cashierCountedCash" :currency="true" label="Amount counted" />
+                            <button type="button" wire:click="confirmCash" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold touch-manipulation">
+                                Confirm Cash
+                            </button>
+                        </div>
                     @endif
                 </div>
 
@@ -70,11 +71,12 @@
                         @endif
                     @else
                         <div class="text-sm text-gray-500">System total: <span class="font-bold">₦{{ number_format($this->expectedPosMachine(), 2) }}</span></div>
-                        <input type="number" step="0.01" wire:model="posMachineAmount" placeholder="Machine batch total"
-                            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                        <button type="button" wire:click="confirmPos" class="w-full px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold">
-                            Confirm POS Total
-                        </button>
+                        <div x-data="{ posMachineAmount: @entangle('posMachineAmount') }" class="space-y-3">
+                            <x-mobile.numeric-pad model="posMachineAmount" :currency="true" label="Machine batch total" />
+                            <button type="button" wire:click="confirmPos" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold touch-manipulation">
+                                Confirm POS Total
+                            </button>
+                        </div>
                     @endif
                 </div>
             </div>

@@ -1,4 +1,8 @@
-<div class="min-h-screen p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
+@php
+    $lineCount = count($productLines) + count($ingredientLines);
+    $total = collect($productLines)->sum('line_total_cost') + collect($ingredientLines)->sum('line_total_cost');
+@endphp
+<div class="min-h-screen p-6 {{ $lineCount > 0 ? 'pb-24' : '' }} bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
     <div class="max-w-5xl mx-auto mb-6">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Record Procurement</h2>
         <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -30,6 +34,7 @@
                 priceRoundingStep: {{ (int) $priceRoundingStep }},
                 type: 'product',
                 selectedId: '',
+                itemSearch: '',
                 creatingNew: false,
                 newItem: { name: '', category_id: '', base_unit: 'bottle', unit_name: 'kg', purchase_unit_name: '', units_per_purchase_unit: '' },
                 enteredQty: 1,
@@ -38,6 +43,12 @@
                 manualPrice: '',
                 applyingPrice: false,
                 get currentList() { return this.type === 'product' ? this.products : this.ingredients; },
+                get filteredList() {
+                    const term = this.itemSearch.trim().toLowerCase();
+                    if (!term) return this.currentList.slice(0, 30);
+                    return this.currentList.filter(i => i.name.toLowerCase().includes(term)).slice(0, 30);
+                },
+                selectItem(id) { this.selectedId = id; this.itemSearch = ''; },
                 get selected() { return this.selectedId ? this.currentList.find(i => i.id == this.selectedId) : null; },
                 get unitsPerPurchaseUnit() {
                     if (this.creatingNew) return this.newItem.units_per_purchase_unit ? parseInt(this.newItem.units_per_purchase_unit) : null;
@@ -124,7 +135,7 @@
                     return this.currentList.filter(i => i.name.toLowerCase().includes(term)).slice(0, 5);
                 },
                 resetEntry() {
-                    this.selectedId = ''; this.creatingNew = false;
+                    this.selectedId = ''; this.itemSearch = ''; this.creatingNew = false;
                     this.newItem = { name: '', category_id: '', base_unit: 'bottle', unit_name: 'kg', purchase_unit_name: '', units_per_purchase_unit: '' };
                     this.enteredQty = 1; this.enteredUnit = 'base_unit'; this.lineTotalCost = '';
                 },
@@ -183,19 +194,31 @@
                         class="px-4 py-2 rounded-lg text-sm font-semibold">Ingredient</button>
             </div>
 
-            <template x-if="!creatingNew">
+            <template x-if="!creatingNew && !selected">
                 <div class="mb-4">
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Item</label>
-                    <div class="flex gap-2">
-                        <select x-model="selectedId" class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                            <option value="">Select…</option>
-                            <template x-for="item in currentList" :key="item.id">
-                                <option :value="item.id" x-text="item.name"></option>
-                            </template>
-                        </select>
-                        <button type="button" @click="creatingNew = true; selectedId = ''"
-                                class="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold whitespace-nowrap">+ New</button>
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" x-model="itemSearch" placeholder="Search…"
+                            class="flex-1 min-h-[48px] px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                        <button type="button" @click="creatingNew = true; selectedId = ''; itemSearch = ''"
+                                class="min-h-[48px] px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold whitespace-nowrap touch-manipulation">+ New</button>
                     </div>
+                    <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                        <template x-for="item in filteredList" :key="item.id">
+                            <button type="button" @click="selectItem(item.id)"
+                                class="min-h-[48px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:border-primary-500 touch-manipulation truncate"
+                                x-text="item.name"></button>
+                        </template>
+                        <p x-show="filteredList.length === 0" class="col-span-2 text-sm text-gray-400 py-2">No match.</p>
+                    </div>
+                </div>
+            </template>
+
+            <template x-if="!creatingNew && selected">
+                <div class="mb-4 flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <span class="text-sm font-semibold text-gray-900 dark:text-white truncate" x-text="selected.name"></span>
+                    <button type="button" @click="selectedId = ''"
+                        class="shrink-0 min-h-[48px] px-3 py-2 rounded-lg text-primary-600 text-sm font-bold touch-manipulation">Change</button>
                 </div>
             </template>
 
@@ -241,20 +264,29 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Quantity</label>
-                    <input type="number" min="0.01" step="0.01" x-model="enteredQty" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                    <x-mobile.numeric-pad model="enteredQty" :min="0.01" />
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Unit</label>
-                    <select x-model="enteredUnit" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                        <option value="base_unit" x-text="baseUnitLabel"></option>
+                    {{-- Not <x-mobile.chip-select> — the option label itself is
+                         fully dynamic (the item's own pack size/name), which
+                         that component's PHP-known-options assumption can't
+                         express; a plain 2-button toggle covers it directly. --}}
+                    <div class="flex gap-2">
+                        <button type="button" @click="enteredUnit = 'base_unit'"
+                            :class="enteredUnit === 'base_unit' ? 'bg-primary-600 border-primary-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'"
+                            class="flex-1 min-h-[48px] px-3 py-2 rounded-lg border-2 text-sm font-bold touch-manipulation truncate" x-text="baseUnitLabel"></button>
                         <template x-if="unitsPerPurchaseUnit">
-                            <option value="purchase_unit" x-text="purchaseUnitName + ' (' + unitsPerPurchaseUnit + ' ' + baseUnitLabel + ')'"></option>
+                            <button type="button" @click="enteredUnit = 'purchase_unit'"
+                                :class="enteredUnit === 'purchase_unit' ? 'bg-primary-600 border-primary-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'"
+                                class="flex-1 min-h-[48px] px-3 py-2 rounded-lg border-2 text-sm font-bold touch-manipulation truncate"
+                                x-text="purchaseUnitName + ' (' + unitsPerPurchaseUnit + ')'"></button>
                         </template>
-                    </select>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Line total cost (₦)</label>
-                    <input type="number" min="0.01" step="0.01" x-model="lineTotalCost" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                    <x-mobile.numeric-pad model="lineTotalCost" :currency="true" :min="0.01" />
                 </div>
             </div>
 
@@ -353,18 +385,19 @@
                 </tbody>
             </table>
 
-            @php
-                $total = collect($productLines)->sum('line_total_cost') + collect($ingredientLines)->sum('line_total_cost');
-            @endphp
-            <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <span class="font-semibold text-gray-900 dark:text-gray-100">Total: ₦{{ number_format($total, 2) }}</span>
-                <button type="button" wire:click="save" wire:loading.attr="disabled"
-                        class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-semibold shadow-lg disabled:opacity-50">
-                    Save procurement
-                </button>
-            </div>
         </div>
     </div>
+
+    @if($lineCount > 0)
+        <x-mobile.sticky-cta-bar>
+            <x-slot:context>{{ $lineCount }} line(s) · ₦{{ number_format($total, 2) }}</x-slot:context>
+            <button type="button" wire:click="save" wire:loading.attr="disabled" wire:target="save"
+                class="w-full min-h-[48px] py-4 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-lg font-bold shadow-lg disabled:opacity-50 touch-manipulation">
+                <span wire:loading.remove wire:target="save">Save procurement</span>
+                <span wire:loading wire:target="save">Saving…</span>
+            </button>
+        </x-mobile.sticky-cta-bar>
+    @endif
 
     {{-- Recent Procurements (deferred) --}}
     <div wire:init="load" class="max-w-5xl mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">

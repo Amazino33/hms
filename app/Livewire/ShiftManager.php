@@ -90,7 +90,7 @@ class ShiftManager extends Component
             $this->showModal = false;
 
         } catch (\Exception $e) {
-            Notification::make()->title('Error starting shift: ' . $e->getMessage())->danger()->send();
+            Notification::make()->title('Error starting shift: ' . $e->getMessage())->danger()->persistent()->send();
         } finally {
             $this->isProcessing = false;
         }
@@ -125,7 +125,7 @@ class ShiftManager extends Component
 
         // Validate amounts
         if ($declaredCash < 0 || $declaredPos < 0) {
-            Notification::make()->title('Cash and POS amounts cannot be negative')->danger()->send();
+            Notification::make()->title('Cash and POS amounts cannot be negative')->danger()->persistent()->send();
             return;
         }
 
@@ -156,7 +156,7 @@ class ShiftManager extends Component
             $this->declaredPos = 0;
 
         } catch (\Exception $e) {
-            Notification::make()->title('Error ending shift: ' . $e->getMessage())->danger()->send();
+            Notification::make()->title('Error ending shift: ' . $e->getMessage())->danger()->persistent()->send();
         } finally {
             $this->isProcessing = false;
         }

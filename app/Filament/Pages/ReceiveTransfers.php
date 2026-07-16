@@ -126,7 +126,7 @@ class ReceiveTransfers extends Page
         $user = Auth::user();
 
         if (! $user->hasAnyRole(['storekeeper', 'chef', 'bartender', 'super_admin'])) {
-            Notification::make()->danger()->title('Permission denied')->send();
+            Notification::make()->danger()->title('Permission denied')->persistent()->send();
 
             return;
         }
@@ -139,7 +139,7 @@ class ReceiveTransfers extends Page
             app(StockTransferService::class)->receiveTransferLine($item, (float) $receivedQty, $user->id);
             Notification::make()->success()->title('Line received')->send();
         } catch (\Throwable $e) {
-            Notification::make()->danger()->title('Could not receive line')->body($e->getMessage())->send();
+            Notification::make()->danger()->title('Could not receive line')->body($e->getMessage())->persistent()->send();
 
             return;
         }

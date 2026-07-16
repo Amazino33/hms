@@ -1,6 +1,66 @@
 <x-filament-panels::page>
     <div class="space-y-4">
-        <div class="overflow-x-auto hms-table-scroll bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        {{-- Phone-width: one day at a time, room list, swipe/tap to change day.
+             The 14-day Gantt below is mathematically unfittable at 360px
+             (986px hardcoded min-width) — this isn't a squeeze fix, it's a
+             different view over the same $days/$bars data. --}}
+        <div class="md:hidden"
+            x-data="{ _tx: 0, _tdx: 0 }"
+            @touchstart="_tx = $event.touches[0].clientX"
+            @touchmove="_tdx = $event.touches[0].clientX - _tx"
+            @touchend="if (_tdx < -60) { $wire.nextDay() } else if (_tdx > 60) { $wire.prevDay() }; _tdx = 0">
+            @php
+                $selectedDay = $days[$selectedDayOffset];
+            @endphp
+            <div class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-2 mb-3">
+                <button type="button" wire:click="prevDay" @disabled($selectedDayOffset === 0)
+                    class="min-h-[48px] min-w-[48px] rounded-lg text-xl font-bold text-gray-700 dark:text-gray-200 disabled:opacity-30 touch-manipulation">&larr;</button>
+                <div class="text-center">
+                    <div class="text-sm font-bold text-gray-900 dark:text-white">{{ $selectedDay->format('l') }}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ $selectedDay->format('M j, Y') }}{{ $selectedDay->isToday() ? ' · Today' : '' }}</div>
+                </div>
+                <button type="button" wire:click="nextDay" @disabled($selectedDayOffset === count($days) - 1)
+                    class="min-h-[48px] min-w-[48px] rounded-lg text-xl font-bold text-gray-700 dark:text-gray-200 disabled:opacity-30 touch-manipulation">&rarr;</button>
+            </div>
+
+            {{-- Jump strip: 7 nearest days as tappable chips, current one
+                 highlighted — a quick way in without swiping one at a time. --}}
+            <div class="flex gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1">
+                @foreach($days as $i => $d)
+                    <button type="button" wire:click="jumpToDay({{ $i }})"
+                        class="shrink-0 min-w-[48px] min-h-[48px] px-2 rounded-lg text-xs font-bold touch-manipulation
+                            {{ $i === $selectedDayOffset ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300' }}">
+                        <div>{{ $d->format('D') }}</div>
+                        <div>{{ $d->format('j') }}</div>
+                    </button>
+                @endforeach
+            </div>
+
+            <div class="space-y-2">
+                @foreach($rooms as $room)
+                    @php
+                        $dayBar = collect($bars[$room->id] ?? [])->first(fn ($bar) => $selectedDayOffset >= $bar['start'] && $selectedDayOffset < $bar['start'] + $bar['span']);
+                        $dayColor = $dayBar
+                            ? ($dayBar['status'] === 'reserved' ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300'
+                                : ($dayBar['status'] === 'checked_in' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300'
+                                : 'bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'))
+                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500';
+                        $dayClickAction = $dayBar
+                            ? "openDetails({$dayBar['booking_id']})"
+                            : "openForm({$room->id}, '{$selectedDay->toDateString()}')";
+                    @endphp
+                    <button type="button" wire:click="{{ $dayClickAction }}"
+                        class="w-full min-h-[56px] rounded-lg border-2 px-4 py-3 flex items-center justify-between gap-3 touch-manipulation {{ $dayColor }}">
+                        <span class="font-bold text-base">{{ $room->number }}</span>
+                        <span class="text-sm truncate flex-1 text-right">
+                            {{ $dayBar ? $dayBar['guest_name'] . ' — ' . ucfirst(str_replace('_', ' ', $dayBar['status'])) : 'Vacant — tap to reserve' }}
+                        </span>
+                    </button>
+                @endforeach
+            </div>
+        </div>
+
+        <div class="hidden md:block overflow-x-auto hms-table-scroll bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <div class="grid" style="grid-template-columns: 90px repeat({{ count($days) }}, minmax(64px, 1fr)); min-width: {{ 90 + count($days) * 64 }}px;">
                 {{-- Header row --}}
                 <div class="sticky left-0 bg-gray-50 dark:bg-gray-900 border-b border-r border-gray-200 dark:border-gray-700 px-2 py-2 text-xs font-bold text-gray-500 dark:text-gray-400 z-10">
@@ -82,9 +142,8 @@
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Deposit (optional)</label>
-                    <input type="number" step="0.01" wire:model="deposit" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                <div x-data="{ deposit: @entangle('deposit') }">
+                    <x-mobile.numeric-pad model="deposit" :currency="true" label="Deposit (optional)" />
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">

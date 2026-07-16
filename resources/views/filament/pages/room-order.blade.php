@@ -19,7 +19,7 @@
             @endif
         </div>
     @else
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-24 lg:pb-0" x-data="{ cartOpen: false }">
             <div class="lg:col-span-2 space-y-4">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
@@ -63,7 +63,7 @@
                 </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 h-fit">
+            <div class="hidden lg:block bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 h-fit">
                 <h3 class="font-bold text-gray-900 dark:text-white">Cart</h3>
 
                 @forelse($cart as $key => $line)
@@ -90,6 +90,48 @@
                     Send to Kitchen/Bar
                 </button>
             </div>
+        </div>
+
+        {{-- Mobile: cart collapses into a sticky bottom bar, tap to expand
+             into a bottom sheet for line edits — matches every other
+             multi-step flow's sticky-CTA treatment instead of sinking below
+             a potentially long product grid. --}}
+        <div class="lg:hidden">
+            <x-mobile.sticky-cta-bar>
+                <x-slot:context>
+                    <button type="button" @click="cartOpen = true" class="w-full text-center">
+                        {{ count($cart) }} item(s) · ₦{{ number_format($this->cartTotal(), 2) }} — tap to review
+                    </button>
+                </x-slot:context>
+                <button type="button" wire:click="submitOrder" wire:loading.attr="disabled" wire:target="submitOrder"
+                    @if(count($cart) === 0) disabled @endif
+                    class="w-full min-h-[48px] py-4 rounded-xl text-white text-lg font-bold touch-manipulation
+                        {{ count($cart) > 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-400 cursor-not-allowed' }}">
+                    <span wire:loading.remove wire:target="submitOrder">Send to Kitchen/Bar</span>
+                    <span wire:loading wire:target="submitOrder">Sending…</span>
+                </button>
+            </x-mobile.sticky-cta-bar>
+
+            <x-mobile.bottom-sheet show="cartOpen" title="Cart">
+                @forelse($cart as $key => $line)
+                    <div class="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 py-2">
+                        <div>
+                            <div class="font-bold text-gray-900 dark:text-white">{{ $line['name'] }}</div>
+                            <div class="text-gray-500">₦{{ number_format($line['price'], 2) }} x {{ $line['quantity'] }}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" wire:click="decrementCartLine('{{ $key }}')" class="min-w-[44px] min-h-[44px] rounded-lg bg-gray-200 dark:bg-gray-600 font-bold touch-manipulation">-</button>
+                            <button type="button" wire:click="removeFromCart('{{ $key }}')" class="min-h-[44px] px-2 text-red-500 text-xs font-bold touch-manipulation">Remove</button>
+                        </div>
+                    </div>
+                @empty
+                    <p class="text-gray-400 text-sm py-4 text-center">No items yet — tap a product to add it.</p>
+                @endforelse
+                <div class="flex justify-between font-bold text-gray-900 dark:text-white pt-3">
+                    <span>Total</span>
+                    <span>₦{{ number_format($this->cartTotal(), 2) }}</span>
+                </div>
+            </x-mobile.bottom-sheet>
         </div>
     @endif
 

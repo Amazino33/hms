@@ -257,20 +257,33 @@
             div.dataset.index = i;
             div.innerHTML = `
                 <div class="md:flex md:gap-3 md:items-center">
-                    <select class="type-select px-3 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mb-3 md:mb-0">
+                    <select class="type-select px-3 py-3 min-h-[48px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mb-3 md:mb-0">
                         <option value="product">Product</option>
                         <option value="ingredient">Ingredient</option>
                     </select>
-                    <select class="item-select md:flex-1 w-full md:w-auto px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none mb-3 md:mb-0"></select>
-                    <button type="button" class="px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all" onclick="removeItemRow(this)">
+                    <div class="md:flex-1 w-full md:w-auto mb-3 md:mb-0">
+                        <input type="text" placeholder="Search item…"
+                            class="item-search w-full px-4 py-3 min-h-[48px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none" />
+                        <div class="item-results mt-1 max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 hidden"></div>
+                        <div class="item-selected hidden mt-1 flex items-center justify-between gap-2 px-3 py-2 min-h-[48px] rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                            <span class="item-selected-name text-sm font-semibold text-gray-900 dark:text-white truncate"></span>
+                            <button type="button" class="shrink-0 text-xs font-bold text-blue-600 dark:text-blue-400 touch-manipulation" onclick="clearItemSelection(this)">Change</button>
+                        </div>
+                        <select class="item-select hidden"></select>
+                    </div>
+                    <button type="button" class="px-4 py-3 min-h-[48px] text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all touch-manipulation" onclick="removeItemRow(this)">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                         </svg>
                     </button>
                 </div>
                 <div class="flex flex-wrap gap-3 items-center mt-3">
-                    <input type="number" min="0.01" step="0.01" value="1" placeholder="Qty" class="qty-input w-24 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-center font-medium" />
-                    <select class="unit-select px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"></select>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" class="qty-dec w-11 h-11 min-w-[44px] rounded-lg bg-gray-200 dark:bg-gray-700 text-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation">&minus;</button>
+                        <input type="number" min="0.01" step="0.01" value="1" placeholder="Qty" inputmode="decimal" class="qty-input w-20 min-h-[44px] px-2 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-center font-medium" />
+                        <button type="button" class="qty-inc w-11 h-11 min-w-[44px] rounded-lg bg-gray-200 dark:bg-gray-700 text-xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation">+</button>
+                    </div>
+                    <select class="unit-select px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"></select>
                     <span class="conversion-note text-xs text-gray-500 dark:text-gray-400"></span>
                 </div>
             `;
@@ -280,6 +293,11 @@
             refreshPreview();
         }
 
+        // The hidden .item-select stays the actual source of truth for the
+        // chosen item id — every other function (rowData, availability
+        // lookups, submit) already reads it, unchanged. The search box +
+        // tap-result list is purely a friendlier way to set its value and
+        // fire the same 'change' event a real <select> pick would have.
         function refreshItemSelect(i) {
             const row = rowEl(i);
             if (!row) return;
@@ -290,6 +308,64 @@
             const list = itemsFor(type, toWarehouseId);
             select.innerHTML = '<option value="">Select ' + (type === 'ingredient' ? 'Ingredient' : 'Product') + '</option>' +
                 list.map(item => `<option value="${item.id}" ${item.id == currentValue ? 'selected' : ''}>${item.name}</option>`).join('');
+            select.dataset.list = JSON.stringify(list.map(item => ({ id: item.id, name: item.name })));
+            syncItemPickerUi(row);
+        }
+
+        // Reflects the hidden select's current value into the search/result/
+        // selected-chip UI — called after refreshItemSelect() and whenever
+        // the selection is cleared.
+        function syncItemPickerUi(row) {
+            const select = row.querySelector('.item-select');
+            const searchInput = row.querySelector('.item-search');
+            const resultsEl = row.querySelector('.item-results');
+            const selectedEl = row.querySelector('.item-selected');
+            const selectedNameEl = row.querySelector('.item-selected-name');
+            const list = JSON.parse(select.dataset.list || '[]');
+            const chosen = select.value ? list.find(item => item.id == select.value) : null;
+
+            if (chosen) {
+                selectedNameEl.textContent = chosen.name;
+                selectedEl.classList.remove('hidden');
+                searchInput.classList.add('hidden');
+                resultsEl.classList.add('hidden');
+            } else {
+                selectedEl.classList.add('hidden');
+                searchInput.classList.remove('hidden');
+            }
+        }
+
+        function renderItemResults(row) {
+            const select = row.querySelector('.item-select');
+            const searchInput = row.querySelector('.item-search');
+            const resultsEl = row.querySelector('.item-results');
+            const list = JSON.parse(select.dataset.list || '[]');
+            const term = searchInput.value.trim().toLowerCase();
+
+            if (!term) { resultsEl.classList.add('hidden'); resultsEl.innerHTML = ''; return; }
+
+            const matches = list.filter(item => item.name.toLowerCase().includes(term)).slice(0, 20);
+            resultsEl.innerHTML = matches.map(item =>
+                `<button type="button" class="item-result-btn w-full text-left px-3 py-2 min-h-[44px] text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 touch-manipulation" data-id="${item.id}">${item.name}</button>`
+            ).join('') || '<p class="px-3 py-2 text-sm text-gray-400">No match.</p>';
+            resultsEl.classList.remove('hidden');
+        }
+
+        function pickItemResult(row, id) {
+            const select = row.querySelector('.item-select');
+            select.value = id;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            row.querySelector('.item-search').value = '';
+            row.querySelector('.item-results').classList.add('hidden');
+            syncItemPickerUi(row);
+        }
+
+        function clearItemSelection(btn) {
+            const row = btn.closest('.item-row');
+            const select = row.querySelector('.item-select');
+            select.value = '';
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            syncItemPickerUi(row);
         }
 
         function refreshUnitSelect(i) {
@@ -398,6 +474,32 @@
         document.addEventListener('input', function (e) {
             if (e.target && (e.target.matches('.qty-input') || e.target.matches('select[name="from_warehouse_id"]'))) {
                 refreshPreview();
+            }
+            if (e.target && e.target.matches('.item-search')) {
+                const row = e.target.closest('.item-row');
+                if (row) renderItemResults(row);
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            const resultBtn = e.target.closest && e.target.closest('.item-result-btn');
+            if (resultBtn) {
+                const row = resultBtn.closest('.item-row');
+                if (row) pickItemResult(row, resultBtn.dataset.id);
+                return;
+            }
+
+            const decBtn = e.target.closest && e.target.closest('.qty-dec');
+            const incBtn = e.target.closest && e.target.closest('.qty-inc');
+            if (decBtn || incBtn) {
+                const row = (decBtn || incBtn).closest('.item-row');
+                if (!row) return;
+                const input = row.querySelector('.qty-input');
+                const step = parseFloat(input.step) || 1;
+                const current = parseFloat(input.value) || 0;
+                const next = decBtn ? Math.max(parseFloat(input.min) || 0, current - step) : current + step;
+                input.value = Math.round(next * 100) / 100;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
             }
         });
 

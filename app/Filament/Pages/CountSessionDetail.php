@@ -240,7 +240,7 @@ class CountSessionDetail extends Page
     public function addCatchItem(string $itemType, int $itemId): ?array
     {
         if (!$this->catchStepEnabled()) {
-            Notification::make()->title('Could not add item')->body('This session is not using the in-stock-only catch step.')->danger()->send();
+            Notification::make()->title('Could not add item')->body('This session is not using the in-stock-only catch step.')->danger()->persistent()->send();
 
             return null;
         }
@@ -257,7 +257,7 @@ class CountSessionDetail extends Page
                 'values' => $item->subCounts->pluck('quantity', 'sub_location')->map(fn () => '')->all(),
             ];
         } catch (\Exception $e) {
-            Notification::make()->title('Could not add item')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not add item')->body($e->getMessage())->danger()->persistent()->send();
 
             return null;
         }
@@ -325,7 +325,7 @@ class CountSessionDetail extends Page
 
             return true;
         } catch (\Exception $e) {
-            Notification::make()->title('Could not record count')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not record count')->body($e->getMessage())->danger()->persistent()->send();
 
             return false;
         }
@@ -353,7 +353,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Count declared')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not declare')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not declare')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -396,14 +396,14 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Identity confirmed — you can review now')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not confirm identity')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not confirm identity')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
     public function reviewAccept(int $itemId): void
     {
         if (!$this->iAmReviewer()) {
-            Notification::make()->title('Only the incoming custodian can review this count')->danger()->send();
+            Notification::make()->title('Only the incoming custodian can review this count')->danger()->persistent()->send();
 
             return;
         }
@@ -418,14 +418,14 @@ class CountSessionDetail extends Page
             (new CountSessionService())->reviewProduct($item, $this->session->incoming_user_id, 'accepted');
             $this->refreshSession();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not accept')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not accept')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
     public function reviewDispute(int $itemId, array $quantities): void
     {
         if (!$this->iAmReviewer()) {
-            Notification::make()->title('Only the incoming custodian can review this count')->danger()->send();
+            Notification::make()->title('Only the incoming custodian can review this count')->danger()->persistent()->send();
 
             return;
         }
@@ -440,7 +440,7 @@ class CountSessionDetail extends Page
             (new CountSessionService())->reviewProduct($item, $this->session->incoming_user_id, 'disputed', $quantities);
             $this->refreshSession();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not record dispute')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not record dispute')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -457,14 +457,14 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Declaration amended')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not amend')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not amend')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
     public function markItemUnresolved(int $itemId): void
     {
         if (!$this->iAmReviewer()) {
-            Notification::make()->title('Only the incoming custodian can mark this unresolved')->danger()->send();
+            Notification::make()->title('Only the incoming custodian can mark this unresolved')->danger()->persistent()->send();
 
             return;
         }
@@ -480,7 +480,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Marked unresolved — a supervisor has been notified')->warning()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not mark unresolved')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not mark unresolved')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -549,7 +549,7 @@ class CountSessionDetail extends Page
 
             return true;
         } catch (\Exception $e) {
-            Notification::make()->title('Could not submit')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not submit')->body($e->getMessage())->danger()->persistent()->send();
 
             return false;
         }
@@ -645,7 +645,7 @@ class CountSessionDetail extends Page
 
             return true;
         } catch (\Exception $e) {
-            Notification::make()->title('Could not seal')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not seal')->body($e->getMessage())->danger()->persistent()->send();
 
             return false;
         }
@@ -658,7 +658,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Outgoing confirmation recorded')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -669,7 +669,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Incoming confirmation recorded')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -700,7 +700,7 @@ class CountSessionDetail extends Page
     public function cancelSession(?string $reason = null): void
     {
         if (!$this->canCancelSession()) {
-            Notification::make()->title('You are not able to cancel this session')->danger()->send();
+            Notification::make()->title('You are not able to cancel this session')->danger()->persistent()->send();
             return;
         }
 
@@ -709,7 +709,7 @@ class CountSessionDetail extends Page
             Notification::make()->title('Session cancelled')->success()->send();
             $this->redirect('/admin/my-count');
         } catch (\Exception $e) {
-            Notification::make()->title('Could not cancel')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not cancel')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -720,7 +720,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Submitted for supervisor review')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not submit')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not submit')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -741,7 +741,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Decision recorded')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not record decision')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not record decision')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -752,7 +752,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Session finalized')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not finalize')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not finalize')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 
@@ -803,7 +803,7 @@ class CountSessionDetail extends Page
             $this->refreshSession();
             Notification::make()->title('Shift started')->success()->send();
         } catch (\Exception $e) {
-            Notification::make()->title('Could not start shift')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not start shift')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 }

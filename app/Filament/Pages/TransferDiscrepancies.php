@@ -88,7 +88,7 @@ class TransferDiscrepancies extends Page implements HasTable
                             app(StockTransferService::class)->reverseDiscrepancyToStore($record, Auth::id(), $data['note']);
                             Notification::make()->success()->title('Reversed to main store')->send();
                         } catch (\Throwable $e) {
-                            Notification::make()->danger()->title('Could not reverse')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Could not reverse')->body($e->getMessage())->persistent()->send();
                         }
                     }),
                 Action::make('writeOff')
@@ -104,7 +104,7 @@ class TransferDiscrepancies extends Page implements HasTable
                             app(StockTransferService::class)->writeOffDiscrepancy($record, Auth::id(), $data['note']);
                             Notification::make()->success()->title('Written off as missing')->send();
                         } catch (\Throwable $e) {
-                            Notification::make()->danger()->title('Could not write off')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Could not write off')->body($e->getMessage())->persistent()->send();
                         }
                     }),
             ])

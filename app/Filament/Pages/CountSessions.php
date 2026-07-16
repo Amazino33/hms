@@ -139,7 +139,7 @@ class CountSessions extends Page implements HasTable
                             (new CountSessionService())->cancelSession($record, auth()->id(), $data['reason'] ?? null);
                             Notification::make()->title('Session cancelled')->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not cancel')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not cancel')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
             ])
@@ -191,7 +191,7 @@ class CountSessions extends Page implements HasTable
 
                             $action->redirect("/admin/count-session-detail?session_id={$session->id}");
                         } catch (\Exception $e) {
-                            Notification::make()->title('Could not open session')->body($e->getMessage())->danger()->send();
+                            Notification::make()->title('Could not open session')->body($e->getMessage())->danger()->persistent()->send();
                         }
                     }),
             ]);

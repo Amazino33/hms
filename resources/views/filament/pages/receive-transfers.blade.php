@@ -260,9 +260,10 @@
                                                 <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-semibold">Sent: {{ $it->quantity }}</span>
                                             </div>
                                             @if ($it->isPending())
-                                                <div class="flex items-center gap-2">
-                                                    <input type="number" id="recv-m-{{ $line['type'] }}-{{ $it->id }}" value="{{ $it->quantity }}" min="0" max="{{ $it->quantity }}" step="0.01" class="w-24 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-center">
-                                                    <button wire:click="receiveLine({{ $it->id }}, '{{ $line['type'] }}', document.getElementById('recv-m-{{ $line['type'] }}-{{ $it->id }}').value)" wire:loading.attr="disabled" class="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-xs font-semibold">Receive</button>
+                                                <div x-data="{ receivedQty: {{ (float) $it->quantity }} }" class="space-y-2">
+                                                    <x-mobile.stepper model="receivedQty" :min="0" :max="(float) $it->quantity" :step="1" />
+                                                    <button @click="$wire.call('receiveLine', {{ $it->id }}, '{{ $line['type'] }}', receivedQty)" wire:loading.attr="disabled"
+                                                        class="w-full min-h-[44px] px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold touch-manipulation">Receive</button>
                                                 </div>
                                             @elseif ($it->outcome === 'received_full')
                                                 <span class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-xs font-semibold">Received {{ $it->received_quantity }}</span>

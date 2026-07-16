@@ -6,6 +6,7 @@ use App\Filament\Resources\Bookings\Pages\CreateBooking;
 use App\Filament\Resources\Bookings\Pages\EditBooking;
 use App\Filament\Resources\Bookings\Pages\ListBookings;
 use App\Models\Booking;
+use App\Services\UserFeedback;
 use BackedEnum;
 use UnitEnum;
 use Filament\Resources\Resource;
@@ -158,7 +159,15 @@ class BookingResource extends Resource
                 ->label('Delete')
                 ->icon('heroicon-o-trash')
                 ->color('danger')
-                ->action(fn (Booking $record) => $record->delete()),
+                ->action(function (Booking $record) {
+                    try {
+                        $record->delete();
+                        UserFeedback::succeeded('Booking deleted');
+                    } catch (\Throwable $e) {
+                        report($e);
+                        UserFeedback::blocked('Cannot delete booking', 'This booking still has a folio or related records on it.');
+                    }
+                }),
         ])
         ->paginated([10, 25, 50, 100])
         ->toolbarActions([
@@ -166,7 +175,15 @@ class BookingResource extends Resource
             ->requiresConfirmation()
             ->label('Delete Selected')
             ->icon('heroicon-o-trash')
-            ->action(fn (array $records) => Booking::whereIn('id', $records)->delete()),
+            ->action(function (array $records) {
+                try {
+                    $count = Booking::whereIn('id', $records)->delete();
+                    UserFeedback::succeeded("{$count} booking(s) deleted");
+                } catch (\Throwable $e) {
+                    report($e);
+                    UserFeedback::blocked('Could not delete', 'One or more selected bookings still have folios or related records on them.');
+                }
+            }),
         ]);
     }
 

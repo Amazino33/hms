@@ -6,6 +6,7 @@ use App\Filament\Resources\Categories\Pages\CreateCategory;
 use App\Filament\Resources\Categories\Pages\EditCategory;
 use App\Filament\Resources\Categories\Pages\ListCategories;
 use App\Models\Category;
+use App\Services\UserFeedback;
 use BackedEnum;
 use UnitEnum;
 use Filament\Forms\Components\Select;
@@ -82,7 +83,15 @@ class CategoryResource extends Resource
                 ->label('Delete')
                 ->icon('heroicon-o-trash')
                 ->color('danger')
-                ->action(fn (Category $record) => $record->delete()),
+                ->action(function (Category $record) {
+                    try {
+                        $record->delete();
+                        UserFeedback::succeeded('Category deleted');
+                    } catch (\Throwable $e) {
+                        report($e);
+                        UserFeedback::blocked('Cannot delete category', 'This category still has products assigned to it. Move or delete those products first.');
+                    }
+                }),
         ])
         ->paginated([10, 25, 50, 100])
         ->toolbarActions([
@@ -90,7 +99,15 @@ class CategoryResource extends Resource
                 ->requiresConfirmation()
                 ->label('Delete Selected')
                 ->icon('heroicon-o-trash')
-                ->action(fn (array $records) => Category::whereIn('id', $records)->delete()),
+                ->action(function (array $records) {
+                    try {
+                        $count = Category::whereIn('id', $records)->delete();
+                        UserFeedback::succeeded("{$count} categor" . ($count === 1 ? 'y' : 'ies') . ' deleted');
+                    } catch (\Throwable $e) {
+                        report($e);
+                        UserFeedback::blocked('Could not delete', 'One or more selected categories still have products assigned to them.');
+                    }
+                }),
         ]);
     }
 

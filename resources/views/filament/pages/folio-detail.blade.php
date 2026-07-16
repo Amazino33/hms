@@ -36,7 +36,39 @@
 
             <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <h3 class="font-bold text-gray-900 dark:text-white mb-3">Ledger</h3>
-                <div class="overflow-x-auto hms-table-scroll">
+
+                {{-- Mobile: one card per line, nothing dropped that the
+                     desktop table shows — date/type/description/by all
+                     still present, just stacked instead of columned. --}}
+                <div class="md:hidden space-y-2">
+                    @forelse($booking->folio?->lines ?? [] as $line)
+                        <div class="rounded-lg border border-gray-100 dark:border-gray-700 p-3">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ $line->description }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                                        {{ ucfirst(str_replace('_', ' ', $line->type)) }} · {{ $line->created_at->format('M j, g:ia') }} · {{ $line->createdBy?->name ?? '—' }}
+                                    </div>
+                                    @if($line->reference)
+                                        <div class="text-xs text-gray-400">{{ $line->reference }}</div>
+                                    @endif
+                                    @if($line->type === 'payment' && $line->payment_method === 'transfer')
+                                        <div class="text-xs font-bold {{ $line->verified ? 'text-emerald-600' : 'text-amber-600' }}">
+                                            {{ $line->verified ? 'Verified' : 'Pending verification' }}
+                                        </div>
+                                    @endif
+                                </div>
+                                <div class="shrink-0 text-right font-bold {{ $line->amount >= 0 ? 'text-red-600' : 'text-emerald-600' }}">
+                                    {{ $line->amount >= 0 ? '+' : '' }}{{ number_format($line->amount, 2) }}
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <p class="text-sm text-gray-400 py-3">No charges or payments yet.</p>
+                    @endforelse
+                </div>
+
+                <div class="hidden md:block overflow-x-auto hms-table-scroll">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-left text-gray-500 dark:text-gray-400">
@@ -102,11 +134,12 @@
                     </div>
 
                     <input type="text" wire:model="incidentalDescription" placeholder="Description"
-                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                    <input type="number" step="0.01" wire:model="incidentalAmount" placeholder="Amount"
-                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                        class="w-full px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                    <div x-data="{ incidentalAmount: @entangle('incidentalAmount') }">
+                        <x-mobile.numeric-pad model="incidentalAmount" :currency="true" label="Amount" />
+                    </div>
 
-                    <button type="button" wire:click="addIncidental" class="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold">
+                    <button type="button" wire:click="addIncidental" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold touch-manipulation">
                         Add charge
                     </button>
                 </div>
@@ -114,14 +147,13 @@
                 <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3">
                     <h3 class="font-bold text-gray-900 dark:text-white">Record payment</h3>
 
-                    <input type="number" step="0.01" wire:model="paymentAmount" placeholder="Amount"
-                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                    <div x-data="{ paymentAmount: @entangle('paymentAmount') }">
+                        <x-mobile.numeric-pad model="paymentAmount" :currency="true" label="Amount" />
+                    </div>
 
-                    <select wire:model="paymentMethod" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-                        <option value="cash">Cash</option>
-                        <option value="pos_terminal">POS Terminal</option>
-                        <option value="transfer">Bank Transfer</option>
-                    </select>
+                    <div x-data="{ paymentMethod: @entangle('paymentMethod') }">
+                        <x-mobile.chip-select model="paymentMethod" :options="['cash' => 'Cash', 'pos_terminal' => 'POS Terminal', 'transfer' => 'Bank Transfer']" />
+                    </div>
 
                     @if($paymentMethod === 'transfer')
                         <input type="text" wire:model="paymentReference" placeholder="Transfer reference / sender name"

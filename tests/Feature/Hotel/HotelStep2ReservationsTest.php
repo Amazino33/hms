@@ -256,3 +256,62 @@ it('grants receptionist access to the reservations timeline page', function () {
     $this->actingAs($receptionist);
     expect(\App\Services\PermissionService::canAccessPage(ReservationsTimeline::class))->toBeTrue();
 });
+
+/**
+ * Mobile pass: phone-width gets a day-at-a-time room list instead of the
+ * 14-day Gantt (which is mathematically unfittable at 360px). These pin the
+ * navigation bounds — same $days/$bars data the Gantt already computes, just
+ * a different offset into it.
+ */
+it('clamps day navigation to the visible window, never going negative or past the last day', function () {
+    Artisan::call('db:seed', ['--class' => 'PagePermissionsSeeder', '--force' => true]);
+    $receptionist = User::factory()->create();
+    $receptionist->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'receptionist']));
+
+    $component = \Livewire\Livewire::actingAs($receptionist)->test(ReservationsTimeline::class);
+
+    expect($component->instance()->selectedDayOffset)->toBe(0);
+
+    $component->call('prevDay');
+    expect($component->instance()->selectedDayOffset)->toBe(0); // clamped, not negative
+
+    $component->call('jumpToDay', 13);
+    expect($component->instance()->selectedDayOffset)->toBe(13);
+
+    $component->call('nextDay');
+    expect($component->instance()->selectedDayOffset)->toBe(13); // clamped to the last day
+
+    $component->call('jumpToDay', 999);
+    expect($component->instance()->selectedDayOffset)->toBe(13); // clamped even for an out-of-range jump
+
+    $component->call('prevDay');
+    expect($component->instance()->selectedDayOffset)->toBe(12);
+});
+
+it('renders the day-list room row as vacant-and-tappable-to-reserve when nothing books that room on the selected day', function () {
+    Artisan::call('db:seed', ['--class' => 'PagePermissionsSeeder', '--force' => true]);
+    $receptionist = User::factory()->create();
+    $receptionist->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'receptionist']));
+    $room = Room::create(['number' => '501', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
+
+    $html = \Livewire\Livewire::actingAs($receptionist)->test(ReservationsTimeline::class)->html();
+
+    expect($html)->toContain('Vacant — tap to reserve');
+});
+
+it('renders the day-list room row with the guest name and status when a booking covers the selected day', function () {
+    Artisan::call('db:seed', ['--class' => 'PagePermissionsSeeder', '--force' => true]);
+    $receptionist = User::factory()->create();
+    $receptionist->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'receptionist']));
+    $room = Room::create(['number' => '502', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
+
+    (new ReservationService())->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Timeline Guest', 'guest_phone' => '0809' . fake()->numerify('#######'),
+        'check_in' => now()->toDateString(), 'check_out' => now()->addDays(2)->toDateString(), 'deposit' => null,
+    ], $receptionist->id);
+
+    $html = \Livewire\Livewire::actingAs($receptionist)->test(ReservationsTimeline::class)->html();
+
+    expect($html)->toContain('Timeline Guest');
+    expect($html)->toContain('Reserved');
+});

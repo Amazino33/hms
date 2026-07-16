@@ -6,6 +6,7 @@ use App\Filament\Resources\Guests\Pages\CreateGuest;
 use App\Filament\Resources\Guests\Pages\EditGuest;
 use App\Filament\Resources\Guests\Pages\ListGuests;
 use App\Models\Guest;
+use App\Services\UserFeedback;
 use BackedEnum;
 use UnitEnum;
 use Filament\Resources\Resource;
@@ -115,7 +116,15 @@ class GuestResource extends Resource
                 ->label('Delete')
                 ->requiresConfirmation()
                 ->color('danger')
-                ->action(fn (Guest $record) => $record->delete()),
+                ->action(function (Guest $record) {
+                    try {
+                        $record->delete();
+                        UserFeedback::succeeded('Guest deleted');
+                    } catch (\Throwable $e) {
+                        report($e);
+                        UserFeedback::blocked('Cannot delete guest', 'This guest still has orders or bookings on record.');
+                    }
+                }),
         ])
         ->paginated([10, 25, 50, 100])
         ->toolbarActions([
@@ -124,7 +133,16 @@ class GuestResource extends Resource
                 ->label('Delete Selected')
                 ->requiresConfirmation()
                 ->color('danger')
-                ->action(fn (\Illuminate\Database\Eloquent\Collection $records) => $records->each->delete()),
+                ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                    try {
+                        $count = $records->count();
+                        $records->each->delete();
+                        UserFeedback::succeeded("{$count} guest(s) deleted");
+                    } catch (\Throwable $e) {
+                        report($e);
+                        UserFeedback::blocked('Could not delete', 'One or more selected guests still have orders or bookings on record.');
+                    }
+                }),
         ]);
     }
 

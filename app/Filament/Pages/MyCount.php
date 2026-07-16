@@ -172,7 +172,7 @@ class MyCount extends Page
         $warehouseId = $this->myWarehouseId();
 
         if (!$role || !$type || !$warehouseId) {
-            Notification::make()->title('Your account is not set up as a bartender or chef')->danger()->send();
+            Notification::make()->title('Your account is not set up as a bartender or chef')->danger()->persistent()->send();
             return;
         }
 
@@ -204,7 +204,7 @@ class MyCount extends Page
 
             $this->redirect("/admin/count-session-detail?session_id={$session->id}");
         } catch (\Exception $e) {
-            Notification::make()->title('Could not start count')->body($e->getMessage())->danger()->send();
+            Notification::make()->title('Could not start count')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

@@ -195,10 +195,20 @@ new class extends Component {
                     this.pin += d
                     if (this.pin.length === 4) {
                         this.submitting = true
-                        $wire.submitPin(this.pin).then(() => {
-                            this.pin = ''
-                            this.submitting = false
-                        })
+                        // finally, not just then(): a genuine network/419/500
+                        // failure here used to leave submitting=true forever,
+                        // permanently covering the pad behind the "Logging
+                        // in…" overlay with no way out but a hard reload —
+                        // the global request-failure handler now also shows
+                        // a visible banner/toast for the same failure, but
+                        // that alone doesn't unstick this component's own
+                        // local state.
+                        $wire.submitPin(this.pin)
+                            .catch(() => {})
+                            .finally(() => {
+                                this.pin = ''
+                                this.submitting = false
+                            })
                     }
                 },
                 backspace() {

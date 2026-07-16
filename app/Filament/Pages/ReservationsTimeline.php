@@ -59,6 +59,31 @@ class ReservationsTimeline extends Page
 
     public ?int $selectedBookingId = null;
 
+    /**
+     * Phone-width view only (see reservations-timeline.blade.php's md:hidden
+     * branch) — the 14-day Gantt is mathematically unfittable at 360px
+     * (986px hardcoded min-width), so phones get one day's room list at a
+     * time instead. Desktop/kiosk keeps the unchanged Gantt. Purely a view-
+     * layer offset into the same $days/$bars data getViewData() already
+     * computes for the Gantt — no separate query, no new business logic.
+     */
+    public int $selectedDayOffset = 0;
+
+    public function nextDay(): void
+    {
+        $this->selectedDayOffset = min(self::WINDOW_DAYS - 1, $this->selectedDayOffset + 1);
+    }
+
+    public function prevDay(): void
+    {
+        $this->selectedDayOffset = max(0, $this->selectedDayOffset - 1);
+    }
+
+    public function jumpToDay(int $offset): void
+    {
+        $this->selectedDayOffset = max(0, min(self::WINDOW_DAYS - 1, $offset));
+    }
+
     public function openDetails(int $bookingId): void
     {
         $this->selectedBookingId = $bookingId;
@@ -92,6 +117,7 @@ class ReservationsTimeline extends Page
                 ->title('Could not check in')
                 ->body($e->getMessage())
                 ->danger()
+                ->persistent()
                 ->send();
         }
     }
@@ -138,6 +164,7 @@ class ReservationsTimeline extends Page
                 ->title('Could not create reservation')
                 ->body($e->getMessage())
                 ->danger()
+                ->persistent()
                 ->send();
         }
     }
