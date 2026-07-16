@@ -46,7 +46,7 @@
             class="shrink-0 w-12 h-12 rounded-xl bg-gray-200 dark:bg-gray-700 active:bg-gray-300 dark:active:bg-gray-600 text-2xl font-bold text-gray-700 dark:text-gray-200 touch-manipulation flex items-center justify-center">&minus;</button>
 
         <div class="flex-1">
-            <x-mobile.numeric-pad :model="$model" :min="$min" :max="$max" :integer="$integer" />
+            <x-mobile.numeric-pad :model="$model" :min="$min" :max="$max" :integer="$integer" :label="$label" :hide-field-label="true" />
         </div>
 
         <button type="button"

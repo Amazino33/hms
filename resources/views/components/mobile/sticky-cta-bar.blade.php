@@ -9,8 +9,20 @@
 
     Destructive/secondary actions never belong in this bar — voids, cancels,
     and back actions stay elsewhere (top-left back, inside a review sheet).
+
+    Hides itself while a mobile.numeric-pad sheet is open (spec: the pad
+    must fully replace it, not overlap it) — a counter, not a boolean,
+    since it must stay hidden if a second pad opens before the first
+    closes. The pad components are the only thing that dispatch these two
+    window events; nothing else needs to know this bar exists.
 --}}
-<div {{ $attributes->merge(['class' => 'fixed inset-x-0 bottom-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 pt-3']) }}
+<div x-data="{ hmsOpenPads: 0 }"
+    x-init="
+        window.addEventListener('hms-pad-open', () => hmsOpenPads++);
+        window.addEventListener('hms-pad-close', () => hmsOpenPads = Math.max(0, hmsOpenPads - 1));
+    "
+    x-show="hmsOpenPads === 0"
+    {{ $attributes->merge(['class' => 'fixed inset-x-0 bottom-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 pt-3']) }}
     style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));">
     @if($retrying)
         <div x-show="{{ $retrying }}" x-cloak
