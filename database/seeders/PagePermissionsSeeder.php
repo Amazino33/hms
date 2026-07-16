@@ -209,6 +209,19 @@ class PagePermissionsSeeder extends Seeder
                 'role_name' => 'storekeeper',
             ],
 
+            // System Error Log - Admins, Super Admin only (stack traces can
+            // reveal internal file paths, not for the manager tier)
+            [
+                'page_class' => 'App\Filament\Pages\SystemErrorLog',
+                'page_name' => 'Error Log',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\SystemErrorLog',
+                'page_name' => 'Error Log',
+                'role_name' => 'admin',
+            ],
+
             // Transfer Discrepancies - Managers, Admins, Super Admin
             [
                 'page_class' => 'App\Filament\Pages\TransferDiscrepancies',

@@ -37,5 +37,12 @@ return Application::configure(basePath: dirname(__DIR__))
         }
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // File-based (not DB-based) so it still captures the error even
+        // when the exception IS a database outage — see ErrorLogRecorder's
+        // own docblock. Only fires for exceptions that reach here: routine
+        // caught-and-notified failures elsewhere in the app never clutter
+        // this log, since they don't call report().
+        $exceptions->report(function (\Throwable $e): void {
+            \App\Services\ErrorLogRecorder::record($e);
+        });
     })->create();
