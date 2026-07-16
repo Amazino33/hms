@@ -4,6 +4,7 @@ use App\Filament\Pages\SystemErrorLog;
 use App\Models\PagePermission;
 use App\Models\User;
 use App\Services\ErrorLogRecorder;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Artisan;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -72,6 +73,28 @@ it('automatically records an uncaught exception reported through the framework',
 
     expect($entries)->toHaveCount(1);
     expect($entries[0]['message'])->toBe('reported via the real exception handler');
+});
+
+it('records a raw Notification::make()->danger() call site into the error log, without touching that call site', function () {
+    // This is the exact pattern still used across most of the codebase
+    // (ShiftManager, FolioDetail, CountSessionDetail, etc.) — proving this
+    // works with zero changes to any of those files is the whole point of
+    // binding over Filament's own Notification class.
+    Notification::make()->title('Could not check out')->body('Folio balance must be zero.')->danger()->persistent()->send();
+
+    $entries = ErrorLogRecorder::recent();
+
+    expect($entries)->toHaveCount(1);
+    expect($entries[0]['source'])->toBe('notification');
+    expect($entries[0]['message'])->toBe('Could not check out');
+    expect($entries[0]['body'])->toBe('Folio balance must be zero.');
+});
+
+it('does not record a success or warning notification, only danger ones', function () {
+    Notification::make()->title('Shift Ended Successfully')->success()->send();
+    Notification::make()->title('Choose a reason first')->warning()->send();
+
+    expect(ErrorLogRecorder::recent())->toHaveCount(0);
 });
 
 it('grants a super_admin and an admin access to the error log page, and blocks a plain waiter', function () {

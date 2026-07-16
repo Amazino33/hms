@@ -36,7 +36,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Every ->danger() notification across the app — most call sites
+        // still use raw Notification::make() rather than the shared
+        // UserFeedback service — resolves through this binding first, so
+        // LoggingNotification::send() can also mirror it into the System
+        // Error Log without editing every one of those call sites.
+        $this->app->bind(\Filament\Notifications\Notification::class, function ($app, array $parameters) {
+            return new \App\Support\LoggingNotification($parameters['id']);
+        });
     }
 
     /**

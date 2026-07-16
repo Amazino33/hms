@@ -19,6 +19,46 @@ class ErrorLogRecorder
 
     private const MAX_LINES = 2000;
 
+    /**
+     * Every ->danger() notification shown to a user (see LoggingNotification)
+     * — no exception object to draw a stack trace from here, just the
+     * title/body the user actually saw, which is exactly what was asked
+     * for: "have it show what shows in the notifications".
+     */
+    public static function recordNotification(?string $title, ?string $body): void
+    {
+        $userId = null;
+        try {
+            $userId = auth()->id();
+        } catch (Throwable) {
+        }
+
+        $url = null;
+        $method = null;
+        try {
+            $url = Request::fullUrl();
+            $method = Request::method();
+        } catch (Throwable) {
+        }
+
+        $entry = [
+            'time' => now()->toDateTimeString(),
+            'source' => 'notification',
+            'class' => 'Notification',
+            'message' => $title ?? '(no title)',
+            'body' => $body,
+            'code' => null,
+            'file' => null,
+            'line' => null,
+            'url' => $url,
+            'method' => $method,
+            'user_id' => $userId,
+            'trace' => null,
+        ];
+
+        self::write($entry);
+    }
+
     public static function record(Throwable $e): void
     {
         // auth()->id() and the request facade can themselves touch the
@@ -41,8 +81,10 @@ class ErrorLogRecorder
 
         $entry = [
             'time' => now()->toDateTimeString(),
+            'source' => 'exception',
             'class' => get_class($e),
             'message' => $e->getMessage(),
+            'body' => null,
             'code' => $e->getCode(),
             'file' => $e->getFile(),
             'line' => $e->getLine(),
@@ -62,6 +104,14 @@ class ErrorLogRecorder
                 ->implode("\n"),
         ];
 
+        self::write($entry);
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     */
+    private static function write(array $entry): void
+    {
         try {
             $path = storage_path(self::LOG_RELATIVE_PATH);
             file_put_contents($path, json_encode($entry, JSON_UNESCAPED_SLASHES) . PHP_EOL, FILE_APPEND | LOCK_EX);
