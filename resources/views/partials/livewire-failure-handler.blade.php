@@ -51,22 +51,42 @@
 
     window.hmsShowFailureToast = function () {
         // Persistent (no auto-dismiss timer) — tap anywhere on the card to
-        // dismiss. Not de-duplicated: a second distinct failure while one
-        // toast is already showing still deserves its own visible toast,
-        // stacked below the first.
-        const existing = document.querySelectorAll('.hms-failure-toast').length;
+        // dismiss. Deduplicated to a single toast: this app never does a
+        // full page reload between screens, so on a stretch where the
+        // server is genuinely struggling, un-deduplicated stacking buries
+        // the whole screen under a wall of identical banners nobody can
+        // act on. A repeat failure while one is already showing just bumps
+        // its own counter and gives it a brief pulse instead.
+        const existingToast = document.getElementById('hms-failure-toast');
+
+        if (existingToast) {
+            const count = parseInt(existingToast.dataset.count || '1', 10) + 1;
+            existingToast.dataset.count = String(count);
+            existingToast.querySelector('.hms-failure-toast-text').textContent =
+                `Action failed (${count}×) — please try again. If this repeats, tell the manager.`;
+            existingToast.style.transform = 'translateX(-50%) scale(1.05)';
+            setTimeout(() => { existingToast.style.transform = 'translateX(-50%) scale(1)'; }, 150);
+            return;
+        }
 
         const toast = document.createElement('div');
+        toast.id = 'hms-failure-toast';
         toast.className = 'hms-failure-toast';
         toast.setAttribute('role', 'alert');
+        toast.dataset.count = '1';
         toast.style.cssText = [
-            'position:fixed', `top:${16 + existing * 72}px`, 'left:50%', 'transform:translateX(-50%)',
+            'position:fixed', 'top:16px', 'left:50%', 'transform:translateX(-50%)',
             'z-index:99999', 'min-height:64px', 'display:flex', 'align-items:center',
             'background:#dc2626', 'color:#fff', 'padding:16px 24px', 'border-radius:12px',
             'font-weight:700', 'max-width:90vw', 'text-align:center', 'cursor:pointer',
-            'box-shadow:0 10px 25px rgba(0,0,0,.35)',
+            'box-shadow:0 10px 25px rgba(0,0,0,.35)', 'transition:transform 150ms ease',
         ].join(';');
-        toast.textContent = 'Action failed — please try again. If this repeats, tell the manager.';
+
+        const text = document.createElement('span');
+        text.className = 'hms-failure-toast-text';
+        text.textContent = 'Action failed — please try again. If this repeats, tell the manager.';
+        toast.appendChild(text);
+
         toast.addEventListener('click', () => toast.remove());
         document.body.appendChild(toast);
     };
