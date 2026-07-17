@@ -3,6 +3,7 @@
 namespace App\Services\Ceo;
 
 use App\Models\FolioLine;
+use App\Models\InventoryTransaction;
 use App\Models\OrderItem;
 use App\Models\OrderPayment;
 use Illuminate\Support\Collection;
@@ -18,11 +19,23 @@ use Illuminate\Support\Collection;
  * (RoomOrderService is the only place that ever sets it), regardless of
  * whether the item itself is food or drink.
  *
- * Margin uses each product's/menu item's CURRENT cost (Product.cost_price,
- * MenuItem's recipe cost) — no cost-at-time-of-sale is snapshotted
- * anywhere in this codebase, confirmed during the Phase 1 audit and
- * accepted per the Phase 2 answer. Every margin figure this service
- * produces must be labeled "computed at current cost" by the caller.
+ * Margin for product lines uses unit_cost_at_sale, snapshotted on the
+ * matching sale InventoryTransaction (joined by product_id + the same
+ * "order:{id}" reference InventoryService writes — unambiguous even
+ * across repeat lines of the same product in one order, since they share
+ * the same last_cost_price at deduction time). Falls back to the
+ * product's current cost_price when null (pre-Prompt-1 history, or a
+ * product that has never had last_cost_price set), incrementing the
+ * caller-visible estimated-cost count.
+ *
+ * Menu items have no reliable per-order-item cost-at-sale: Prompt 1
+ * snapshots unit_cost_at_sale per *ingredient* transaction, not per menu
+ * item, and one order can plate two different dishes sharing an
+ * ingredient in the same order — there is no unambiguous way to
+ * reconstruct which ingredient transaction belongs to which dish's
+ * recipe from the order-level reference alone. Rather than guess,
+ * menu-item margin always uses current recipe cost and is always marked
+ * estimated.
  */
 class RevenueReportService
 {
@@ -57,7 +70,10 @@ class RevenueReportService
             $query->where('product_id', $filters['product_id']);
         }
 
-        $rows = $query->get()->map(function (OrderItem $item) {
+        $items = $query->get();
+        $costAtSaleByProductOrder = $this->productUnitCostAtSaleLookup($items);
+
+        $rows = $items->map(function (OrderItem $item) use ($costAtSaleByProductOrder) {
             $product = $item->product;
             $menuItem = $item->menuItem;
             $category = $product?->category ?? $menuItem?->category;
@@ -67,9 +83,17 @@ class RevenueReportService
 
             $quantity = (float) $item->quantity;
             $revenue = (float) $item->subtotal;
-            $unitCost = $product
-                ? (float) $product->cost_price
-                : ($menuItem ? (float) $menuItem->total_recipe_cost : 0.0);
+
+            if ($product) {
+                $costAtSale = $costAtSaleByProductOrder["{$product->id}:{$item->order_id}"] ?? null;
+                $costEstimated = is_null($costAtSale);
+                $unitCost = $costEstimated ? (float) $product->cost_price : (float) $costAtSale;
+            } else {
+                // Menu items: see class docblock — always estimated.
+                $costEstimated = true;
+                $unitCost = $menuItem ? (float) $menuItem->total_recipe_cost : 0.0;
+            }
+
             $cost = round($unitCost * $quantity, 2);
 
             return [
@@ -84,6 +108,7 @@ class RevenueReportService
                 'quantity' => $quantity,
                 'revenue' => $revenue,
                 'cost' => $cost,
+                'cost_estimated' => $costEstimated,
                 'margin' => round($revenue - $cost, 2),
                 'date' => $item->order?->created_at,
             ];
@@ -112,7 +137,37 @@ class RevenueReportService
             'cost' => $cost,
             'margin' => $margin,
             'margin_pct' => $revenue > 0 ? round($margin / $revenue * 100, 2) : 0.0,
+            'cost_estimated_count' => $lineItems->where('cost_estimated', true)->count(),
         ];
+    }
+
+    /**
+     * Batch lookup of unit_cost_at_sale for every product line in one
+     * query, keyed "{product_id}:{order_id}" — avoids an N+1 per item.
+     * Menu items are excluded (see class docblock).
+     */
+    private function productUnitCostAtSaleLookup(Collection $items): array
+    {
+        $references = $items->filter(fn (OrderItem $i) => $i->item_type === 'product' && $i->product_id)
+            ->map(fn (OrderItem $i) => "order:{$i->order_id}")
+            ->unique()
+            ->values();
+
+        if ($references->isEmpty()) {
+            return [];
+        }
+
+        return InventoryTransaction::query()
+            ->where('type', 'sale')
+            ->whereIn('reference', $references)
+            ->get(['product_id', 'reference', 'unit_cost_at_sale'])
+            ->filter(fn (InventoryTransaction $t) => ! is_null($t->unit_cost_at_sale))
+            ->mapWithKeys(function (InventoryTransaction $t) {
+                $orderId = str_replace('order:', '', $t->reference);
+
+                return ["{$t->product_id}:{$orderId}" => (float) $t->unit_cost_at_sale];
+            })
+            ->all();
     }
 
     /**

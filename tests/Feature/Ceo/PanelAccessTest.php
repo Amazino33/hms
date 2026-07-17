@@ -60,7 +60,7 @@ it('every discovered CEO page loads successfully for a ceo user', function () {
         '/ceo/occupancy-report', '/ceo/leakage-report', '/ceo/stock-alerts',
         '/ceo/orders', '/ceo/waiter-shift-settlements', '/ceo/receptionist-shift-settlements',
         '/ceo/folios', '/ceo/reservations', '/ceo/handover-counts', '/ceo/staff-debts',
-        '/ceo/inventory-transactions', '/ceo/procurements',
+        '/ceo/inventory-transactions', '/ceo/procurements', '/ceo/report-explorer',
     ];
 
     foreach ($paths as $path) {

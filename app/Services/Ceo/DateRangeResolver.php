@@ -2,6 +2,7 @@
 
 namespace App\Services\Ceo;
 
+use App\Support\BusinessDay;
 use Carbon\CarbonImmutable;
 
 /**
@@ -11,6 +12,10 @@ use Carbon\CarbonImmutable;
  * resolved DateRange, never off the raw preset string, so the "today"-
  * relative presets (this_week/this_month) are resolved exactly once per
  * request, not re-evaluated differently in different places.
+ *
+ * "Today" here means the current business day (BusinessDay::today(),
+ * 4am WAT boundary) — not the calendar day in the app's UTC server
+ * timezone.
  */
 class DateRangeResolver
 {
@@ -20,7 +25,7 @@ class DateRangeResolver
 
     public function resolvePreset(string $preset, ?string $customFrom = null, ?string $customTo = null): DateRange
     {
-        $today = CarbonImmutable::today();
+        $today = CarbonImmutable::parse(BusinessDay::today());
 
         return match ($preset) {
             'today' => new DateRange($today, $today),

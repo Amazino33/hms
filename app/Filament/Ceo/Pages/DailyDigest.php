@@ -10,6 +10,7 @@ use App\Services\Ceo\DateRange;
 use App\Services\Ceo\OccupancyReportService;
 use App\Services\Ceo\RevenueReportService;
 use App\Services\Ceo\WaiterLedgerService;
+use App\Support\BusinessDay;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Pages\Page;
@@ -26,7 +27,7 @@ class DailyDigest extends Page
 
     public function range(): DateRange
     {
-        $yesterday = CarbonImmutable::yesterday();
+        $yesterday = CarbonImmutable::parse(BusinessDay::yesterday());
 
         return new DateRange($yesterday, $yesterday);
     }

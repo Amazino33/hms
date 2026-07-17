@@ -12,7 +12,16 @@ use App\Services\ReservationService;
 use App\Services\RoomOrderService;
 use Carbon\CarbonImmutable;
 
+afterEach(function () {
+    CarbonImmutable::setTestNow();
+});
+
 it('attributes a folio-billed food item to Restaurant (what-was-sold) and flags it billed via folio (secondary dimension)', function () {
+    // Pinned to a WAT daytime hour: a single-day DateRange resolves its
+    // boundary via BusinessDay's 4am WAT cutoff (see DateRange), so an
+    // unpinned "now" run between 00:00-02:59 UTC would fall before that
+    // day's business-day open and be excluded from its own range.
+    CarbonImmutable::setTestNow('2026-07-15 12:00:00');
     $room = Room::create(['number' => '901', 'type' => 'Deluxe', 'price_per_night' => 20000, 'status' => 'available', 'housekeeping' => 'clean']);
     $receptionist = User::factory()->create();
     (new ReceptionistShiftService())->startShift($receptionist, 0);
@@ -51,6 +60,7 @@ it('attributes a folio-billed food item to Restaurant (what-was-sold) and flags 
 });
 
 it('does not flag a direct (non-room) order as billed via folio', function () {
+    CarbonImmutable::setTestNow('2026-07-15 12:00:00'); // see note in the test above
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $beer = Product::create(['name' => 'Star Beer', 'price' => 700, 'cost_price' => 300, 'category_id' => $category->id, 'is_active' => true]);
 

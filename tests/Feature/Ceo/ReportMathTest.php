@@ -51,6 +51,11 @@ it('computes shift shortfall rate as shortfall over that shift\'s total sales', 
 });
 
 it('computes revenue contribution percent and margin percent per product', function () {
+    // Pinned to a WAT daytime hour: a single-day DateRange resolves its
+    // boundary via BusinessDay's 4am WAT cutoff (see DateRange), so an
+    // unpinned "now" run between 00:00-02:59 UTC would fall before that
+    // day's business-day open and be excluded from its own range.
+    CarbonImmutable::setTestNow('2026-07-15 12:00:00');
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $beer = Product::create(['name' => 'Beer', 'price' => 500, 'cost_price' => 200, 'category_id' => $category->id, 'is_active' => true]);
     $coke = Product::create(['name' => 'Coke', 'price' => 300, 'cost_price' => 100, 'category_id' => $category->id, 'is_active' => true]);
@@ -80,6 +85,7 @@ it('computes revenue contribution percent and margin percent per product', funct
 });
 
 it('folds a service-type category into Restaurant revenue', function () {
+    CarbonImmutable::setTestNow('2026-07-15 12:00:00'); // see note above
     $category = Category::create(['name' => 'Spa', 'type' => 'service']);
     $product = Product::create(['name' => 'Massage', 'price' => 5000, 'cost_price' => 0, 'category_id' => $category->id, 'is_active' => true]);
 
@@ -161,6 +167,7 @@ it('buckets outstanding debt into 0-7 / 8-30 / 30+ day aging correctly', functio
 });
 
 it('computes repayment ratio as repaid over incurred for the period', function () {
+    CarbonImmutable::setTestNow('2026-07-15 12:00:00'); // see note in the revenue-contribution test above
     $waiter = User::factory()->create();
     $manager = User::factory()->create();
 

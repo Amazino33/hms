@@ -2,13 +2,16 @@
 
 namespace App\Services\Ceo;
 
+use App\Support\BusinessDay;
 use Carbon\CarbonImmutable;
 
 /**
- * A closed, inclusive [start, end] calendar-day range. Both ends are
- * start-of-day Carbon instances — callers needing a query boundary use
- * startBoundary()/endBoundary() to get the actual inclusive-through-
- * midnight timestamp bounds.
+ * A closed, inclusive [start, end] range of business-day labels (see
+ * BusinessDay — a business day runs 4am WAT to 4am WAT, not midnight to
+ * midnight). start/end are themselves just date labels; callers needing
+ * an actual query boundary use startBoundary()/endBoundary(), which
+ * resolve through BusinessDay so every report reads the same instants
+ * for the same labeled day.
  */
 class DateRange
 {
@@ -25,12 +28,16 @@ class DateRange
 
     public function startBoundary(): CarbonImmutable
     {
-        return $this->start->startOfDay();
+        return BusinessDay::boundsFor($this->start->toDateString())[0];
     }
 
+    /**
+     * Inclusive upper bound (the instant one second before the range's
+     * last business day closes).
+     */
     public function endBoundary(): CarbonImmutable
     {
-        return $this->end->endOfDay();
+        return BusinessDay::boundsFor($this->end->toDateString())[1]->subSecond();
     }
 
     public function eachDate(): array

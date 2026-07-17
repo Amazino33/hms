@@ -55,6 +55,162 @@
         </div>
     </div>
 
+    {{-- ── Owner headline strip: Profit / Cash / Gap ──────────────── --}}
+    @php($owner = $d['owner'])
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Profit Earned</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($owner['profit']['value'], 2) }}</div>
+            @if($owner['profit']['delta'])
+                @php($pct = $owner['profit']['delta']['percent'])
+                <div class="text-xs mt-1 {{ $owner['profit']['delta']['absolute'] >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
+                    {{ $owner['profit']['delta']['absolute'] >= 0 ? '▲' : '▼' }}
+                    ₦{{ number_format(abs($owner['profit']['delta']['absolute']), 2) }}
+                    @if($pct !== null) ({{ number_format($pct, 1) }}%) @endif
+                </div>
+            @endif
+            @if($owner['profit']['has_estimated'])
+                <div class="text-[10px] text-amber-600 mt-1">Includes estimated margins</div>
+            @endif
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Cash in Hand</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($owner['cash']['value'], 2) }}</div>
+            @if($owner['cash']['delta'])
+                @php($pct = $owner['cash']['delta']['percent'])
+                <div class="text-xs mt-1 {{ $owner['cash']['delta']['absolute'] >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
+                    {{ $owner['cash']['delta']['absolute'] >= 0 ? '▲' : '▼' }}
+                    ₦{{ number_format(abs($owner['cash']['delta']['absolute']), 2) }}
+                    @if($pct !== null) ({{ number_format($pct, 1) }}%) @endif
+                </div>
+            @endif
+            <div class="text-[10px] text-gray-400 mt-1">
+                Cash ₦{{ number_format($owner['cash']['cash']) }} ·
+                POS ₦{{ number_format($owner['cash']['pos']) }} ·
+                Transfer (verified) ₦{{ number_format($owner['cash']['transfers_verified']) }}
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 {{ $owner['gap']['widening'] ? 'ring-2 ring-red-400' : '' }}">
+            <div class="flex items-center justify-between">
+                <div class="text-xs font-semibold text-gray-500 uppercase">Gap</div>
+                @if($owner['gap']['as_of'])
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">as of {{ \Carbon\CarbonImmutable::parse($owner['gap']['as_of'])->format('M j') }}</span>
+                @endif
+            </div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($owner['gap']['value'], 2) }}</div>
+            @if($owner['gap']['widening'])
+                <div class="text-xs text-red-600 font-semibold mt-1">⚠ Widening for 2+ consecutive days</div>
+            @else
+                <div class="text-[10px] text-gray-400 mt-1">Earned vs collected divergence — stable</div>
+            @endif
+        </div>
+    </div>
+
+    {{-- ── Gap breakdown — tap-through to the explorer ────────────── --}}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+        @foreach([
+            ['label' => 'Unverified Transfers', 'value' => $owner['gap_breakdown']['unverified_transfers'], 'tab' => 'sales'],
+            ['label' => 'Open Folio Balances', 'value' => $owner['gap_breakdown']['open_folio_balance'], 'tab' => 'rooms'],
+            ['label' => 'Unsettled Shifts', 'value' => $owner['gap_breakdown']['unsettled_shift_amount'], 'tab' => 'sales'],
+            ['label' => 'Outstanding Staff Debt', 'value' => $owner['gap_breakdown']['staff_debt_outstanding'], 'tab' => 'debts'],
+        ] as $item)
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => $item['tab'], 'preset' => $preset]) }}"
+               class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:border-primary-400 transition-colors">
+                <div class="text-xs font-semibold text-gray-500 uppercase">{{ $item['label'] }}</div>
+                <div class="text-lg font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($item['value'], 2) }}</div>
+                <div class="text-[10px] text-primary-600 mt-1">View detail →</div>
+            </a>
+        @endforeach
+    </div>
+
+    {{-- ── Trend chart: Profit earned vs Cash collected ───────────── --}}
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 mt-4">
+        <div class="text-xs font-semibold text-gray-500 uppercase">Profit Earned vs Cash Collected</div>
+        <div class="mt-3" wire:ignore>
+            <div
+                x-load
+                x-load-src="{{ \Filament\Support\Facades\FilamentAsset::getAlpineComponentSrc('chart', 'filament/widgets') }}"
+                data-chart-type="line"
+                x-data="chart({
+                    cachedData: @js([
+                        'labels' => $owner['trend_chart']['labels'],
+                        'datasets' => [
+                            ['label' => 'Profit earned', 'data' => $owner['trend_chart']['profit'], 'borderColor' => '#10b981', 'backgroundColor' => 'transparent', 'tension' => 0.3],
+                            ['label' => 'Cash collected', 'data' => $owner['trend_chart']['cash'], 'borderColor' => '#3b82f6', 'backgroundColor' => 'transparent', 'tension' => 0.3],
+                        ],
+                    ]),
+                    options: @js(['plugins' => ['legend' => ['display' => true]]]),
+                    type: @js('line'),
+                })"
+                class="fi-wi-chart-canvas-ctn"
+                style="height: 220px"
+            >
+                <canvas x-ref="canvas"></canvas>
+                <span x-ref="backgroundColorElement" class="fi-wi-chart-bg-color"></span>
+                <span x-ref="borderColorElement" class="fi-wi-chart-border-color"></span>
+                <span x-ref="gridColorElement" class="fi-wi-chart-grid-color"></span>
+                <span x-ref="textColorElement" class="fi-wi-chart-text-color"></span>
+            </div>
+        </div>
+    </div>
+
+    {{-- ── Net position ─────────────────────────────────────────────── --}}
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 mt-4">
+        <div class="flex items-center justify-between">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Net Position</div>
+            @if($owner['net_position']['indicative'])
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">indicative — lumpy daily entries</span>
+            @endif
+        </div>
+        <div class="text-2xl font-bold {{ $owner['net_position']['value'] >= 0 ? 'text-emerald-600' : 'text-red-600' }} mt-1">
+            ₦{{ number_format($owner['net_position']['value'], 2) }}
+        </div>
+        <div class="text-[10px] text-gray-400 mt-1">Gross profit − expenses, for the selected range</div>
+    </div>
+
+    {{-- ── Secondary panels: Expenses / Debts & Damages / Rooms ────── --}}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Expenses</div>
+            <div class="text-xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($owner['expenses']['total'], 2) }}</div>
+            <div class="mt-2 space-y-1">
+                @foreach($owner['expenses']['top_categories'] as $cat)
+                    <div class="flex justify-between text-xs text-gray-500">
+                        <span>{{ $cat['name'] }}</span><span>₦{{ number_format($cat['total'], 2) }}</span>
+                    </div>
+                @endforeach
+            </div>
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => 'expenses', 'preset' => $preset]) }}" class="text-xs text-primary-600 hover:underline mt-2 inline-block">View Expenses →</a>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Debts &amp; Damages</div>
+            <div class="text-xs text-gray-500 mt-2 space-y-1">
+                <div class="flex justify-between"><span>New debt (period)</span><span>₦{{ number_format($owner['debts_damages']['new'], 2) }}</span></div>
+                <div class="flex justify-between"><span>Repaid (period)</span><span>₦{{ number_format($owner['debts_damages']['repaid'], 2) }}</span></div>
+                <div class="flex justify-between"><span>Outstanding (now)</span><span>₦{{ number_format($owner['debts_damages']['outstanding'], 2) }}</span></div>
+                <div class="flex justify-between"><span>Damages at cost (period)</span><span>₦{{ number_format($owner['debts_damages']['damages_cost'], 2) }}</span></div>
+            </div>
+            @if($owner['debts_damages']['pending_damage_approvals'] > 0)
+                <div class="text-xs text-amber-600 font-semibold mt-2">{{ $owner['debts_damages']['pending_damage_approvals'] }} damage report(s) awaiting approval</div>
+            @endif
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => 'debts', 'preset' => $preset]) }}" class="text-xs text-primary-600 hover:underline mt-2 inline-block">View Debts →</a>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Rooms</div>
+            <div class="text-xs text-gray-500 mt-2 space-y-1">
+                <div class="flex justify-between"><span>Occupancy (as of {{ $owner['gap']['as_of'] ? \Carbon\CarbonImmutable::parse($owner['gap']['as_of'])->format('M j') : 'today' }})</span><span>{{ number_format($owner['rooms']['occupancy_rate'], 1) }}%</span></div>
+                <div class="flex justify-between"><span>Room revenue (period)</span><span>₦{{ number_format($owner['rooms']['room_revenue'], 2) }}</span></div>
+                <div class="flex justify-between"><span>ADR</span><span>₦{{ number_format($owner['rooms']['adr'], 2) }}</span></div>
+                <div class="flex justify-between"><span>Open folio balances (now)</span><span>₦{{ number_format($owner['rooms']['open_folio_balance'], 2) }}</span></div>
+            </div>
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => 'rooms', 'preset' => $preset]) }}" class="text-xs text-primary-600 hover:underline mt-2 inline-block">View Rooms →</a>
+        </div>
+    </div>
+
     {{-- ── Tier 1: Headline KPI strip ─────────────────────────────── --}}
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
         {{-- Total Revenue --}}
