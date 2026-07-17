@@ -134,7 +134,7 @@ new class extends Component {
             </div>
         @endif
 
-        <div>
+        <div x-data="{ quantity: @entangle('quantity') }">
             <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Quantity</label>
             <x-mobile.stepper model="quantity" :min="0.01" :step="1" />
         </div>
