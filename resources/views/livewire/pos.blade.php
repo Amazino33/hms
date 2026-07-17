@@ -1125,6 +1125,10 @@ new class extends Component {
                 @if(auth()->user()->currentShift())
                     <button wire:click="openCashDropModal" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white">💵 Drop Cash</button>
                 @endif
+                @if(($isKioskDevice || session('trusted_device_user_id')) && auth()->user()->currentShift())
+                    <a href="{{ session('kiosk_device_id') ? route('kiosk.report-damage') : route('staff.report-damage') }}"
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 text-white touch-manipulation">⚠️ Report Damage</a>
+                @endif
                 @if(session('kiosk_device_id') || session('trusted_device_user_id'))
                     <button @click="$wire.dispatch('lock-requested')"
                         class="text-xs font-bold px-3 py-1.5 rounded-lg bg-gray-700 text-white flex items-center gap-1 touch-manipulation">

@@ -147,7 +147,7 @@ class InventoryService
 
         $warehouseId = self::getWarehouseForProduct($product);
 
-        DB::transaction(function () use ($item, $productId, $warehouseId, $order) {
+        DB::transaction(function () use ($item, $productId, $product, $warehouseId, $order) {
             $inventory = InventoryItem::query()
                 ->where('product_id', $productId)
                 ->where('warehouse_id', $warehouseId)
@@ -169,6 +169,13 @@ class InventoryService
                 'quantity' => $item->quantity,
                 'reference' => "order:{$order->id}",
                 'user_id' => $order->user_id ?? auth()->id(),
+                // Never 0 for a product with no recorded cost — that would
+                // silently fake a 100% margin in the future reporting
+                // layer. last_cost_price (not cost_price, which defaults
+                // to 0 rather than staying null) is the only field that
+                // correctly distinguishes "genuinely free" from "never
+                // recorded".
+                'unit_cost_at_sale' => $product?->last_cost_price,
             ]);
         });
     }
@@ -212,6 +219,12 @@ class InventoryService
                     'quantity' => $requiredQuantity,
                     'reference' => "order:{$order->id}",
                     'user_id' => $order->user_id ?? auth()->id(),
+                    // Mirrors the product-sale snapshot above so food COGS
+                    // is reachable too, not just bar/product sales.
+                    // cost_per_unit is a required (non-nullable) field on
+                    // Ingredient itself, so unlike Product there's no
+                    // "never recorded" state to guard against here.
+                    'unit_cost_at_sale' => $recipe->ingredient?->cost_per_unit,
                 ]);
             });
         }

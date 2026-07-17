@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\DamageReport;
 use App\Models\HandoverDiscrepancy;
 use App\Services\CountSessionService;
+use App\Services\DamageReportService;
 use App\Services\PermissionService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -99,6 +101,18 @@ class HandoverDiscrepancies extends Page implements HasTable
                     }),
                 TextColumn::make('resolvedBy.name')->label('Resolved by')->default('—'),
                 TextColumn::make('created_at')->label('Opened')->dateTime('d M Y H:i'),
+                TextColumn::make('damage_context')
+                    ->label('Pending damage')
+                    ->state(function (HandoverDiscrepancy $record) {
+                        $context = $this->pendingDamageContextFor($record);
+
+                        if (! $context) {
+                            return '—';
+                        }
+
+                        return '⚠ ' . number_format($context['damaged_qty'], 2) . ' reported — ' . number_format($context['remaining_qty'], 2) . ' would remain if approved';
+                    })
+                    ->color('warning'),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -237,5 +251,72 @@ class HandoverDiscrepancies extends Page implements HasTable
     public static function canAccess(): bool
     {
         return PermissionService::canAccessPage(self::class);
+    }
+
+    /**
+     * Pending damages never block the seal (they already happened before
+     * this screen exists to react to them) — this is purely decision
+     * support so an honestly reported breakage isn't ruled as bartender
+     * debt on top of. Grouped by warehouse so each is easy to match
+     * against the open discrepancies for that same location below.
+     */
+    public function pendingDamages()
+    {
+        return DamageReport::where('status', 'pending')
+            ->with(['product', 'ingredient', 'warehouse', 'reportedBy'])
+            ->latest()
+            ->get();
+    }
+
+    /**
+     * Display-only context, never a mutation of the discrepancy's own
+     * frozen shortfall_quantity/naira_value — those stay exactly as
+     * sealed. This just tells the manager "here's what's already
+     * accounted for" before they rule.
+     */
+    public function pendingDamageContextFor(HandoverDiscrepancy $record): ?array
+    {
+        $warehouseId = $record->item->session->warehouse_id;
+
+        $pending = DamageReport::where('status', 'pending')
+            ->where('warehouse_id', $warehouseId)
+            ->when($record->item->product_id, fn ($q) => $q->where('product_id', $record->item->product_id))
+            ->when($record->item->ingredient_id, fn ($q) => $q->where('ingredient_id', $record->item->ingredient_id))
+            ->get();
+
+        if ($pending->isEmpty()) {
+            return null;
+        }
+
+        $damagedQty = (float) $pending->sum('quantity');
+        $remaining = max(0, (float) $record->shortfall_quantity - $damagedQty);
+
+        return [
+            'damaged_qty' => $damagedQty,
+            'remaining_qty' => $remaining,
+            'reports' => $pending,
+        ];
+    }
+
+    public function approvePendingDamage(int $damageReportId): void
+    {
+        try {
+            $report = DamageReport::findOrFail($damageReportId);
+            app(DamageReportService::class)->approve($report, Auth::id());
+            Notification::make()->success()->title('Damage approved — stock written off')->send();
+        } catch (\Throwable $e) {
+            Notification::make()->danger()->title('Could not approve')->body($e->getMessage())->persistent()->send();
+        }
+    }
+
+    public function rejectPendingDamage(int $damageReportId, string $reason): void
+    {
+        try {
+            $report = DamageReport::findOrFail($damageReportId);
+            app(DamageReportService::class)->reject($report, Auth::id(), $reason);
+            Notification::make()->success()->title('Damage report rejected')->send();
+        } catch (\Throwable $e) {
+            Notification::make()->danger()->title('Could not reject')->body($e->getMessage())->persistent()->send();
+        }
     }
 }

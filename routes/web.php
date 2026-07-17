@@ -147,6 +147,7 @@ Route::middleware(['kiosk.device'])->group(function () {
     // in the kiosk context.
     Route::middleware(['staff_pin.auth'])->group(function () {
         Route::get('/kiosk/order/{table}', fn ($table) => view('kiosk.order', ['table' => $table]))->name('kiosk.order');
+        Route::get('/kiosk/report-damage', fn () => view('kiosk.report-damage'))->name('kiosk.report-damage');
     });
 });
 
@@ -173,5 +174,6 @@ Route::middleware(['trusted.device'])->group(function () {
 
     Route::middleware(['staff_pin.auth'])->group(function () {
         Route::get('/staff/order/{table}', fn ($table) => view('kiosk.order', ['table' => $table]))->name('staff.order');
+        Route::get('/staff/report-damage', fn () => view('kiosk.report-damage'))->name('staff.report-damage');
     });
 });
