@@ -31,6 +31,27 @@ it('gives two numeric-pad instances on the same screen distinct wire:key identit
     expect(array_unique($matches[1]))->toHaveCount(4); // all four distinct
 });
 
+/**
+ * Real production incident: the wire:key was Str::random() — regenerated
+ * on every single Blade render, not once. POS polls the server every 10s
+ * (wire:poll.10s), so the pad's identity changed on every poll tick,
+ * Livewire treated it as a brand new element each time, and the PREVIOUS
+ * teleported clone was orphaned in <body> with no valid Alpine scope left
+ * — the exact "Uncaught ReferenceError: padOpen is not defined" seen live
+ * on the kiosk order screen. The key must be deterministic per field, not
+ * random per render.
+ */
+it('gives the same field an identical wire:key across repeated renders, the way a wire:poll tick would', function () {
+    $first = Blade::render('<x-mobile.numeric-pad model="paidAmount" :currency="true" label="Amount Received" />');
+    $second = Blade::render('<x-mobile.numeric-pad model="paidAmount" :currency="true" label="Amount Received" />');
+
+    preg_match('/wire:key="(pad-[a-f0-9]+-scrim)"/', $first, $firstMatch);
+    preg_match('/wire:key="(pad-[a-f0-9]+-scrim)"/', $second, $secondMatch);
+
+    expect($firstMatch[1] ?? null)->not->toBeNull();
+    expect($firstMatch[1])->toBe($secondMatch[1] ?? null);
+});
+
 it('renders the pad as a teleported full-width bottom sheet with a scrim, not an inline half-width panel', function () {
     $html = Blade::render('<x-mobile.numeric-pad model="amount" :currency="true" label="Amount" />');
 

@@ -17,7 +17,17 @@
     // report found exactly this: a Livewire re-render conflated the two,
     // showing one field's label over the other's pad. wire:key gives
     // Livewire an explicit identity to morph against instead of guessing.
-    $padId = 'pad-' . \Illuminate\Support\Str::random(10);
+    //
+    // MUST be deterministic, not random per render: this component sits
+    // on screens that wire:poll (POS re-renders every 10s). A fresh
+    // random id on every render made Livewire treat the pad as a brand
+    // new element on every single poll tick, orphaning the previous
+    // teleported clone in <body> with no valid Alpine scope left —
+    // exactly the "padOpen is not defined" crash found live on the
+    // kiosk order screen. Hashing the model expression keeps the same
+    // field's key identical across renders while still distinguishing
+    // different fields on the same screen.
+    $padId = 'pad-' . md5($model);
 @endphp
 {{--
     Tap-to-open custom numeric pad, standalone (no +/- stepper) — this is
