@@ -303,7 +303,9 @@ class StockTransferService
             ->first();
 
         if (! $from || $from->quantity < $qty) {
-            throw new \Exception("Insufficient stock in source warehouse for product {$productId}");
+            $name = Product::find($productId)?->name ?? "product #{$productId}";
+
+            throw new \Exception("Cannot receive — the source warehouse no longer has enough {$name} to cover this transfer. Ask the storekeeper to record a procurement for it before retrying.");
         }
 
         $from->decrement('quantity', $qty);
@@ -327,7 +329,9 @@ class StockTransferService
             ->first();
 
         if (! $from || $from->quantity < $qty) {
-            throw new \Exception("Insufficient stock in source warehouse for ingredient {$ingredientId}");
+            $name = Ingredient::find($ingredientId)?->name ?? "ingredient #{$ingredientId}";
+
+            throw new \Exception("Cannot receive — the source warehouse no longer has enough {$name} to cover this transfer. Ask the storekeeper to record a procurement for it before retrying.");
         }
 
         $from->decrement('quantity', $qty);

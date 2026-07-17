@@ -186,3 +186,41 @@ it('refuses to resolve a discrepancy twice', function () {
 
     expect(fn () => $service->writeOffDiscrepancy($discrepancy->fresh(), $manager->id, 'again'))->toThrow(Exception::class);
 });
+
+it('gives a clear, actionable message naming the product when the source warehouse no longer has enough to cover receipt', function () {
+    // Stock was sufficient when the transfer was created (setUpTransferFixture's
+    // own createTransfer() call already checked that) — this covers the gap
+    // where something else (another transfer, a sale, a write-off) depletes
+    // Main Store's stock in between, so the debit at receive time comes up short.
+    ['service' => $service, 'transfer' => $transfer, 'main' => $main, 'product' => $product, 'storekeeper' => $storekeeper] = setUpTransferFixture(10);
+
+    InventoryItem::where('product_id', $product->id)->where('warehouse_id', $main->id)->update(['quantity' => 3]);
+
+    $item = $transfer->items->first();
+
+    expect(fn () => $service->receiveTransferLine($item, 10, $storekeeper->id))
+        ->toThrow(Exception::class, "Cannot receive — the source warehouse no longer has enough {$product->name} to cover this transfer. Ask the storekeeper to record a procurement for it before retrying.");
+});
+
+it('names the ingredient the same way when an ingredient transfer line comes up short at the source', function () {
+    Role::firstOrCreate(['name' => 'storekeeper']);
+    $storekeeper = User::factory()->create();
+    $storekeeper->assignRole('storekeeper');
+
+    $main = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $kitchen = WareHouse::create(['name' => 'Kitchen', 'type' => 'consumer']);
+    $ingredient = Ingredient::create(['name' => 'Rice', 'sku' => 'RICE-'.uniqid(), 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 500, 'category' => 'Grains']);
+    IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $main->id, 'quantity' => 20]);
+
+    $service = new StockTransferService();
+    $transfer = $service->createTransfer($main->id, $kitchen->id, $storekeeper->id, [], [
+        ['ingredient_id' => $ingredient->id, 'quantity' => 10],
+    ]);
+
+    IngredientInventoryItem::where('ingredient_id', $ingredient->id)->where('warehouse_id', $main->id)->update(['quantity' => 2]);
+
+    $item = $transfer->ingredientItems->first();
+
+    expect(fn () => $service->receiveTransferLine($item, 10, $storekeeper->id))
+        ->toThrow(Exception::class, "Cannot receive — the source warehouse no longer has enough {$ingredient->name} to cover this transfer. Ask the storekeeper to record a procurement for it before retrying.");
+});
