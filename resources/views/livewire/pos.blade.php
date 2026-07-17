@@ -1154,7 +1154,7 @@ new class extends Component {
                 <div
                     class="flex overflow-x-auto overflow-y-hidden p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 space-x-2 flex-nowrap">
                     @foreach($categories as $category)
-                        <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
+                        <button wire:key="category-tab-desktop-{{ $category->id }}" @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
                             class="px-3 py-2 lg:px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
                             {{ auth()->user()->currentShift() ? '' : 'disabled' }}>{{ $category->name }}</button>
                     @endforeach
@@ -1197,7 +1197,7 @@ new class extends Component {
                         </div>
                     @endif
 
-                    @if($products->isEmpty())
+                    @if($products->isEmpty() && $menuItems->isEmpty())
                         @for($i = 0; $i < 8; $i++)
                             <div
                                 class="animate-pulse bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 lg:p-4 flex flex-col items-center justify-center text-center h-28 lg:h-32">
@@ -1406,13 +1406,13 @@ new class extends Component {
         <div
             class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed top-[137px] left-0 right-0 z-20">
             <div class="flex overflow-x-auto overflow-y-hidden p-3 space-x-2 flex-nowrap">
-                <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', null) }"
+                <button wire:key="category-tab-mobile-all" @click="if($wire.currentShift) { $wire.set('activeCategoryId', null) }"
                     class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ !$activeCategoryId ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
                     {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                     All
                 </button>
                 @foreach($categories as $category)
-                    <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
+                    <button wire:key="category-tab-mobile-{{ $category->id }}" @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
                         class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors touch-manipulation flex-shrink-0 {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed') }}"
                         {{ auth()->user()->currentShift() ? '' : 'disabled' }}>
                         {{ $category->name }}
@@ -1462,7 +1462,7 @@ new class extends Component {
                  both grids are always in the DOM regardless of viewport (CSS
                  only toggles visibility), so only one needs to fire it. --}}
             <div class="grid grid-cols-2 gap-3">
-                @if($products->isEmpty())
+                @if($products->isEmpty() && $menuItems->isEmpty())
                     @for($i = 0; $i < 8; $i++)
                         <div
                             class="animate-pulse bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col text-center h-28">
@@ -1706,11 +1706,12 @@ new class extends Component {
                 <div
                     class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                     <div class="flex-1 flex items-center gap-2 overflow-x-auto">
-                        <button @click="if($wire.currentShift) { $wire.set('activeCategoryId', null) }"
+                        <button wire:key="category-tab-kiosk-all" @click="if($wire.currentShift) { $wire.set('activeCategoryId', null) }"
                             class="shrink-0 h-14 px-8 rounded-full text-lg font-bold whitespace-nowrap transition-colors touch-manipulation {{ !$activeCategoryId ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 cursor-not-allowed') }}"
                             {{ auth()->user()->currentShift() ? '' : 'disabled' }}>All</button>
                         @foreach($categories as $category)
                             <button
+                                wire:key="category-tab-kiosk-{{ $category->id }}"
                                 @click="if($wire.currentShift) { $wire.set('activeCategoryId', {{ $category->id }}) }"
                                 class="shrink-0 h-14 px-8 rounded-full text-lg font-bold whitespace-nowrap transition-colors touch-manipulation {{ $activeCategoryId === $category->id ? 'bg-amber-500 text-white' : (auth()->user()->currentShift() ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 cursor-not-allowed') }}"
                                 {{ auth()->user()->currentShift() ? '' : 'disabled' }}>{{ $category->name }}</button>
@@ -1751,7 +1752,7 @@ new class extends Component {
                         </div>
                     @endif
 
-                    @if($products->isEmpty())
+                    @if($products->isEmpty() && $menuItems->isEmpty())
                         @for($i = 0; $i < 8; $i++)
                             <div
                                 class="animate-pulse bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl h-40">
