@@ -48,6 +48,31 @@ it('logs the waiter in via staff_pin and redirects to the order screen on a corr
     expect(Auth::guard('staff_pin')->id())->toBe($waiter->id);
 });
 
+/**
+ * Real production error: closePinPad() (fired by the pad's Cancel button
+ * or a tap on the backdrop) nulls selectedTableId with no guard against a
+ * submission already being in flight — if that races against submitPin(),
+ * it was hitting route('kiosk.order', ['table' => null]) and crashing
+ * with a raw UrlGenerationException instead of just failing to log in.
+ */
+it('fails gracefully instead of crashing when submitPin runs with no table selected', function () {
+    ['token' => $token] = registerKioskAndGetToken();
+    $waiter = User::factory()->create();
+    (new PinAuthService())->setPin($waiter, '5739');
+
+    $this->withUnencryptedCookie(EnsureValidKioskDevice::COOKIE_NAME, $token);
+    session(['kiosk_device_id' => 1]);
+
+    // Deliberately never calls selectTable() first — reproduces
+    // selectedTableId being null (e.g. raced away by closePinPad())
+    // at the exact moment submitPin() runs.
+    Livewire::test('kiosk-idle-screen')
+        ->call('submitPin', '5739')
+        ->assertNoRedirect();
+
+    expect(Auth::guard('staff_pin')->check())->toBeFalse();
+});
+
 it('shows the name of whoever is handling an occupied table on the table grid', function () {
     ['token' => $token] = registerKioskAndGetToken();
     $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);

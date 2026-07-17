@@ -108,6 +108,18 @@ new class extends Component {
      */
     public function submitPin(string $pin): void
     {
+        // The pad's own Cancel button and tap-outside-to-dismiss both call
+        // closePinPad() (which nulls selectedTableId) without checking
+        // whether a submission is already in flight — a mistap on Cancel
+        // right as the 4th digit lands could otherwise null this out
+        // between the client sending the request and this method running,
+        // crashing the redirect below on a missing route parameter instead
+        // of just... not logging in.
+        if (!$this->selectedTableId) {
+            $this->errorMessage = 'No table selected — please select a table again.';
+            return;
+        }
+
         $service = new PinAuthService();
 
         try {
@@ -184,7 +196,7 @@ new class extends Component {
     </div>
 
     @if ($selectedTableId)
-        <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" wire:click.self="closePinPad"
+        <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click.self="if (!submitting) $wire.closePinPad()"
             x-data="{
                 pin: '',
                 submitting: false,
@@ -242,8 +254,8 @@ new class extends Component {
                             :class="pressed === '{{ $digit }}' ? 'bg-amber-400 scale-95' : 'bg-gray-100'"
                             class="py-4 rounded-lg text-xl font-bold transition-all duration-100 touch-manipulation">{{ $digit }}</button>
                     @endforeach
-                    <button wire:click="closePinPad"
-                        class="py-4 bg-gray-200 rounded-lg text-sm font-bold text-gray-600 touch-manipulation active:scale-95 transition-transform">Cancel</button>
+                    <button @click="if (!submitting) $wire.closePinPad()" :disabled="submitting"
+                        class="py-4 bg-gray-200 rounded-lg text-sm font-bold text-gray-600 touch-manipulation active:scale-95 transition-transform disabled:opacity-50">Cancel</button>
                     <button @click="digit('0')"
                         :class="pressed === '0' ? 'bg-amber-400 scale-95' : 'bg-gray-100'"
                         class="py-4 rounded-lg text-xl font-bold transition-all duration-100 touch-manipulation">0</button>
