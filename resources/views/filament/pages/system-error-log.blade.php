@@ -19,7 +19,11 @@
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
-                                @if (($entry['source'] ?? 'exception') === 'notification')
+                                @if (($entry['category'] ?? null) === 'stock')
+                                    <span class="px-2 py-0.5 rounded-md bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-bold">
+                                        📦 Stock
+                                    </span>
+                                @elseif (($entry['source'] ?? 'exception') === 'notification')
                                     <span class="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-bold">
                                         Notification shown to user
                                     </span>
@@ -28,7 +32,18 @@
                                         {{ class_basename($entry['class'] ?? 'Unknown') }}
                                     </span>
                                 @endif
-                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ $entry['time'] ?? '—' }}</span>
+                                @if (($entry['occurrences'] ?? 1) > 1)
+                                    <span class="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold">
+                                        ×{{ $entry['occurrences'] }}
+                                    </span>
+                                @endif
+                                <span class="text-xs text-gray-500 dark:text-gray-400">
+                                    @if (($entry['occurrences'] ?? 1) > 1)
+                                        {{ $entry['first_time'] ?? '—' }} – {{ $entry['last_time'] ?? '—' }}
+                                    @else
+                                        {{ $entry['time'] ?? '—' }}
+                                    @endif
+                                </span>
                                 @if (!empty($entry['url']))
                                     <span class="text-xs text-gray-400 dark:text-gray-500 truncate">{{ $entry['method'] ?? '' }} {{ $entry['url'] }}</span>
                                 @endif

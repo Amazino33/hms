@@ -119,6 +119,51 @@ it('grants a super_admin and an admin access to the error log page, and blocks a
     expect(\App\Services\PermissionService::canAccessPage(SystemErrorLog::class))->toBeFalse();
 });
 
+it('categorizes a stock-related notification so it can be badged distinctly', function () {
+    expect(SystemErrorLog::categoryFor(['message' => 'Stock Error', 'body' => 'Out of Stock: Only 0.00 left of AQUAFINA - MEDIUM']))->toBe('stock');
+    expect(SystemErrorLog::categoryFor(['message' => 'Could not receive line', 'body' => 'Cannot receive — the source warehouse no longer has enough Aquafina to cover this transfer.']))->toBe('stock');
+});
+
+it('does not categorize an unrelated notification as stock', function () {
+    expect(SystemErrorLog::categoryFor(['message' => 'Could not check out', 'body' => 'Folio balance must be zero.']))->toBeNull();
+});
+
+it('collapses consecutive identical stock errors into one grouped row with an occurrence count', function () {
+    Notification::make()->title('Stock Error')->body('Out of Stock: Only 0.00 left of AQUAFINA - MEDIUM')->danger()->send();
+    Notification::make()->title('Stock Error')->body('Out of Stock: Only 0.00 left of AQUAFINA - MEDIUM')->danger()->send();
+    Notification::make()->title('Stock Error')->body('Out of Stock: Only 0.00 left of AQUAFINA - MEDIUM')->danger()->send();
+
+    $admin = User::factory()->create();
+    $admin->assignRole(Role::firstOrCreate(['name' => 'admin']));
+    PagePermission::firstOrCreate(
+        ['page_class' => SystemErrorLog::class, 'role_name' => 'admin'],
+        ['page_class' => SystemErrorLog::class, 'page_name' => 'Error Log', 'role_name' => 'admin']
+    );
+
+    Livewire::actingAs($admin)
+        ->test(SystemErrorLog::class)
+        ->assertSee('×3')
+        ->assertSee('📦 Stock');
+});
+
+it('does not merge the same message when a different entry falls between occurrences', function () {
+    Notification::make()->title('Stock Error')->body('Out of Stock: Only 0.00 left of AQUAFINA - MEDIUM')->danger()->send();
+    Notification::make()->title('Could not check out')->body('Folio balance must be zero.')->danger()->send();
+    Notification::make()->title('Stock Error')->body('Out of Stock: Only 0.00 left of AQUAFINA - MEDIUM')->danger()->send();
+
+    $admin = User::factory()->create();
+    $admin->assignRole(Role::firstOrCreate(['name' => 'admin']));
+    PagePermission::firstOrCreate(
+        ['page_class' => SystemErrorLog::class, 'role_name' => 'admin'],
+        ['page_class' => SystemErrorLog::class, 'page_name' => 'Error Log', 'role_name' => 'admin']
+    );
+
+    Livewire::actingAs($admin)
+        ->test(SystemErrorLog::class)
+        ->assertDontSee('×2')
+        ->assertDontSee('×3');
+});
+
 it('renders the error log page and can clear the log through it', function () {
     ErrorLogRecorder::record(new \Exception('visible on the page'));
 
