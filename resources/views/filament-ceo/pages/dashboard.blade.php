@@ -1,5 +1,6 @@
 <x-filament-panels::page>
     @php($d = $this->dashboardData())
+    @php($owner = $d['owner'])
 
     {{-- ── Filter bar ─────────────────────────────────────────────── --}}
     <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 flex flex-wrap items-end gap-4">
@@ -55,9 +56,11 @@
         </div>
     </div>
 
-    {{-- ── Owner headline strip: Profit / Cash / Gap ──────────────── --}}
-    @php($owner = $d['owner'])
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+    {{-- ══════════════════════════════════════════════════════════════
+         FINANCIAL OVERVIEW — the four "how's the money" numbers, together
+         ══════════════════════════════════════════════════════════════ --}}
+    <h2 class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-6 mb-2">Financial Overview</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
             <div class="text-xs font-semibold text-gray-500 uppercase">Profit Earned</div>
             <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($owner['profit']['value'], 2) }}</div>
@@ -71,7 +74,41 @@
             @endif
             @if($owner['profit']['has_estimated'])
                 <div class="text-[10px] text-amber-600 mt-1">Includes estimated margins</div>
+            @else
+                <div class="text-[10px] text-gray-400 mt-1">&nbsp;</div>
             @endif
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Total Revenue</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($d['tier1']['revenue']['value'], 2) }}</div>
+            @if($d['tier1']['revenue']['delta'])
+                @php($pct = $d['tier1']['revenue']['delta']['percent'])
+                <div class="text-xs mt-1 {{ $d['tier1']['revenue']['delta']['absolute'] >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
+                    {{ $d['tier1']['revenue']['delta']['absolute'] >= 0 ? '▲' : '▼' }}
+                    ₦{{ number_format(abs($d['tier1']['revenue']['delta']['absolute']), 2) }}
+                    @if($pct !== null) ({{ number_format($pct, 1) }}%) @endif
+                </div>
+            @endif
+            <div class="flex items-end gap-0.5 h-8 mt-2">
+                @php($max = max(1, ...$d['tier1']['revenue']['sparkline']))
+                @foreach($d['tier1']['revenue']['sparkline'] as $v)
+                    <div class="flex-1 bg-primary-400 dark:bg-primary-600 rounded-sm" style="height: {{ max(2, ($v / $max) * 100) }}%"></div>
+                @endforeach
+            </div>
+            <div class="text-[10px] text-gray-400 mt-1">14-day trend</div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div class="text-xs font-semibold text-gray-500 uppercase">Gross Margin %</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{{ number_format($d['tier1']['margin_pct']['value'], 1) }}%</div>
+            @if($d['tier1']['margin_pct']['delta'])
+                <div class="text-xs mt-1 {{ $d['tier1']['margin_pct']['delta']['absolute'] >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
+                    {{ $d['tier1']['margin_pct']['delta']['absolute'] >= 0 ? '▲' : '▼' }}
+                    {{ number_format(abs($d['tier1']['margin_pct']['delta']['absolute']), 1) }}pp
+                </div>
+            @endif
+            <div class="text-[10px] text-gray-400 mt-2">Bar &amp; restaurant only, computed at current cost — not historical COGS.</div>
         </div>
 
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
@@ -91,10 +128,16 @@
                 Transfer (verified) ₦{{ number_format($owner['cash']['transfers_verified']) }}
             </div>
         </div>
+    </div>
 
+    {{-- ══════════════════════════════════════════════════════════════
+         GAP & EXPOSURE — everything earned-but-not-yet-collected, one place
+         ══════════════════════════════════════════════════════════════ --}}
+    <h2 class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-8 mb-2">Gap &amp; Exposure</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_2fr] gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 {{ $owner['gap']['widening'] ? 'ring-2 ring-red-400' : '' }}">
             <div class="flex items-center justify-between">
-                <div class="text-xs font-semibold text-gray-500 uppercase">Gap</div>
+                <div class="text-xs font-semibold text-gray-500 uppercase">Total Gap</div>
                 @if($owner['gap']['as_of'])
                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">as of {{ \Carbon\CarbonImmutable::parse($owner['gap']['as_of'])->format('M j') }}</span>
                 @endif
@@ -106,23 +149,48 @@
                 <div class="text-[10px] text-gray-400 mt-1">Earned vs collected divergence — stable</div>
             @endif
         </div>
-    </div>
 
-    {{-- ── Gap breakdown — tap-through to the explorer ────────────── --}}
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-        @foreach([
-            ['label' => 'Unverified Transfers', 'value' => $owner['gap_breakdown']['unverified_transfers'], 'tab' => 'sales'],
-            ['label' => 'Open Folio Balances', 'value' => $owner['gap_breakdown']['open_folio_balance'], 'tab' => 'rooms'],
-            ['label' => 'Unsettled Shifts', 'value' => $owner['gap_breakdown']['unsettled_shift_amount'], 'tab' => 'sales'],
-            ['label' => 'Outstanding Staff Debt', 'value' => $owner['gap_breakdown']['staff_debt_outstanding'], 'tab' => 'debts'],
-        ] as $item)
-            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => $item['tab'], 'preset' => $preset]) }}"
-               class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:border-primary-400 transition-colors">
-                <div class="text-xs font-semibold text-gray-500 uppercase">{{ $item['label'] }}</div>
-                <div class="text-lg font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($item['value'], 2) }}</div>
+        <div class="grid grid-cols-2 gap-4">
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => 'sales', 'preset' => $preset]) }}"
+               class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 hover:border-primary-400 transition-colors">
+                <div class="text-xs font-semibold text-gray-500 uppercase">Unverified Transfers</div>
+                <div class="text-lg font-bold text-gray-900 dark:text-white mt-0.5">₦{{ number_format($owner['gap_breakdown']['unverified_transfers'], 2) }}</div>
+                @if($d['tier2']['unverified_transfers']['oldest_at'])
+                    <div class="text-[10px] text-gray-400 mt-0.5">Oldest: {{ \Illuminate\Support\Carbon::parse($d['tier2']['unverified_transfers']['oldest_at'])->diffForHumans() }}</div>
+                @endif
                 <div class="text-[10px] text-primary-600 mt-1">View detail →</div>
             </a>
-        @endforeach
+
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => 'rooms', 'preset' => $preset]) }}"
+               class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 hover:border-primary-400 transition-colors">
+                <div class="text-xs font-semibold text-gray-500 uppercase">Open Folio Balances</div>
+                <div class="text-lg font-bold text-gray-900 dark:text-white mt-0.5">₦{{ number_format($owner['gap_breakdown']['open_folio_balance'], 2) }}</div>
+                <div class="text-[10px] text-gray-400 mt-0.5">as of now</div>
+                <div class="text-[10px] text-primary-600 mt-1">View detail →</div>
+            </a>
+
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => 'sales', 'preset' => $preset]) }}"
+               class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 hover:border-primary-400 transition-colors">
+                <div class="text-xs font-semibold text-gray-500 uppercase">Unsettled Shifts</div>
+                <div class="text-lg font-bold text-gray-900 dark:text-white mt-0.5">₦{{ number_format($owner['gap_breakdown']['unsettled_shift_amount'], 2) }}</div>
+                <div class="text-[10px] text-gray-400 mt-0.5">as of now</div>
+                <div class="text-[10px] text-primary-600 mt-1">View detail →</div>
+            </a>
+
+            <a href="{{ \App\Filament\Ceo\Pages\ReportExplorer::getUrl(['tab' => 'debts', 'preset' => $preset]) }}"
+               class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 hover:border-primary-400 transition-colors">
+                <div class="text-xs font-semibold text-gray-500 uppercase">Outstanding Staff Debt</div>
+                <div class="text-lg font-bold text-gray-900 dark:text-white mt-0.5">₦{{ number_format($owner['gap_breakdown']['staff_debt_outstanding'], 2) }}</div>
+                @php($aging = $d['tier2']['debt_aging'])
+                @php($totalAging = max(0.01, array_sum($aging)))
+                <div class="flex h-1.5 rounded overflow-hidden mt-1.5">
+                    <div class="bg-emerald-400" style="width: {{ $aging['aging_0_7'] / $totalAging * 100 }}%" title="0-7 days"></div>
+                    <div class="bg-amber-400" style="width: {{ $aging['aging_8_30'] / $totalAging * 100 }}%" title="8-30 days"></div>
+                    <div class="bg-red-400" style="width: {{ $aging['aging_30_plus'] / $totalAging * 100 }}%" title="30+ days"></div>
+                </div>
+                <div class="text-[10px] text-primary-600 mt-1">View detail →</div>
+            </a>
+        </div>
     </div>
 
     {{-- ── Trend chart: Profit earned vs Cash collected ───────────── --}}
@@ -170,8 +238,11 @@
         <div class="text-[10px] text-gray-400 mt-1">Gross profit − expenses, for the selected range</div>
     </div>
 
-    {{-- ── Secondary panels: Expenses / Debts & Damages / Rooms ────── --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+    {{-- ══════════════════════════════════════════════════════════════
+         EXPENSES, DEBTS & DAMAGES, ROOMS
+         ══════════════════════════════════════════════════════════════ --}}
+    <h2 class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-8 mb-2">Expenses, Debts &amp; Rooms</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
             <div class="text-xs font-semibold text-gray-500 uppercase">Expenses</div>
             <div class="text-xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($owner['expenses']['total'], 2) }}</div>
@@ -200,7 +271,15 @@
         </div>
 
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="text-xs font-semibold text-gray-500 uppercase">Rooms</div>
+            <div class="flex items-center justify-between">
+                <div class="text-xs font-semibold text-gray-500 uppercase">Rooms</div>
+                @php($maxOcc = max(1, ...$d['tier1']['occupancy_pct']['sparkline']))
+                <div class="flex items-end gap-0.5 h-5">
+                    @foreach($d['tier1']['occupancy_pct']['sparkline'] as $v)
+                        <div class="w-1 bg-blue-400 dark:bg-blue-600 rounded-sm" style="height: {{ max(2, ($v / $maxOcc) * 100) }}%"></div>
+                    @endforeach
+                </div>
+            </div>
             <div class="text-xs text-gray-500 mt-2 space-y-1">
                 <div class="flex justify-between"><span>Occupancy (as of {{ $owner['gap']['as_of'] ? \Carbon\CarbonImmutable::parse($owner['gap']['as_of'])->format('M j') : 'today' }})</span><span>{{ number_format($owner['rooms']['occupancy_rate'], 1) }}%</span></div>
                 <div class="flex justify-between"><span>Room revenue (period)</span><span>₦{{ number_format($owner['rooms']['room_revenue'], 2) }}</span></div>
@@ -211,122 +290,11 @@
         </div>
     </div>
 
-    {{-- ── Tier 1: Headline KPI strip ─────────────────────────────── --}}
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-        {{-- Total Revenue --}}
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="text-xs font-semibold text-gray-500 uppercase">Total Revenue</div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($d['tier1']['revenue']['value'], 2) }}</div>
-            @if($d['tier1']['revenue']['delta'])
-                @php($pct = $d['tier1']['revenue']['delta']['percent'])
-                <div class="text-xs mt-1 {{ $d['tier1']['revenue']['delta']['absolute'] >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
-                    {{ $d['tier1']['revenue']['delta']['absolute'] >= 0 ? '▲' : '▼' }}
-                    ₦{{ number_format(abs($d['tier1']['revenue']['delta']['absolute']), 2) }}
-                    @if($pct !== null) ({{ number_format($pct, 1) }}%) @endif
-                </div>
-            @endif
-            @if($d['unequal_length'])
-                <div class="text-[11px] text-gray-400 mt-1">
-                    ₦{{ number_format($d['tier1']['revenue']['per_day_avg'], 2) }}/day
-                    vs ₦{{ number_format($d['tier1']['revenue']['comparison_per_day_avg'], 2) }}/day
-                </div>
-            @endif
-            <div class="flex items-end gap-0.5 h-8 mt-2">
-                @php($max = max(1, ...$d['tier1']['revenue']['sparkline']))
-                @foreach($d['tier1']['revenue']['sparkline'] as $v)
-                    <div class="flex-1 bg-primary-400 dark:bg-primary-600 rounded-sm" style="height: {{ max(2, ($v / $max) * 100) }}%"></div>
-                @endforeach
-            </div>
-            <div class="text-[10px] text-gray-400 mt-1">14-day trend</div>
-        </div>
-
-        {{-- Gross Margin % --}}
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="text-xs font-semibold text-gray-500 uppercase">Gross Margin %</div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{{ number_format($d['tier1']['margin_pct']['value'], 1) }}%</div>
-            @if($d['tier1']['margin_pct']['delta'])
-                <div class="text-xs mt-1 {{ $d['tier1']['margin_pct']['delta']['absolute'] >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
-                    {{ $d['tier1']['margin_pct']['delta']['absolute'] >= 0 ? '▲' : '▼' }}
-                    {{ number_format(abs($d['tier1']['margin_pct']['delta']['absolute']), 1) }}pp
-                </div>
-            @endif
-            <div class="text-[10px] text-gray-400 mt-2">Bar &amp; restaurant only, computed at current cost — not historical COGS.</div>
-        </div>
-
-        {{-- Occupancy Rate --}}
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="text-xs font-semibold text-gray-500 uppercase">Occupancy Rate</div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{{ number_format($d['tier1']['occupancy_pct']['value'], 1) }}%</div>
-            @if($d['tier1']['occupancy_pct']['delta'])
-                <div class="text-xs mt-1 {{ $d['tier1']['occupancy_pct']['delta']['absolute'] >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
-                    {{ $d['tier1']['occupancy_pct']['delta']['absolute'] >= 0 ? '▲' : '▼' }}
-                    {{ number_format(abs($d['tier1']['occupancy_pct']['delta']['absolute']), 1) }}pp
-                </div>
-            @endif
-            <div class="flex items-end gap-0.5 h-8 mt-2">
-                @php($maxOcc = max(1, ...$d['tier1']['occupancy_pct']['sparkline']))
-                @foreach($d['tier1']['occupancy_pct']['sparkline'] as $v)
-                    <div class="flex-1 bg-blue-400 dark:bg-blue-600 rounded-sm" style="height: {{ max(2, ($v / $maxOcc) * 100) }}%"></div>
-                @endforeach
-            </div>
-            <div class="text-[10px] text-gray-400 mt-1">14-day trend</div>
-        </div>
-
-        {{-- Total Exposure --}}
-        <div x-data="{ open: false }" class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 cursor-pointer" @click="open = !open">
-            <div class="flex items-center justify-between">
-                <div class="text-xs font-semibold text-gray-500 uppercase">Total Exposure</div>
-                <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">as of now</span>
-            </div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($d['tier1']['exposure']['total'], 2) }}</div>
-            <div x-show="open" x-collapse class="mt-2 space-y-1 text-xs text-gray-500">
-                <div class="flex justify-between"><span>Outstanding staff debt</span><span>₦{{ number_format($d['tier1']['exposure']['staff_debt'], 2) }}</span></div>
-                <div class="flex justify-between"><span>Unverified transfers</span><span>₦{{ number_format($d['tier1']['exposure']['unverified_transfers'], 2) }}</span></div>
-                <div class="flex justify-between"><span>In-house folio balances</span><span>₦{{ number_format($d['tier1']['exposure']['in_house_folio_balances'], 2) }}</span></div>
-            </div>
-        </div>
-    </div>
-
-    {{-- ── Tier 2: Risk & Exposure ────────────────────────────────── --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="flex items-center justify-between">
-                <div class="text-xs font-semibold text-gray-500 uppercase">Unverified Transfers</div>
-                <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">as of now</span>
-            </div>
-            <div class="text-xl font-bold text-gray-900 dark:text-white mt-1">{{ $d['tier2']['unverified_transfers']['count'] }} · ₦{{ number_format($d['tier2']['unverified_transfers']['total'], 2) }}</div>
-            @if($d['tier2']['unverified_transfers']['oldest_at'])
-                <div class="text-xs text-gray-500 mt-1">Oldest: {{ \Illuminate\Support\Carbon::parse($d['tier2']['unverified_transfers']['oldest_at'])->diffForHumans() }}</div>
-            @endif
-            <a href="{{ \App\Filament\Ceo\Resources\Orders\OrderResource::getUrl() }}" class="text-xs text-primary-600 hover:underline mt-2 inline-block">View orders →</a>
-        </div>
-
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="flex items-center justify-between">
-                <div class="text-xs font-semibold text-gray-500 uppercase">Outstanding Staff Debt</div>
-                <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">as of now</span>
-            </div>
-            @php($aging = $d['tier2']['debt_aging'])
-            @php($totalAging = max(0.01, array_sum($aging)))
-            <div class="text-xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($totalAging, 2) }}</div>
-            <div class="flex h-3 rounded overflow-hidden mt-2">
-                <div class="bg-emerald-400" style="width: {{ $aging['aging_0_7'] / $totalAging * 100 }}%" title="0-7 days"></div>
-                <div class="bg-amber-400" style="width: {{ $aging['aging_8_30'] / $totalAging * 100 }}%" title="8-30 days"></div>
-                <div class="bg-red-400" style="width: {{ $aging['aging_30_plus'] / $totalAging * 100 }}%" title="30+ days"></div>
-            </div>
-            <div class="text-[10px] text-gray-400 mt-1">0–7d ₦{{ number_format($aging['aging_0_7']) }} · 8–30d ₦{{ number_format($aging['aging_8_30']) }} · 30+d ₦{{ number_format($aging['aging_30_plus']) }}</div>
-            <a href="{{ \App\Filament\Ceo\Pages\LeakageReport::getUrl() }}" class="text-xs text-primary-600 hover:underline mt-2 inline-block">View Leakage Report →</a>
-        </div>
-
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="flex items-center justify-between">
-                <div class="text-xs font-semibold text-gray-500 uppercase">In-House Folio Balances</div>
-                <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">as of now</span>
-            </div>
-            <div class="text-xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($d['tier2']['in_house_folio_balances'], 2) }}</div>
-            <a href="{{ \App\Filament\Ceo\Resources\Folios\FolioResource::getUrl() }}" class="text-xs text-primary-600 hover:underline mt-2 inline-block">View folios →</a>
-        </div>
-
+    {{-- ══════════════════════════════════════════════════════════════
+         OPERATIONAL WATCH — things that don't fit the money view above
+         ══════════════════════════════════════════════════════════════ --}}
+    <h2 class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-8 mb-2">Operational Watch</h2>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
             <div class="text-xs font-semibold text-gray-500 uppercase">Voids (period)</div>
             <div class="text-xl font-bold text-gray-900 dark:text-white mt-1">{{ $d['tier2']['voids']['count'] }} · ₦{{ number_format($d['tier2']['voids']['value'], 2) }}</div>
@@ -352,13 +320,16 @@
 
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
             <div class="text-xs font-semibold text-gray-500 uppercase">Operational Integrity</div>
-            <div class="text-sm text-gray-700 dark:text-gray-300 mt-2">Unsealed handovers past expected time: <span class="font-bold">{{ $d['tier2']['unsealed_handovers'] }}</span></div>
-            <div class="text-sm text-gray-700 dark:text-gray-300">Shifts open beyond normal duration: <span class="font-bold">{{ $d['tier2']['stale_shifts'] }}</span></div>
+            <div class="text-sm text-gray-700 dark:text-gray-300 mt-2">Unsealed handovers past expected time: <span class="font-bold {{ $d['tier2']['unsealed_handovers'] > 0 ? 'text-red-600' : 'text-emerald-600' }}">{{ $d['tier2']['unsealed_handovers'] }}</span></div>
+            <div class="text-sm text-gray-700 dark:text-gray-300 mt-1">Shifts open beyond normal duration: <span class="font-bold {{ $d['tier2']['stale_shifts'] > 0 ? 'text-amber-600' : 'text-emerald-600' }}">{{ $d['tier2']['stale_shifts'] }}</span></div>
         </div>
     </div>
 
-    {{-- ── Tier 3: Drivers ────────────────────────────────────────── --}}
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+    {{-- ══════════════════════════════════════════════════════════════
+         REVENUE DETAIL — mix, payment methods, products, daily trend
+         ══════════════════════════════════════════════════════════════ --}}
+    <h2 class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-8 mb-2">Revenue Detail</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700" x-data="{ showFolio: false }">
             <div class="flex items-center justify-between">
                 <div class="text-xs font-semibold text-gray-500 uppercase">Revenue Mix</div>
@@ -422,7 +393,7 @@
                 </thead>
                 <tbody>
                     @php($categoryAvgMargin = $d['tier3']['top_products']->groupBy('category_name')->map(fn($g) => $g->avg('margin_pct')))
-                    @foreach($d['tier3']['top_products'] as $row)
+                    @forelse($d['tier3']['top_products'] as $row)
                         <tr class="border-b border-gray-100 dark:border-gray-700/50">
                             <td class="py-1">{{ $row['item_name'] }}</td>
                             <td class="py-1 text-right">{{ number_format($row['quantity']) }}</td>
@@ -434,7 +405,9 @@
                                 @endif
                             </td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <tr><td colspan="4" class="py-4 text-center text-gray-400">No sales in this range.</td></tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>

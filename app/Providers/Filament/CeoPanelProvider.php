@@ -35,6 +35,7 @@ class CeoPanelProvider extends PanelProvider
             ->login()
             ->globalSearch(false)
             ->databaseNotifications(false)
+            ->viteTheme('resources/css/filament/ceo/theme.css')
             ->colors([
                 'primary' => '#1D4ED8',
             ])
