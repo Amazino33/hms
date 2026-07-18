@@ -28,7 +28,15 @@
     <h3 class="text-lg font-bold text-gray-900 dark:text-white text-center mb-1">Seal the Agreement</h3>
 
     <template x-if="step === 'first'">
-        <x-mobile.pin-keypad wire:key="dual-seal-{{ $session->id }}-first" :title="$firstLabel" onComplete="firstPin = pin; step = 'second'" />
+        {{-- onComplete gets embedded as Promise.resolve({{ $onComplete }}) inside
+             pin-keypad's digit() — a semicolon there is inside a function call's
+             argument list, which is a JS SyntaxError ("Unexpected token ';'"),
+             breaking this whole component's x-data construction (method bodies
+             are parsed as part of the object literal) so NONE of its digit
+             buttons respond at all. A comma is a second argument to
+             Promise.resolve(), which only uses the first and ignores the rest —
+             both assignments still run, now without a syntax error. --}}
+        <x-mobile.pin-keypad wire:key="dual-seal-{{ $session->id }}-first" :title="$firstLabel" onComplete="firstPin = pin, step = 'second'" />
     </template>
 
     <template x-if="step === 'second'">
