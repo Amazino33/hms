@@ -223,6 +223,60 @@ it('shows a manager the final comparison of counted vs expected stock once a han
     $response->assertSee('Accepted');
 });
 
+it('gives the Seal the Agreement panel a stable wire:key on each pad, surviving an unrelated Livewire re-render', function () {
+    // Regression test for a live incident: reviewing items (Accept/Dispute/
+    // Next/Previous) re-renders the page server-side. The dual-seal panel
+    // sits alongside that reviewer, not inside its wire:ignore wrapper, so
+    // without its own stable identity, that unrelated re-render orphaned
+    // its Alpine scope — the browser console showed "pressed is not
+    // defined" / "submitting is not defined" thrown from inside the pad's
+    // own :class bindings, and the seal got stuck on "Confirming…" forever.
+    // Asserting the compiled wire:key markup is present is what would have
+    // caught this before it reached production — a passing "it seals
+    // correctly" test never exercises the browser's own DOM morph at all.
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Heineken', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'bartender']);
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole('bartender');
+    $incoming = User::factory()->create();
+    $incoming->assignRole('bartender');
+
+    $pinAuth = new \App\Services\PinAuthService();
+    $pinAuth->setPin($outgoing, '6284');
+    $pinAuth->setPin($incoming, '3971');
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
+    $session = $service->declare($session, '6284', 'test-seal-key-declare');
+    $session = $service->bindIncomingCustodian($session, '3971', 'test-seal-key-bind');
+    $item->refresh();
+    $service->reviewProduct($item, $incoming->id, 'accepted');
+
+    // Viewed by a manager (matching this file's existing convention for
+    // rendering CountSessionDetail — see "shows a manager the final
+    // comparison" above) rather than the bartender directly: a bare
+    // 'bartender' role has no PagePermission grant for this admin page in
+    // a fresh test database, only whatever production has actually seeded.
+    // Irrelevant to what this test checks — the markup renders the same
+    // regardless of viewer, once readyToSeal() is true.
+    $manager = User::factory()->create();
+    $manager->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']));
+
+    $html = Livewire::actingAs($manager)
+        ->test(CountSessionDetail::class, ['session_id' => $session->fresh()->id])
+        ->assertSee('Seal the Agreement')
+        ->html();
+
+    expect($html)->toContain("wire:key=\"dual-seal-{$session->id}\"");
+    expect($html)->toContain("wire:key=\"dual-seal-{$session->id}-first\"");
+});
+
 it('flags a shortfall on the admin Count Sessions list once a handover with an accountability decision is reviewed', function () {
     $bar = WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'is_active' => 1]);
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);

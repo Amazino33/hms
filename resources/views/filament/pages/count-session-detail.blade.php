@@ -557,7 +557,7 @@
                                 </button>
                             @endforeach
                         </div>
-                        <x-mobile.pin-keypad title="Declare" onComplete="$wire.declare(pin).then(() => { show = false })" />
+                        <x-mobile.pin-keypad wire:key="declare-pad-{{ $session->id }}" title="Declare" onComplete="$wire.declare(pin).then(() => { show = false })" />
                     </div>
                 </div>
             @endif
@@ -574,6 +574,7 @@
                      overwriting that guess. Visible to anyone viewing the
                      page — the PIN is the gate, not the logged-in account. --}}
                 <x-mobile.pin-keypad
+                    wire:key="bind-incoming-{{ $session->id }}"
                     title="Confirm your identity"
                     :subtitle="'Incoming custodian — enter your PIN to begin reviewing ' . ($session->outgoingUser?->name ?? '') . '\'s declared count.'"
                     onComplete="$wire.bindIncomingReview(pin)"
