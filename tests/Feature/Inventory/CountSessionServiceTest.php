@@ -325,3 +325,45 @@ it('supports a single-person main store stocktake without dual confirmation', fu
     $session = $service->finalizeReview($session->fresh(), $manager->id);
     expect($session->status)->toBe('reviewed');
 });
+
+it('backfills a zero-quantity Main Store row for a product only ever stocked at another warehouse, so a stocktake can count it', function () {
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+
+    // This product has never had an InventoryItem row at Main Store —
+    // e.g. it was first stocked via Quick Inventory Update at the Bar.
+    $barOnlyProduct = Product::create(['name' => 'Bar-only Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $barOnlyProduct->id, 'warehouse_id' => $bar->id, 'quantity' => 12]);
+
+    $storekeeper = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+
+    $items = $session->items()->with('product')->get();
+    expect($items->pluck('product_id'))->toContain($barOnlyProduct->id);
+
+    $backfilled = $items->firstWhere('product_id', $barOnlyProduct->id);
+    expect((int) $backfilled->expected_quantity_at_open)->toBe(0);
+
+    // The Bar's own quantity must be untouched by the backfill.
+    expect((int) InventoryItem::where('product_id', $barOnlyProduct->id)->where('warehouse_id', $bar->id)->value('quantity'))->toBe(12);
+});
+
+it('does not backfill Main Store rows for an inactive product', function () {
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+
+    $discontinued = Product::create(['name' => 'Discontinued Drink', 'price' => 500, 'category_id' => $category->id, 'is_active' => false]);
+    InventoryItem::create(['product_id' => $discontinued->id, 'warehouse_id' => $bar->id, 'quantity' => 5]);
+
+    $storekeeper = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+
+    expect($session->items()->where('product_id', $discontinued->id)->exists())->toBeFalse();
+    expect(InventoryItem::where('product_id', $discontinued->id)->where('warehouse_id', $mainStore->id)->exists())->toBeFalse();
+});

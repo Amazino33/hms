@@ -46,12 +46,16 @@ class ProductImport implements OnEachRow, WithHeadingRow
         );
 
         // 4. Add Inventory
-        // We find the warehouse by the name provided in the Excel (e.g. "Main Bar").
-        // A bulk import row is a stock intake, not a correction — it can only
-        // ever ADD to existing stock, never silently overwrite it, and every
-        // addition is logged as an InventoryTransaction like any other
-        // purchase.
-        $warehouse = WareHouse::where('name', $row['warehouse'])->first();
+        // Always Main Store, regardless of what the spreadsheet's
+        // "warehouse" column says — a product's first-ever stock record
+        // must never be created anywhere else, or it becomes invisible to
+        // a Main Store stocktake (which only ever counts InventoryItem rows
+        // that already exist there). Move stock elsewhere afterwards via a
+        // transfer. A bulk import row is a stock intake, not a correction —
+        // it can only ever ADD to existing stock, never silently overwrite
+        // it, and every addition is logged as an InventoryTransaction like
+        // any other purchase.
+        $warehouse = WareHouse::where('type', 'storage')->first();
         $quantity = (float) ($row['quantity'] ?? 0);
 
         if ($warehouse && $quantity > 0) {

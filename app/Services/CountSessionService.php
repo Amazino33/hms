@@ -129,6 +129,29 @@ class CountSessionService
             // regardless of the setting (it's the manager's full physical
             // audit, not a bartender/chef handover) — deliberately not
             // filtered.
+            // A Main Store stocktake is meant to be the full physical audit
+            // — but a product whose very first InventoryItem row was ever
+            // created at another warehouse (Quick Inventory Update, a bulk
+            // import) has no row here at all, so it would be silently
+            // absent from the count sheet. Backfill it at quantity 0 before
+            // snapshotting, same non-destructive fix as
+            // app:backfill-main-store-inventory, just applied automatically
+            // going forward instead of as a one-off.
+            if ($type === 'main_store_stocktake') {
+                $existingProductIds = InventoryItem::where('warehouse_id', $warehouseId)->pluck('product_id');
+                $missingProductIds = Product::where('is_active', true)
+                    ->whereNotIn('id', $existingProductIds)
+                    ->pluck('id');
+
+                foreach ($missingProductIds as $productId) {
+                    InventoryItem::create([
+                        'product_id' => $productId,
+                        'warehouse_id' => $warehouseId,
+                        'quantity' => 0,
+                    ]);
+                }
+            }
+
             if ($type === 'kitchen_handover') {
                 $rows = IngredientInventoryItem::where('warehouse_id', $warehouseId)
                     ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))

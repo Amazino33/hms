@@ -11,13 +11,13 @@ use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Actions\Action;
 use App\Services\PermissionService;
 use BackedEnum;
 use UnitEnum;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Locked;
 
 class QuickInventoryUpdate extends Page implements HasTable
 {
@@ -32,6 +32,11 @@ class QuickInventoryUpdate extends Page implements HasTable
     // Defer heavy table population until client requests it
     public bool $ready = false;
 
+    // Locked, not just unwired from the UI: without this, a crafted
+    // Livewire request could still overwrite this property directly and
+    // reopen the exact "first stock record lands outside Main Store" gap
+    // the rest of this hardening exists to close.
+    #[Locked]
     public ?int $selectedWarehouseId = null;
 
     public function load(): void
@@ -41,8 +46,13 @@ class QuickInventoryUpdate extends Page implements HasTable
 
     public function mount(): void
     {
-        // Default to first warehouse
-        $this->selectedWarehouseId = WareHouse::first()?->id;
+        // Hard-locked to Main Store: a product's very first stock record
+        // must never be created anywhere else, or it becomes invisible to
+        // a Main Store stocktake (which only ever counts InventoryItem rows
+        // that already exist there). Correcting Bar/Kitchen quantities
+        // directly belongs to a stock transfer or a count-session handover,
+        // not this page.
+        $this->selectedWarehouseId = WareHouse::where('type', 'storage')->first()?->id;
     }
 
     public function table(Table $table): Table
@@ -93,16 +103,6 @@ class QuickInventoryUpdate extends Page implements HasTable
                     ->label('Cost Price')
                     ->money('NGN')
                     ->sortable(),
-            ])
-            ->filters([
-                SelectFilter::make('warehouse')
-                    ->options(WareHouse::pluck('name', 'id'))  // Use options instead of relationship to avoid joins
-                    ->default($this->selectedWarehouseId)
-                    ->query(function ($query, $value) {
-                        if ($value) {
-                            $this->selectedWarehouseId = $value;
-                        }
-                    }),
             ])
             ->actions([
                 // Deliberately NOT routed through StockAdjustmentService/its

@@ -7,6 +7,7 @@ use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\WareHouse;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 
@@ -19,9 +20,10 @@ it('adds to existing stock and logs a purchase transaction', function () {
     $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
     InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $warehouse->id, 'quantity' => 20]);
 
+    // No .set('selectedWarehouseId', ...) — mount() already locks it onto
+    // the "storage"-type warehouse (Main Store) by itself.
     Livewire::actingAs($admin)
         ->test(QuickInventoryUpdate::class)
-        ->set('selectedWarehouseId', $warehouse->id)
         ->callTableAction('add_stock', $product, [
             'quantity' => 10,
             'cost_per_unit' => 400,
@@ -47,7 +49,6 @@ it('creates a new inventory row when none exists yet for that warehouse', functi
 
     Livewire::actingAs($admin)
         ->test(QuickInventoryUpdate::class)
-        ->set('selectedWarehouseId', $warehouse->id)
         ->callTableAction('add_stock', $product, [
             'quantity' => 15,
             'cost_per_unit' => 400,
@@ -57,3 +58,21 @@ it('creates a new inventory row when none exists yet for that warehouse', functi
 
     expect((int) InventoryItem::where('product_id', $product->id)->where('warehouse_id', $warehouse->id)->value('quantity'))->toBe(15);
 });
+
+it('always targets Main Store even if other warehouses exist, and rejects any attempt to override it', function () {
+    $admin = User::factory()->create();
+    $admin->assignRole(Role::firstOrCreate(['name' => 'super_admin']));
+
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $bar = WareHouse::create(['name' => 'Main Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+
+    $component = Livewire::actingAs($admin)->test(QuickInventoryUpdate::class);
+
+    expect($component->get('selectedWarehouseId'))->toBe($mainStore->id);
+
+    // Locked, not just unwired from the UI — a crafted request trying to
+    // point this page at Bar instead must be rejected outright.
+    $component->set('selectedWarehouseId', $bar->id);
+})->throws(CannotUpdateLockedPropertyException::class);
