@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\User;
 use App\Models\WareHouse;
 use Database\Seeders\ShieldSeeder;
+use Illuminate\Support\Facades\Artisan;
+use Spatie\Permission\Models\Role;
 
 it('renders the stock overview page showing per-warehouse product stock by default', function () {
     $this->seed(ShieldSeeder::class);
@@ -40,4 +42,24 @@ it('shows ingredient stock when toggled to the ingredients view', function () {
         ->call('setViewMode', 'ingredients')
         ->assertSee('Tomato')
         ->assertSee('8');
+});
+
+it('grants a storekeeper access to Stock Overview so she can see what she has before transferring or procuring', function () {
+    Artisan::call('db:seed', ['--class' => 'PagePermissionsSeeder', '--force' => true]);
+    $storekeeper = User::factory()->create();
+    $storekeeper->assignRole(Role::firstOrCreate(['name' => 'storekeeper']));
+
+    $response = $this->actingAs($storekeeper)->get('/admin/stock-overview');
+
+    $response->assertStatus(200);
+});
+
+it('does not grant an unrelated role (waiter) access to Stock Overview', function () {
+    Artisan::call('db:seed', ['--class' => 'PagePermissionsSeeder', '--force' => true]);
+    $waiter = User::factory()->create();
+    $waiter->assignRole(Role::firstOrCreate(['name' => 'waiter']));
+
+    $response = $this->actingAs($waiter)->get('/admin/stock-overview');
+
+    $response->assertForbidden();
 });

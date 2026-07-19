@@ -141,6 +141,22 @@ class PagePermissionsSeeder extends Seeder
                 'role_name' => 'storekeeper',
             ],
 
+            // Stock Overview - read-only stock-on-hand per warehouse, no
+            // pricing/valuation. Existed with zero seeded grants at all
+            // (not even super_admin, though super_admin bypasses this
+            // check regardless) — the storekeeper had no way to see what
+            // she actually has before deciding to transfer or procure.
+            [
+                'page_class' => 'App\Filament\Pages\StockOverview',
+                'page_name' => 'Stock Overview',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\StockOverview',
+                'page_name' => 'Stock Overview',
+                'role_name' => 'storekeeper',
+            ],
+
             // Stock Valuation - Only Super Admin
             [
                 'page_class' => 'App\Filament\Pages\StockValuation',
