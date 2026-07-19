@@ -67,22 +67,40 @@ class WaiterLedger extends Page
         return (new WaiterLedgerService())->allWaiters($this->range());
     }
 
+    public function orderRows()
+    {
+        if (! $this->waiterId) {
+            return collect();
+        }
+
+        return (new WaiterLedgerService())->orderRows($this->waiterId, $this->range());
+    }
+
+    public function debtRows()
+    {
+        if (! $this->waiterId) {
+            return collect();
+        }
+
+        return (new WaiterLedgerService())->debtRows($this->waiterId, $this->range());
+    }
+
     public function exportCsv()
     {
         $filtersDesc = $this->filtersDescription();
 
         if ($this->mode === 'all_waiters') {
             return $this->csvResponse('waiter-ledger-all-waiters.csv', [
-                'Waiter', 'Sales Handled', 'Shortfall', 'Shortfall Rate %', 'Outstanding Debt',
+                'Waiter', 'Sales Handled', 'Commission Earned', 'Shortfall', 'Shortfall Rate %', 'Outstanding Debt',
             ], $this->allWaiterRows()->map(fn ($r) => [
-                $r['waiter_name'], $r['sales_handled'], $r['shortfall'], $r['shortfall_rate_pct'], $r['outstanding_debt'],
+                $r['waiter_name'], $r['sales_handled'], $r['commission_earned'], $r['shortfall'], $r['shortfall_rate_pct'], $r['outstanding_debt'],
             ]));
         }
 
         return $this->csvResponse('waiter-ledger.csv', [
-            'Date', 'Orders', 'Total Sales', 'Cash Declared', 'POS Total', 'Transfer Total', 'Shortfall', 'Shortfall Rate %', 'Running Debt Balance',
+            'Date', 'Orders', 'Total Sales', 'Commission', 'Cash Declared', 'POS Total', 'Transfer Total', 'Shortfall', 'Shortfall Rate %', 'Running Debt Balance',
         ], $this->shiftRows()->map(fn ($r) => [
-            $r['date']->format('Y-m-d H:i'), $r['orders_count'], $r['total_sales'], $r['cash_declared'],
+            $r['date']->format('Y-m-d H:i'), $r['orders_count'], $r['total_sales'], $r['commission'], $r['cash_declared'],
             $r['pos_total'], $r['transfer_total'], $r['shortfall'], $r['shortfall_rate_pct'], $r['running_debt_balance'],
         ]));
     }
@@ -93,24 +111,26 @@ class WaiterLedger extends Page
 
         if ($this->mode === 'all_waiters') {
             return $this->pdfResponse('waiter-ledger-all-waiters.pdf', 'Waiter Ledger — All Waiters', $this->filtersDescription(), [], [
-                'Waiter', 'Sales Handled', 'Shortfall', 'Shortfall Rate %', 'Outstanding Debt',
+                'Waiter', 'Sales Handled', 'Commission Earned', 'Shortfall', 'Shortfall Rate %', 'Outstanding Debt',
             ], $this->allWaiterRows()->map(fn ($r) => [
-                $r['waiter_name'], number_format($r['sales_handled'], 2), number_format($r['shortfall'], 2),
+                $r['waiter_name'], number_format($r['sales_handled'], 2), number_format($r['commission_earned'], 2), number_format($r['shortfall'], 2),
                 number_format($r['shortfall_rate_pct'], 2), number_format($r['outstanding_debt'], 2),
             ]));
         }
 
         return $this->pdfResponse('waiter-ledger.pdf', 'Waiter Ledger', $this->filtersDescription(), [
             'Total sales handled' => '₦' . number_format($summary['total_sales_handled'] ?? 0, 2),
+            'Total commission earned' => '₦' . number_format($summary['total_commission_earned'] ?? 0, 2),
             'Total shortfall' => '₦' . number_format($summary['total_shortfall'] ?? 0, 2),
             'Shortfall rate' => number_format($summary['shortfall_rate_pct'] ?? 0, 2) . '%',
             'Orders count' => $summary['orders_count'] ?? 0,
             'Average sale per order' => '₦' . number_format($summary['avg_sale_per_order'] ?? 0, 2),
+            'Debt incurred in period' => '₦' . number_format($summary['debt_incurred_in_period'] ?? 0, 2),
             'Current outstanding debt balance' => '₦' . number_format($summary['current_outstanding_debt_balance'] ?? 0, 2),
         ], [
-            'Date', 'Orders', 'Total Sales', 'Cash Declared', 'POS Total', 'Transfer Total', 'Shortfall', 'Shortfall Rate %', 'Running Debt Balance',
+            'Date', 'Orders', 'Total Sales', 'Commission', 'Cash Declared', 'POS Total', 'Transfer Total', 'Shortfall', 'Shortfall Rate %', 'Running Debt Balance',
         ], $this->shiftRows()->map(fn ($r) => [
-            $r['date']->format('Y-m-d H:i'), $r['orders_count'], number_format($r['total_sales'], 2), number_format($r['cash_declared'], 2),
+            $r['date']->format('Y-m-d H:i'), $r['orders_count'], number_format($r['total_sales'], 2), number_format($r['commission'], 2), number_format($r['cash_declared'], 2),
             number_format($r['pos_total'], 2), number_format($r['transfer_total'], 2), number_format($r['shortfall'], 2),
             number_format($r['shortfall_rate_pct'], 2), number_format($r['running_debt_balance'], 2),
         ]));

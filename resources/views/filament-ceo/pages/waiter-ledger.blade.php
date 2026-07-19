@@ -40,10 +40,14 @@
             <div class="text-sm text-gray-500 mt-4">Select a waiter to view their ledger.</div>
         @else
             @php($summary = $this->summary())
-            <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mt-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mt-4">
                 <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                     <div class="text-[10px] text-gray-500 uppercase">Sales Handled</div>
                     <div class="font-bold">₦{{ number_format($summary['total_sales_handled'], 2) }}</div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <div class="text-[10px] text-gray-500 uppercase">Commission Earned</div>
+                    <div class="font-bold text-green-600">₦{{ number_format($summary['total_commission_earned'], 2) }}</div>
                 </div>
                 <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                     <div class="text-[10px] text-gray-500 uppercase">Shortfall</div>
@@ -62,26 +66,33 @@
                     <div class="font-bold">₦{{ number_format($summary['avg_sale_per_order'], 2) }}</div>
                 </div>
                 <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                    <div class="text-[10px] text-gray-500 uppercase">Outstanding Debt</div>
+                    <div class="text-[10px] text-gray-500 uppercase">Debt Incurred (Period)</div>
+                    <div class="font-bold">₦{{ number_format($summary['debt_incurred_in_period'], 2) }}</div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <div class="text-[10px] text-gray-500 uppercase">Outstanding Debt (All-Time)</div>
                     <div class="font-bold">₦{{ number_format($summary['current_outstanding_debt_balance'], 2) }}</div>
                 </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mt-4 overflow-x-auto">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-4 font-semibold uppercase">Shifts</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mt-1 overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="text-left text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                            <th class="p-2">Date</th><th class="p-2 text-right">Orders</th><th class="p-2 text-right">Sales</th>
-                            <th class="p-2 text-right">Cash</th><th class="p-2 text-right">POS</th><th class="p-2 text-right">Transfer</th>
+                            <th class="p-2">Started</th><th class="p-2">Ended</th><th class="p-2 text-right">Orders</th><th class="p-2 text-right">Sales</th>
+                            <th class="p-2 text-right">Commission</th><th class="p-2 text-right">Cash</th><th class="p-2 text-right">POS</th><th class="p-2 text-right">Transfer</th>
                             <th class="p-2 text-right">Shortfall</th><th class="p-2 text-right">Rate</th><th class="p-2 text-right">Running Debt</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($this->shiftRows() as $row)
                             <tr class="border-b border-gray-100 dark:border-gray-700/50">
+                                <td class="p-2">{{ $row['started_at']?->format('M j, Y g:ia') }}</td>
                                 <td class="p-2">{{ $row['date']->format('M j, Y g:ia') }}</td>
                                 <td class="p-2 text-right">{{ $row['orders_count'] }}</td>
                                 <td class="p-2 text-right">₦{{ number_format($row['total_sales'], 2) }}</td>
+                                <td class="p-2 text-right text-green-600">₦{{ number_format($row['commission'], 2) }}</td>
                                 <td class="p-2 text-right">₦{{ number_format($row['cash_declared'], 2) }}</td>
                                 <td class="p-2 text-right">₦{{ number_format($row['pos_total'], 2) }}</td>
                                 <td class="p-2 text-right">₦{{ number_format($row['transfer_total'], 2) }}</td>
@@ -90,7 +101,58 @@
                                 <td class="p-2 text-right">₦{{ number_format($row['running_debt_balance'], 2) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="9" class="p-4 text-center text-gray-400">No confirmed shifts in this range.</td></tr>
+                            <tr><td colspan="11" class="p-4 text-center text-gray-400">No confirmed shifts in this range.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-6 font-semibold uppercase">Orders</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mt-1 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                            <th class="p-2">Order #</th><th class="p-2">Date</th><th class="p-2">Status</th>
+                            <th class="p-2 text-right">Total</th><th class="p-2 text-right">Commission</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($this->orderRows() as $row)
+                            <tr class="border-b border-gray-100 dark:border-gray-700/50">
+                                <td class="p-2">{{ $row['order_number'] }}</td>
+                                <td class="p-2">{{ $row['date']?->format('M j, Y g:ia') }}</td>
+                                <td class="p-2 capitalize">{{ $row['status'] }}</td>
+                                <td class="p-2 text-right">₦{{ number_format($row['total_amount'], 2) }}</td>
+                                <td class="p-2 text-right text-green-600">₦{{ number_format($row['commission'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="5" class="p-4 text-center text-gray-400">No orders in this range.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-6 font-semibold uppercase">Debts</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mt-1 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                            <th class="p-2">Date</th><th class="p-2">Reason</th><th class="p-2">Status</th>
+                            <th class="p-2 text-right">Amount</th><th class="p-2 text-right">Repaid</th><th class="p-2 text-right">Remaining</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($this->debtRows() as $row)
+                            <tr class="border-b border-gray-100 dark:border-gray-700/50">
+                                <td class="p-2">{{ $row['date']?->format('M j, Y g:ia') }}</td>
+                                <td class="p-2 capitalize">{{ str_replace('_', ' ', $row['reason']) }}</td>
+                                <td class="p-2 capitalize">{{ str_replace('_', ' ', $row['status']) }}</td>
+                                <td class="p-2 text-right">₦{{ number_format($row['amount'], 2) }}</td>
+                                <td class="p-2 text-right">₦{{ number_format($row['repaid'], 2) }}</td>
+                                <td class="p-2 text-right {{ $row['remaining'] > 0 ? 'text-red-600' : '' }}">₦{{ number_format($row['remaining'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="p-4 text-center text-gray-400">No debts incurred in this range.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -101,7 +163,7 @@
             <table class="w-full text-sm">
                 <thead>
                     <tr class="text-left text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                        <th class="p-2">Waiter</th><th class="p-2 text-right">Sales Handled</th>
+                        <th class="p-2">Waiter</th><th class="p-2 text-right">Sales Handled</th><th class="p-2 text-right">Commission Earned</th>
                         <th class="p-2 text-right">Shortfall</th><th class="p-2 text-right">Shortfall Rate</th><th class="p-2 text-right">Outstanding Debt</th>
                     </tr>
                 </thead>
@@ -110,6 +172,7 @@
                         <tr class="border-b border-gray-100 dark:border-gray-700/50">
                             <td class="p-2">{{ $row['waiter_name'] }}</td>
                             <td class="p-2 text-right">₦{{ number_format($row['sales_handled'], 2) }}</td>
+                            <td class="p-2 text-right text-green-600">₦{{ number_format($row['commission_earned'], 2) }}</td>
                             <td class="p-2 text-right {{ $row['shortfall'] > 0 ? 'text-red-600' : '' }}">₦{{ number_format($row['shortfall'], 2) }}</td>
                             <td class="p-2 text-right">{{ number_format($row['shortfall_rate_pct'], 2) }}%</td>
                             <td class="p-2 text-right">₦{{ number_format($row['outstanding_debt'], 2) }}</td>
