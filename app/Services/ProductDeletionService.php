@@ -31,6 +31,46 @@ class ProductDeletionService
     }
 
     /**
+     * super_admin is the top of this app's role hierarchy — there is
+     * nobody else to be the "different reviewer" four-eyes normally
+     * requires, so a request made by (or reviewed for) a super_admin would
+     * otherwise sit pending forever with no one able to approve it. This
+     * deletes immediately and records the request as self-approved, for
+     * the same audit trail every other deletion leaves behind. If a
+     * pending request already exists for this product (e.g. from before
+     * this method existed, stuck with no reviewer), that request is
+     * resolved instead of creating a duplicate.
+     *
+     * @throws \Exception
+     */
+    public function deleteImmediately(Product $product, User $actor, string $reason): ProductDeletionRequest
+    {
+        if (! $actor->hasRole('super_admin')) {
+            throw new \Exception('Only a super_admin can delete a product immediately without review.');
+        }
+
+        return DB::transaction(function () use ($product, $actor, $reason) {
+            $request = $product->deletionRequests()->where('status', 'pending')->first()
+                ?? ProductDeletionRequest::create([
+                    'product_id' => $product->id,
+                    'reason' => $reason,
+                    'status' => 'pending',
+                    'requested_by' => $actor->id,
+                ]);
+
+            $request->update([
+                'status' => 'approved',
+                'reviewed_by' => $actor->id,
+                'reviewed_at' => now(),
+            ]);
+
+            $product->delete();
+
+            return $request->fresh();
+        });
+    }
+
+    /**
      * Approve a pending request, soft-deleting the product. Four-eyes is
      * enforced unconditionally here: the reviewer can never be the
      * requester, regardless of role — same rule as StockAdjustmentService,

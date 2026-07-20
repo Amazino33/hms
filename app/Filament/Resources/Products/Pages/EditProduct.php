@@ -27,20 +27,31 @@ class EditProduct extends EditRecord
             // away this product's entire inventory/transaction/adjustment/
             // count history.
             Action::make('request_deletion')
-                ->label('Request Deletion')
+                ->label(fn () => auth()->user()->hasRole('super_admin') ? 'Delete Product' : 'Request Deletion')
                 ->color('danger')
                 ->icon('heroicon-o-trash')
                 ->form([
                     Textarea::make('reason')->required()->label('Reason for deletion'),
                 ])
+                ->requiresConfirmation(fn () => auth()->user()->hasRole('super_admin'))
+                ->modalDescription('This soft-deletes the product immediately — there is no one else to review it. Its inventory/transaction/adjustment/count history is kept, and it can be restored from the trashed filter.')
                 ->visible(fn () => auth()->user()->can('delete', $this->record))
                 ->action(function (array $data) {
-                    try {
-                        (new ProductDeletionService)->request($this->record, $data['reason'], auth()->id());
+                    $isSuperAdmin = auth()->user()->hasRole('super_admin');
 
-                        Notification::make()->title('Deletion request submitted')->body('A different reviewer must approve it before anything is deleted.')->success()->send();
+                    try {
+                        if ($isSuperAdmin) {
+                            (new ProductDeletionService)->deleteImmediately($this->record, auth()->user(), $data['reason']);
+                            Notification::make()->title('Product deleted')->success()->send();
+                            $this->redirect($this->getResource()::getUrl('index'));
+
+                            return;
+                        } else {
+                            (new ProductDeletionService)->request($this->record, $data['reason'], auth()->id());
+                            Notification::make()->title('Deletion request submitted')->body('A different reviewer must approve it before anything is deleted.')->success()->send();
+                        }
                     } catch (\Exception $e) {
-                        Notification::make()->title('Could not submit request')->body($e->getMessage())->danger()->persistent()->send();
+                        Notification::make()->title('Could not delete product')->body($e->getMessage())->danger()->persistent()->send();
                     }
                 }),
         ];

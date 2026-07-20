@@ -176,3 +176,55 @@ it('refuses to restore a product that is not deleted', function () {
     $service = new ProductDeletionService;
     expect(fn () => $service->restore($product, $admin))->toThrow(Exception::class);
 });
+
+it('lets a super_admin delete a product immediately, self-approved, with no other reviewer needed', function () {
+    test()->seed(ShieldSeeder::class);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+
+    $admin = User::factory()->create();
+    $admin->assignRole('super_admin');
+
+    $service = new ProductDeletionService;
+    $request = $service->deleteImmediately($product, $admin, 'Discontinued, no one else to review it');
+
+    expect($product->fresh()->trashed())->toBeTrue();
+    expect($request->status)->toBe('approved');
+    expect($request->requested_by)->toBe($admin->id);
+    expect($request->reviewed_by)->toBe($admin->id);
+});
+
+it('refuses immediate deletion for anyone who is not super_admin', function () {
+    test()->seed(ShieldSeeder::class);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+
+    $manager = User::factory()->create();
+    $manager->assignRole('manager');
+
+    $service = new ProductDeletionService;
+
+    expect(fn () => $service->deleteImmediately($product, $manager, 'Discontinued'))->toThrow(Exception::class);
+    expect($product->fresh()->trashed())->toBeFalse();
+});
+
+it('resolves an existing stuck pending request instead of creating a duplicate', function () {
+    test()->seed(ShieldSeeder::class);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+
+    $admin = User::factory()->create();
+    $admin->assignRole('super_admin');
+
+    $service = new ProductDeletionService;
+    // The exact scenario this method exists for: a request with nobody
+    // else able to review it, sitting pending indefinitely.
+    $stuckRequest = $service->request($product, 'Discontinued', $admin->id);
+
+    $resolved = $service->deleteImmediately($product, $admin, 'Discontinued');
+
+    expect($resolved->id)->toBe($stuckRequest->id);
+    expect($resolved->status)->toBe('approved');
+    expect($product->fresh()->trashed())->toBeTrue();
+    expect(\App\Models\ProductDeletionRequest::where('product_id', $product->id)->count())->toBe(1);
+});
