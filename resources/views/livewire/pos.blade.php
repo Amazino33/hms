@@ -522,15 +522,22 @@ new class extends Component {
                 'kiosk_device_id' => session('kiosk_device_id'),
             ]);
         } catch (\Exception $e) {
-            if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
-                Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
+            // Every deliberate validation throw inside OrderSplitter/
+            // InventoryService (out of stock, insufficient ingredients, no
+            // active shift, product/menu item not found, ...) is a plain
+            // \Exception with a message already written for the person
+            // seeing it — show it exactly as raised instead of only
+            // recognizing a couple of hardcoded phrases and hiding
+            // everything else (e.g. "Product not found: X") behind a vague
+            // "Could not process payment" that gives no clue what to fix.
+            // A genuinely unexpected exception (DB failure, etc.) is never
+            // a plain \Exception instance, so get_class() here reliably
+            // tells the two apart.
+            if (get_class($e) === \Exception::class) {
+                Notification::make()->title('Could Not Complete Order')->body($e->getMessage())->danger()->send();
                 return false;
             }
-            // Previously re-thrown — the Alpine caller's empty catch block
-            // swallowed it with no visible feedback at all, on a money-
-            // handling action. Logged normally (report()), notified
-            // generically (the specific cause isn't one of the two
-            // recognized/expected cases above).
+
             report($e);
             UserFeedback::failed('Could not process payment');
 
@@ -623,14 +630,14 @@ new class extends Component {
                 'kiosk_device_id' => session('kiosk_device_id'),
             ]);
         } catch (\Exception $e) {
-            if (str_contains($e->getMessage(), 'Out of Stock') || str_contains($e->getMessage(), 'Insufficient ingredients')) {
-                Notification::make()->title('Stock Error')->body($e->getMessage())->danger()->send();
+            // See the identical comment in processPayment() above — always
+            // show the real message for a deliberate domain-validation
+            // throw, rather than only recognizing a few hardcoded phrases.
+            if (get_class($e) === \Exception::class) {
+                Notification::make()->title('Could Not Complete Order')->body($e->getMessage())->danger()->send();
                 return false;
             }
-            if (str_contains($e->getMessage(), 'shift') || str_contains($e->getMessage(), 'session')) {
-                Notification::make()->title('No Active Shift')->body($e->getMessage())->danger()->send();
-                return false;
-            }
+
             report($e);
             UserFeedback::failed('Could not send order');
 
