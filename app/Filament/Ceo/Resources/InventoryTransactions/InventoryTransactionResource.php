@@ -27,7 +27,10 @@ class InventoryTransactionResource extends Resource
         return $table
             ->defaultSort('created_at', 'desc')
             ->columns([
-                TextColumn::make('product.name')->label('Product')->searchable(),
+                TextColumn::make('product.name')
+                    ->label('Product')
+                    ->formatStateUsing(fn ($record) => ($record->product?->name ?? '—').($record->product?->trashed() ? ' (deleted)' : ''))
+                    ->searchable(),
                 TextColumn::make('warehouse.name')->label('Location'),
                 TextColumn::make('type')->badge(),
                 TextColumn::make('quantity')->numeric(),

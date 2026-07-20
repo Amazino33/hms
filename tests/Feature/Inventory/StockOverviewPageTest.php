@@ -63,3 +63,31 @@ it('does not grant an unrelated role (waiter) access to Stock Overview', functio
 
     $response->assertForbidden();
 });
+
+/**
+ * Product now supports soft deletes; InventoryItem::product() (like every
+ * other model that references Product) is a plain belongsTo(), which
+ * Eloquent silently scopes to non-trashed rows. Before withTrashed() was
+ * added to that relation, deleting a product left its existing
+ * InventoryItem rows still on the shelf — with a completely blank Product/
+ * SKU cell instead of the product's actual name, which is exactly the "why
+ * is this row blank?" report this test locks in.
+ */
+it('still shows the product name and SKU on a row whose product has since been deleted', function () {
+    $this->seed(ShieldSeeder::class);
+    $admin = User::factory()->create();
+    $admin->assignRole('super_admin');
+
+    $warehouse = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Origin Beer', 'sku' => 'ORIGIN-BEER', 'price' => 300, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $warehouse->id, 'quantity' => 12]);
+
+    $product->delete();
+
+    $response = $this->actingAs($admin)->get('/admin/stock-overview');
+
+    $response->assertStatus(200);
+    $response->assertSee('Origin Beer (deleted)');
+    $response->assertSee('12');
+});

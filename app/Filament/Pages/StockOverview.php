@@ -83,6 +83,7 @@ class StockOverview extends Page implements HasTable
             ->columns([
                 TextColumn::make('product.name')
                     ->label('Product')
+                    ->formatStateUsing(fn ($record) => ($record->product?->name ?? '—').($record->product?->trashed() ? ' (deleted)' : ''))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('product.sku')
