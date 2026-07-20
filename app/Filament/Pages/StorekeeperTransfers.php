@@ -43,7 +43,11 @@ class StorekeeperTransfers extends Page
         }
 
         $page = request()->get('page', 1);
-        $recent = StockTransfer::with(['items','ingredientItems','fromWarehouse','toWarehouse'])->latest()->paginate(10, ['*'], 'page', $page);
+        $recent = StockTransfer::with([
+            'items.product', 'items.discrepancy',
+            'ingredientItems.ingredient', 'ingredientItems.discrepancy',
+            'fromWarehouse', 'toWarehouse',
+        ])->latest()->paginate(10, ['*'], 'page', $page);
 
         return [
             'products' => $products,
