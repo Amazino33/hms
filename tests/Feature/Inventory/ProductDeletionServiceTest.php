@@ -7,6 +7,8 @@ use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\StockAdjustment;
+use App\Models\StockTransfer;
+use App\Models\StockTransferItem;
 use App\Models\User;
 use App\Models\WareHouse;
 use App\Services\ProductDeletionService;
@@ -206,6 +208,82 @@ it('refuses immediate deletion for anyone who is not super_admin', function () {
 
     expect(fn () => $service->deleteImmediately($product, $manager, 'Discontinued'))->toThrow(Exception::class);
     expect($product->fresh()->trashed())->toBeFalse();
+});
+
+function makeUnreceivedTransferFor(Product $product): StockTransferItem
+{
+    $main = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $storekeeper = User::factory()->create();
+
+    $transfer = StockTransfer::create([
+        'transfer_number' => 'ST-DEL-TEST', 'from_warehouse_id' => $main->id, 'to_warehouse_id' => $bar->id,
+        'user_id' => $storekeeper->id, 'status' => 'sent',
+    ]);
+
+    return StockTransferItem::create([
+        'stock_transfer_id' => $transfer->id, 'product_id' => $product->id, 'quantity' => 10,
+    ]);
+}
+
+it('refuses to request deletion for a product with an unreceived transfer in progress', function () {
+    test()->seed(ShieldSeeder::class);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    makeUnreceivedTransferFor($product);
+
+    $requester = User::factory()->create();
+    $service = new ProductDeletionService;
+
+    expect(fn () => $service->request($product, 'Discontinued', $requester->id))->toThrow(Exception::class, 'ST-DEL-TEST');
+    expect($product->fresh()->trashed())->toBeFalse();
+});
+
+it('refuses immediate deletion for a product with an unreceived transfer in progress', function () {
+    test()->seed(ShieldSeeder::class);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    makeUnreceivedTransferFor($product);
+
+    $admin = User::factory()->create();
+    $admin->assignRole('super_admin');
+    $service = new ProductDeletionService;
+
+    expect(fn () => $service->deleteImmediately($product, $admin, 'Discontinued'))->toThrow(Exception::class, 'ST-DEL-TEST');
+    expect($product->fresh()->trashed())->toBeFalse();
+});
+
+it('refuses to approve a request once a transfer for the product became unreceived after the request was made', function () {
+    test()->seed(ShieldSeeder::class);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+
+    $requester = User::factory()->create();
+    $approver = User::factory()->create();
+    $approver->assignRole('manager');
+
+    $service = new ProductDeletionService;
+    $request = $service->request($product, 'Discontinued', $requester->id);
+
+    makeUnreceivedTransferFor($product);
+
+    expect(fn () => $service->approve($request, $approver))->toThrow(Exception::class, 'ST-DEL-TEST');
+    expect($product->fresh()->trashed())->toBeFalse();
+});
+
+it('allows deletion once the transfer line has actually been received', function () {
+    test()->seed(ShieldSeeder::class);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    $item = makeUnreceivedTransferFor($product);
+    $item->update(['outcome' => 'received_full', 'received_quantity' => 10]);
+
+    $admin = User::factory()->create();
+    $admin->assignRole('super_admin');
+    $service = new ProductDeletionService;
+
+    $service->deleteImmediately($product, $admin, 'Discontinued');
+    expect($product->fresh()->trashed())->toBeTrue();
 });
 
 it('resolves an existing stuck pending request instead of creating a duplicate', function () {

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\ProductDeletionRequest;
+use App\Models\StockTransferItem;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +22,8 @@ class ProductDeletionService
         if ($product->deletionRequests()->where('status', 'pending')->exists()) {
             throw new \Exception('A deletion request for this product is already pending.');
         }
+
+        $this->assertNoUnreceivedTransfer($product);
 
         return ProductDeletionRequest::create([
             'product_id' => $product->id,
@@ -48,6 +51,8 @@ class ProductDeletionService
         if (! $actor->hasRole('super_admin')) {
             throw new \Exception('Only a super_admin can delete a product immediately without review.');
         }
+
+        $this->assertNoUnreceivedTransfer($product);
 
         return DB::transaction(function () use ($product, $actor, $reason) {
             $request = $product->deletionRequests()->where('status', 'pending')->first()
@@ -93,6 +98,13 @@ class ProductDeletionService
 
         if ($reviewer->cannot('update', $request)) {
             throw new \Exception('You do not have permission to approve product deletion requests.');
+        }
+
+        // Re-checked here, not just at request() time: a transfer can be
+        // created and sent for this product at any point while the request
+        // sat pending waiting for a reviewer.
+        if ($request->product) {
+            $this->assertNoUnreceivedTransfer($request->product);
         }
 
         $reviewedByUserId = $reviewer->id;
@@ -162,5 +174,32 @@ class ProductDeletionService
         $product->restore();
 
         return $product->fresh();
+    }
+
+    /**
+     * Refuses to delete a product that a storekeeper has already sent in a
+     * transfer nobody has received (in full or in part) yet. Deleting it
+     * mid-flight doesn't corrupt anything mechanically — receiving still
+     * works against the InventoryItem row directly, not the Product model
+     * — but it leaves the receiving screen showing a bare product ID
+     * instead of a name and makes the whole situation confusing for
+     * whoever has to receive it. Simplest to just not allow it.
+     *
+     * @throws \Exception
+     */
+    private function assertNoUnreceivedTransfer(Product $product): void
+    {
+        $pending = StockTransferItem::where('product_id', $product->id)
+            ->where('outcome', 'pending')
+            ->with('transfer')
+            ->get();
+
+        if ($pending->isEmpty()) {
+            return;
+        }
+
+        $transferNumbers = $pending->pluck('transfer.transfer_number')->filter()->unique()->implode(', ');
+
+        throw new \Exception("This product has an unreceived transfer in progress ({$transferNumbers}) — receive or resolve it first.");
     }
 }

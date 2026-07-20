@@ -53,3 +53,24 @@ it('denies page access to a role with no receiving PagePermission grant, before 
         ->test(ReceiveTransfers::class)
         ->assertForbidden();
 });
+
+/**
+ * The desktop "Receive" button used to read its quantity input via
+ * document.getElementById(...) embedded directly inside the wire:click
+ * expression. Livewire's expression evaluator treats bare identifiers as
+ * component-scope lookups, not real browser globals, so this threw
+ * "$wire.document.getElementById is not a function" in the browser
+ * console and the button silently never called the server — invisible to
+ * every existing Pest test here because they all call receiveLine()
+ * directly, bypassing the actual button markup entirely.
+ */
+it('wires the desktop Receive button through an Alpine reactive variable, never a raw document.getElementById inside wire:click', function () {
+    $view = file_get_contents(resource_path('views/filament/pages/receive-transfers.blade.php'));
+
+    // updateSelectedCount()'s own document.getElementById calls (for the
+    // bulk-select bar) are fine — this only guards against the specific
+    // broken pattern: a wire:click attribute embedding a raw DOM query.
+    expect($view)->not->toContain('wire:click="receiveLine');
+    expect($view)->toContain('x-model.number="receivedQty"');
+    expect($view)->toContain("\$wire.call('receiveLine'");
+});

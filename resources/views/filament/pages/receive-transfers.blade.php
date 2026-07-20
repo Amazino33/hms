@@ -218,7 +218,8 @@
                                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                                 @foreach($lines as $line)
                                                     @php $it = $line['item']; @endphp
-                                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                                        @if ($it->isPending()) x-data="{ receivedQty: {{ (float) $it->quantity }} }" @endif>
                                                         <td class="py-4 pl-4">
                                                             <span class="font-medium text-gray-900 dark:text-white">{{ $line['name'] }}</span>
                                                         </td>
@@ -227,14 +228,21 @@
                                                         </td>
                                                         <td class="py-4 text-center">
                                                             @if ($it->isPending())
-                                                                <input type="number" id="recv-{{ $line['type'] }}-{{ $it->id }}" value="{{ $it->quantity }}" min="0" max="{{ $it->quantity }}" step="0.01" class="w-24 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-center">
+                                                                {{-- x-model (not a raw DOM query embedded in wire:click) — Livewire's
+                                                                     expression evaluator treats bare identifiers like `document` as
+                                                                     component scope lookups, not real browser globals, so
+                                                                     `document.getElementById(...)` inside a wire:click argument throws
+                                                                     "$wire.document.getElementById is not a function" instead of ever
+                                                                     calling the server. This is exactly why "Receive" silently did
+                                                                     nothing. --}}
+                                                                <input type="number" x-model.number="receivedQty" min="0" max="{{ $it->quantity }}" step="0.01" class="w-24 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-center">
                                                             @else
                                                                 <span class="text-gray-600 dark:text-gray-400">{{ $it->received_quantity }}</span>
                                                             @endif
                                                         </td>
                                                         <td class="py-4 pr-4 text-right">
                                                             @if ($it->isPending())
-                                                                <button wire:click="receiveLine({{ $it->id }}, '{{ $line['type'] }}', document.getElementById('recv-{{ $line['type'] }}-{{ $it->id }}').value)" wire:loading.attr="disabled" class="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-xs font-semibold">Receive</button>
+                                                                <button @click="$wire.call('receiveLine', {{ $it->id }}, '{{ $line['type'] }}', receivedQty)" wire:loading.attr="disabled" class="px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-xs font-semibold">Receive</button>
                                                             @elseif ($it->outcome === 'received_full')
                                                                 <span class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs font-semibold">Received</span>
                                                             @elseif ($it->outcome === 'received_short')
@@ -303,13 +311,22 @@
             }, 4000);
         }
 
-        // Bulk selection functionality
+        // Bulk selection functionality — the bulk-actions bar (and these two
+        // elements) only exists in markup when there's at least one transfer
+        // to show. This ran unconditionally on DOMContentLoaded, so the
+        // empty-transfers state threw "Cannot set properties of null"
+        // on every page load, before either delegated listener below could
+        // register.
         function updateSelectedCount() {
+            const selectedCountEl = document.getElementById('selected-count');
+            const bulkReceiveBtn = document.getElementById('bulk-receive-btn');
+            if (!selectedCountEl || !bulkReceiveBtn) return;
+
             const checkboxes = document.querySelectorAll('.transfer-checkbox:checked');
             selectedTransfers = Array.from(checkboxes).map(cb => parseInt(cb.value));
             const count = selectedTransfers.length;
-            document.getElementById('selected-count').textContent = `${count} selected`;
-            document.getElementById('bulk-receive-btn').disabled = count === 0;
+            selectedCountEl.textContent = `${count} selected`;
+            bulkReceiveBtn.disabled = count === 0;
         }
 
         function submitBulkReceive() {
