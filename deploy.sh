@@ -32,7 +32,10 @@ echo "    Backup saved to $BACKUP_FILE"
 
 echo ""
 echo "==> [2/8] Enabling maintenance mode..."
-php artisan down --retry=60 || true
+# Uses the company's configured message/duration/secret (Company Settings
+# in the admin panel) so the maintenance page and bypass URL are the same
+# whether triggered from here or from that page directly.
+php artisan hms:maintenance-down || true
 
 echo ""
 echo "==> [3/8] Pulling latest code from GitHub..."
@@ -92,7 +95,7 @@ php artisan queue:restart
 
 echo ""
 echo "==> [8/8] Disabling maintenance mode..."
-php artisan up
+php artisan hms:maintenance-up
 
 echo ""
 echo "==> Clearing PHP-FPM's OPcache..."
