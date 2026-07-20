@@ -24,9 +24,13 @@ use UnitEnum;
 class MyStoreCount extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clipboard-document-check';
+
     protected static string|UnitEnum|null $navigationGroup = 'Inventory';
+
     protected static ?string $navigationLabel = 'My Store Count';
+
     protected static ?string $title = 'My Store Count';
+
     protected string $view = 'filament.pages.my-store-count';
 
     public static function canAccess(): bool
@@ -54,20 +58,30 @@ class MyStoreCount extends Page
             ->first();
     }
 
-    public function startCount(): void
+    /**
+     * Products and ingredients are never mixed into one session — she
+     * chooses which one she's counting right here, before anything opens.
+     */
+    public function startCount(string $itemScope): void
     {
+        if (! in_array($itemScope, ['product', 'ingredient'], true)) {
+            return;
+        }
+
         $warehouseId = $this->warehouseId();
 
-        if (!$warehouseId) {
+        if (! $warehouseId) {
             Notification::make()->title('No storage warehouse is configured')->danger()->persistent()->send();
+
             return;
         }
 
         try {
-            $session = (new CountSessionService())->openSession(
+            $session = (new CountSessionService)->openSession(
                 'main_store_stocktake',
                 $warehouseId,
                 auth()->id(),
+                itemScope: $itemScope,
             );
 
             $this->redirect("/admin/count-session-detail?session_id={$session->id}");

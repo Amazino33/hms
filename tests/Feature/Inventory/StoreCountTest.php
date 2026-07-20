@@ -256,7 +256,7 @@ it('drives a full solo store count end to end through MyStoreCount and CountSess
     }
 
     $entry = Livewire::actingAs($storekeeper)->test(MyStoreCount::class);
-    $entry->call('startCount')->assertRedirect();
+    $entry->call('startCount', 'product')->assertRedirect();
 
     $session = \App\Models\CountSession::where('type', 'main_store_stocktake')->where('opened_by', $storekeeper->id)->first();
     expect($session)->not->toBeNull();

@@ -77,7 +77,7 @@
             <div wire:ignore x-data="{
                     items: @js($this->safeCountItems()),
                     isIntegerOnly: {{ $session->type === 'bar_handover' ? 'true' : 'false' }},
-                    catchItemType: '{{ $session->type === 'kitchen_handover' ? 'ingredient' : 'product' }}',
+                    catchItemType: '{{ $session->type === 'kitchen_handover' || ($session->type === 'main_store_stocktake' && $session->item_scope === 'ingredient') ? 'ingredient' : 'product' }}',
                     catchStepEnabled: {{ $this->catchStepEnabled() ? 'true' : 'false' }},
                     catchCandidates: @js($this->catchCandidates()),
                     catchSearch: '',

@@ -210,10 +210,15 @@ class CountSessionDetail extends Page
             return [];
         }
 
-        $column = $this->session->type === 'kitchen_handover' ? 'ingredient_id' : 'product_id';
+        // main_store_stocktake is single-type per session too (item_scope),
+        // never mixed — same rule as openSession()'s snapshot logic.
+        $isIngredientSession = $this->session->type === 'kitchen_handover'
+            || ($this->session->type === 'main_store_stocktake' && $this->session->item_scope === 'ingredient');
+
+        $column = $isIngredientSession ? 'ingredient_id' : 'product_id';
         $existingIds = $this->session->items->pluck($column)->filter()->all();
 
-        if ($this->session->type === 'kitchen_handover') {
+        if ($isIngredientSession) {
             return \App\Models\Ingredient::whereNotIn('id', $existingIds)
                 ->orderBy('name')
                 ->get(['id', 'name'])

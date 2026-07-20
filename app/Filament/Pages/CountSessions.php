@@ -28,9 +28,13 @@ class CountSessions extends Page implements HasTable
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clipboard-document-check';
+
     protected static string|UnitEnum|null $navigationGroup = 'Inventory';
+
     protected static ?string $navigationLabel = 'Count Sessions';
+
     protected static ?string $title = 'Count Sessions';
+
     protected string $view = 'filament.pages.count-sessions';
 
     public static function canAccess(): bool
@@ -136,7 +140,7 @@ class CountSessions extends Page implements HasTable
                     ])
                     ->action(function (CountSession $record, array $data) {
                         try {
-                            (new CountSessionService())->cancelSession($record, auth()->id(), $data['reason'] ?? null);
+                            (new CountSessionService)->cancelSession($record, auth()->id(), $data['reason'] ?? null);
                             Notification::make()->title('Session cancelled')->success()->send();
                         } catch (\Exception $e) {
                             Notification::make()->title('Could not cancel')->body($e->getMessage())->danger()->persistent()->send();
@@ -162,6 +166,13 @@ class CountSessions extends Page implements HasTable
                             ->options(fn () => WareHouse::pluck('name', 'id'))
                             ->required(),
 
+                        Select::make('item_scope')
+                            ->label('Counting')
+                            ->options(['product' => 'Products', 'ingredient' => 'Ingredients'])
+                            ->default('product')
+                            ->visible(fn (callable $get) => $get('type') === 'main_store_stocktake')
+                            ->required(fn (callable $get) => $get('type') === 'main_store_stocktake'),
+
                         Select::make('outgoing_user_id')
                             ->label('Outgoing Custodian')
                             ->options(fn () => User::pluck('name', 'id'))
@@ -178,13 +189,14 @@ class CountSessions extends Page implements HasTable
                     ])
                     ->action(function (array $data, Action $action) {
                         try {
-                            $session = (new CountSessionService())->openSession(
+                            $session = (new CountSessionService)->openSession(
                                 $data['type'],
                                 $data['warehouse_id'],
                                 auth()->id(),
                                 $data['outgoing_user_id'] ?? null,
                                 $data['incoming_user_id'] ?? null,
                                 $data['notes'] ?? null,
+                                itemScope: $data['item_scope'] ?? null,
                             );
 
                             Notification::make()->title('Count session opened')->success()->send();

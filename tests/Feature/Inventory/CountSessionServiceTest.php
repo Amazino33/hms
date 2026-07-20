@@ -368,7 +368,44 @@ it('does not backfill Main Store rows for an inactive product', function () {
     expect(InventoryItem::where('product_id', $discontinued->id)->where('warehouse_id', $mainStore->id)->exists())->toBeFalse();
 });
 
-it('lets a storekeeper count kitchen ingredients in a Main Store stocktake, the same way she counts products', function () {
+it('defaults to product scope, matching this session type\'s original behavior', function () {
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $mainStore->id, 'quantity' => 20]);
+    $ingredient = Ingredient::create(['name' => 'Rice', 'sku' => 'ING-RICE-DEFAULT', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 5, 'category' => 'Dry Goods']);
+    IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $mainStore->id, 'quantity' => 15]);
+
+    $storekeeper = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+
+    expect($session->item_scope)->toBe('product');
+    expect($session->items()->where('item_type', 'product')->exists())->toBeTrue();
+    expect($session->items()->where('item_type', 'ingredient')->exists())->toBeFalse();
+});
+
+it('opens a products-only session when itemScope is product, never mixing in ingredients', function () {
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $mainStore->id, 'quantity' => 20]);
+    $ingredient = Ingredient::create(['name' => 'Rice', 'sku' => 'ING-RICE-PRODSCOPE', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 5, 'category' => 'Dry Goods']);
+    IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $mainStore->id, 'quantity' => 15]);
+
+    $storekeeper = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id, itemScope: 'product');
+
+    $productItem = $session->items->firstWhere('product_id', $product->id);
+    expect($productItem)->not->toBeNull();
+    expect((int) $productItem->expected_quantity_at_open)->toBe(20);
+    expect($session->items()->where('item_type', 'ingredient')->exists())->toBeFalse();
+});
+
+it('lets a storekeeper count kitchen ingredients in a Main Store stocktake when she chooses that scope', function () {
     $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
@@ -379,17 +416,17 @@ it('lets a storekeeper count kitchen ingredients in a Main Store stocktake, the 
     $storekeeper = User::factory()->create();
 
     $service = new CountSessionService();
-    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id, itemScope: 'ingredient');
 
-    $items = $session->items;
-    $productItem = $items->firstWhere('product_id', $product->id);
-    $ingredientItem = $items->firstWhere('ingredient_id', $ingredient->id);
+    expect($session->item_scope)->toBe('ingredient');
 
-    expect($productItem)->not->toBeNull();
-    expect((int) $productItem->expected_quantity_at_open)->toBe(20);
+    $ingredientItem = $session->items->firstWhere('ingredient_id', $ingredient->id);
     expect($ingredientItem)->not->toBeNull();
     expect($ingredientItem->item_type)->toBe('ingredient');
     expect((float) $ingredientItem->expected_quantity_at_open)->toEqual(15.0);
+
+    // The product she chose NOT to count this time never appears.
+    expect($session->items()->where('item_type', 'product')->exists())->toBeFalse();
 
     // Counting an ingredient item works exactly the same way as a product.
     $service->recordCount($ingredientItem, ['Shelf A' => 15]);
@@ -405,7 +442,7 @@ it('backfills a zero-quantity Main Store row for an ingredient only ever stocked
     $storekeeper = User::factory()->create();
 
     $service = new CountSessionService();
-    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id, itemScope: 'ingredient');
 
     $ingredientItem = $session->items->firstWhere('ingredient_id', $ingredient->id);
     expect($ingredientItem)->not->toBeNull();

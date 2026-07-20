@@ -43,6 +43,13 @@ class CountSessionService
         ?string $notes = null,
         bool $isClosing = false,
         ?int $witnessUserId = null,
+        // main_store_stocktake only — a storekeeper chooses products or
+        // ingredients up front rather than counting a mixed session, so
+        // every existing per-item screen (already built for one
+        // homogeneous type) keeps working unchanged. Defaults to 'product'
+        // to match this session type's original, pre-ingredient behavior
+        // for any caller that doesn't pass it explicitly.
+        ?string $itemScope = null,
     ): CountSession {
         $isHandover = in_array($type, ['bar_handover', 'kitchen_handover'], true);
 
@@ -119,9 +126,16 @@ class CountSessionService
             );
         }
 
-        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing, $witnessUserId, $skipZero) {
+        // main_store_stocktake only: products or ingredients, chosen up
+        // front, never mixed into the same session — every existing
+        // per-item screen was built for one homogeneous type per session,
+        // same as bar_handover/kitchen_handover already are.
+        $resolvedItemScope = $type === 'main_store_stocktake' ? ($itemScope ?? 'product') : null;
+
+        return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing, $witnessUserId, $skipZero, $resolvedItemScope) {
             $session = CountSession::create([
                 'type' => $type,
+                'item_scope' => $resolvedItemScope,
                 'warehouse_id' => $warehouseId,
                 'status' => 'counting',
                 'opened_by' => $openedByUserId,
@@ -145,18 +159,19 @@ class CountSessionService
             // regardless of the setting (it's the manager's full physical
             // audit, not a bartender/chef handover) — deliberately not
             // filtered.
+            $countsIngredients = $type === 'kitchen_handover' || $resolvedItemScope === 'ingredient';
+            $countsProducts = $type !== 'kitchen_handover' && $resolvedItemScope !== 'ingredient';
+
             // A Main Store stocktake is meant to be the full physical audit
-            // — but a product/ingredient whose very first inventory row was
-            // ever created at another warehouse (Quick Inventory Update, a
-            // bulk import, a kitchen-side procurement) has no row here at
-            // all, so it would be silently absent from the count sheet.
-            // Backfill both at quantity 0 before snapshotting, same non-
-            // destructive fix as app:backfill-main-store-inventory (products
-            // side), just applied automatically going forward and extended
-            // to ingredients too — a storekeeper's stocktake needs to be
-            // able to count kitchen ingredients received into Main Store
-            // stock exactly the same way she counts products there.
-            if ($type === 'main_store_stocktake') {
+            // of whichever side was chosen — but a product/ingredient whose
+            // very first inventory row was ever created at another
+            // warehouse (Quick Inventory Update, a bulk import, a kitchen-
+            // side procurement) has no row here at all, so it would be
+            // silently absent from the count sheet. Backfill it at quantity
+            // 0 before snapshotting, same non-destructive fix as
+            // app:backfill-main-store-inventory, just applied automatically
+            // going forward.
+            if ($type === 'main_store_stocktake' && $countsProducts) {
                 $existingProductIds = InventoryItem::where('warehouse_id', $warehouseId)->pluck('product_id');
                 $missingProductIds = Product::where('is_active', true)
                     ->whereNotIn('id', $existingProductIds)
@@ -169,7 +184,9 @@ class CountSessionService
                         'quantity' => 0,
                     ]);
                 }
+            }
 
+            if ($type === 'main_store_stocktake' && $countsIngredients) {
                 $existingIngredientIds = IngredientInventoryItem::where('warehouse_id', $warehouseId)->pluck('ingredient_id');
                 $missingIngredientIds = Ingredient::whereNotIn('id', $existingIngredientIds)->pluck('id');
 
@@ -182,12 +199,7 @@ class CountSessionService
                 }
             }
 
-            // kitchen_handover stays ingredient-only (a bartender/chef
-            // handover, not a full audit); bar_handover stays product-only
-            // (the bar never stocks ingredients). main_store_stocktake is
-            // the one type that snapshots both — it's the storekeeper's
-            // full physical audit of everything sitting in Main Store.
-            if ($type === 'kitchen_handover' || $type === 'main_store_stocktake') {
+            if ($countsIngredients) {
                 $rows = IngredientInventoryItem::where('warehouse_id', $warehouseId)
                     ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))
                     ->get();
@@ -202,7 +214,7 @@ class CountSessionService
                 }
             }
 
-            if ($type !== 'kitchen_handover') {
+            if ($countsProducts) {
                 $rows = InventoryItem::where('warehouse_id', $warehouseId)
                     ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))
                     ->get();
