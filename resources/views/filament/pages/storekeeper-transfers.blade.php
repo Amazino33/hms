@@ -578,7 +578,23 @@
 
         addItemRow(); // start with one row
 
-        document.getElementById('transfer-form').addEventListener('submit', function (e) {
+        // Delegated (like every other handler above) rather than attached
+        // directly to the #transfer-form element it was found at script-run
+        // time — wire:init="load" fires a Livewire re-render once the
+        // deferred "Recent Transfers" section loads, and Livewire's DOM
+        // morph doesn't know about the item rows this script injected
+        // client-side into #items-list, so it can replace the form node
+        // (or an ancestor of it) rather than patch it in place. A listener
+        // attached to that specific node instance is silently lost when
+        // that happens, so the very next click on "Create Transfer" falls
+        // through to the browser's own native form submission instead —
+        // a real page navigation straight to /stock-transfers with a stale
+        // CSRF token, landing on Laravel's raw 419 page. A listener on
+        // document survives any number of re-renders, since document
+        // itself is never replaced.
+        document.addEventListener('submit', function (e) {
+            if (!e.target || e.target.id !== 'transfer-form') return;
+
             e.preventDefault();
 
             const rows = document.querySelectorAll('#items-list > .item-row');
@@ -634,7 +650,17 @@
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                // A real 419 (session/CSRF expired) comes back as Laravel's
+                // own HTML error page, not JSON — parsing that as JSON would
+                // throw and fall into the generic catch() below with a
+                // misleading "Error creating transfer" message instead of
+                // the actual, actionable reason.
+                if (response.status === 419) {
+                    throw new Error('SESSION_EXPIRED');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.message && data.message === 'Forbidden') {
                     showToast('Permission denied', 'error');
@@ -652,6 +678,10 @@
             })
             .catch(error => {
                 console.error('Error:', error);
+                if (error && error.message === 'SESSION_EXPIRED') {
+                    showToast('Your session expired — reload the page and try again', 'error');
+                    return;
+                }
                 showToast('Error creating transfer', 'error');
             });
         });
