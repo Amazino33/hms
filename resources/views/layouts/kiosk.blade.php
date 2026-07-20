@@ -82,8 +82,14 @@
             `;
             win.document.head.appendChild(style);
 
+            const addressHtml = (d.company && d.company.address) ? `<div class="sub">${d.company.address}</div>` : '';
+            const phoneHtml = (d.company && d.company.phone) ? `<div class="sub">${d.company.phone}</div>` : '';
+            const companyName = (d.company && d.company.name) ? d.company.name : 'HMS RECEIPT';
+
             win.document.body.innerHTML = `
-                <h1>HMS RECEIPT</h1>
+                <h1>${companyName}</h1>
+                ${addressHtml}
+                ${phoneHtml}
                 <div class="sub">*** UNPAID BILL ***</div>
                 <div class="dashed"></div>
                 <div class="meta">Table : <strong>${d.tableName}</strong></div>

@@ -104,6 +104,8 @@ it('does not show a name on an available table with no active order', function (
 });
 
 it('prints a table bill straight from the table grid with no PIN login at all', function () {
+    \App\Models\Company::create(['name' => 'Tiano Hotels and Suite', 'address' => '44 Marina Road, Eket', 'phone_number' => '+234 814 473 4612']);
+
     ['token' => $token] = registerKioskAndGetToken();
     $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
     $waiter = User::factory()->create(['name' => 'Sifon']);
@@ -141,7 +143,10 @@ it('prints a table bill straight from the table grid with no PIN login at all', 
                 && $params[0]['total'] == 1000
                 && $params[0]['cashier'] === 'Sifon'
                 && $params[0]['items'][0]['name'] === 'Beer'
-                && $params[0]['items'][0]['quantity'] === 2;
+                && $params[0]['items'][0]['quantity'] === 2
+                && $params[0]['company']['name'] === 'Tiano Hotels and Suite'
+                && $params[0]['company']['address'] === '44 Marina Road, Eket'
+                && $params[0]['company']['phone'] === '+234 814 473 4612';
         });
 
     expect(Auth::guard('staff_pin')->check())->toBeFalse();

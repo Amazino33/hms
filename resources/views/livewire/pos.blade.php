@@ -1,6 +1,7 @@
 <?php
 
 use Livewire\Component;
+use App\Models\Company;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Order;
@@ -890,12 +891,22 @@ new class extends Component {
         $allItems = array_merge($this->existingItems, $normalizedCart);
         $total = collect($allItems)->sum(fn($i) => $i['price'] * $i['quantity']);
 
+        // Text only, same as the printed bill itself — no logo on thermal
+        // kiosk paper (FloorPlan's version does include one, but that's a
+        // normal-paper admin print, not this 80mm receipt).
+        $company = Company::first();
+
         $this->dispatch('print-bill', [
             'tableName' => $tableName,
             'items' => array_values($allItems),
             'total' => $total,
             'date' => now()->format('M j, Y g:i A'),
             'cashier' => auth()->user()?->name,
+            'company' => [
+                'name' => $company?->name,
+                'address' => $company?->address,
+                'phone' => $company?->phone_number,
+            ],
         ]);
     }
 
@@ -2543,8 +2554,14 @@ new class extends Component {
             `;
             win.document.head.appendChild(style);
 
+            const addressHtml = (d.company && d.company.address) ? `<div class="sub">${d.company.address}</div>` : '';
+            const phoneHtml = (d.company && d.company.phone) ? `<div class="sub">${d.company.phone}</div>` : '';
+            const companyName = (d.company && d.company.name) ? d.company.name : 'HMS RECEIPT';
+
             win.document.body.innerHTML = `
-                <h1>HMS RECEIPT</h1>
+                <h1>${companyName}</h1>
+                ${addressHtml}
+                ${phoneHtml}
                 <div class="sub">*** UNPAID BILL ***</div>
                 <div class="dashed"></div>
                 <div class="meta">Table : <strong>${d.tableName}</strong></div>

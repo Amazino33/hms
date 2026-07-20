@@ -1,6 +1,7 @@
 <?php
 
 use Livewire\Component;
+use App\Models\Company;
 use App\Models\Table;
 use App\Models\Order;
 use App\Services\PinAuthService;
@@ -52,12 +53,21 @@ new class extends Component {
 
         $total = collect($items)->sum(fn ($i) => $i['price'] * $i['quantity']);
 
+        // Text only, no logo — same as pos.blade.php's printBill(), which
+        // this duplicates for the no-PIN table-grid print path.
+        $company = Company::first();
+
         $this->dispatch('print-bill', [
             'tableName' => $table->name,
             'items' => $items,
             'total' => $total,
             'date' => now()->format('M j, Y g:i A'),
             'cashier' => $orders->first()->user?->name ?? 'Kiosk',
+            'company' => [
+                'name' => $company?->name,
+                'address' => $company?->address,
+                'phone' => $company?->phone_number,
+            ],
         ]);
     }
 
