@@ -13,6 +13,11 @@ class Room extends Model
         return $this->hasMany(Booking::class);
     }
 
+    public function roomType()
+    {
+        return $this->belongsTo(RoomType::class);
+    }
+
     /**
      * `status` only ever means "under maintenance" now (or plain
      * available) — occupancy is never stored here, it's derived live from
