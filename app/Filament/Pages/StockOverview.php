@@ -79,11 +79,17 @@ class StockOverview extends Page implements HasTable
         }
 
         return $table
-            ->query(InventoryItem::query()->with(['product', 'warehouse']))
+            // A deleted product isn't something the storekeeper can act
+            // on — no more transferring, procuring, or counting it — so
+            // this current-stock view excludes it entirely rather than
+            // showing a "(deleted)" row that looks actionable but isn't.
+            // Historical pages (transaction ledgers, order/transfer
+            // history) still show it via Product::withTrashed(), since
+            // those are about what happened, not what's available now.
+            ->query(InventoryItem::query()->with(['product', 'warehouse'])->whereHas('product', fn (Builder $q) => $q->whereNull('deleted_at')))
             ->columns([
                 TextColumn::make('product.name')
                     ->label('Product')
-                    ->formatStateUsing(fn ($record) => ($record->product?->name ?? '—').($record->product?->trashed() ? ' (deleted)' : ''))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('product.sku')
