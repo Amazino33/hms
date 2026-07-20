@@ -288,6 +288,65 @@
                     @endforeach
                 </div>
             @endif
+
+            <!-- Past Transfers: fully received, read-only history — scoped
+                 to the same warehouse (or all warehouses for storekeeper/
+                 super_admin) as the incoming list above. -->
+            <div class="mt-8">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Past Transfers</h3>
+
+                @if($pastTransfers->isEmpty())
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700 shadow-md text-center">
+                        <p class="text-gray-600 dark:text-gray-400">No fully received transfers yet.</p>
+                    </div>
+                @else
+                    <div class="space-y-4">
+                        @foreach($pastTransfers as $t)
+                            @php
+                                $pastLines = $t->items->map(fn ($it) => ['item' => $it, 'type' => 'product', 'name' => $it->product->name ?? $it->product_id])
+                                    ->concat($t->ingredientItems->map(fn ($it) => ['item' => $it, 'type' => 'ingredient', 'name' => $it->ingredient->name ?? $it->ingredient_id]));
+                            @endphp
+                            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                <div class="p-4 bg-gradient-to-r from-slate-50 to-gray-100 dark:from-slate-800 dark:to-slate-900 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                                    <div>
+                                        <h4 class="font-bold text-gray-900 dark:text-white">{{ $t->transfer_number }}</h4>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400">From: {{ $t->fromWarehouse->name ?? $t->from_warehouse_id }}</p>
+                                    </div>
+                                    <span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Received</span>
+                                </div>
+                                <div class="p-4 space-y-1.5">
+                                    @foreach($pastLines as $line)
+                                        @php $it = $line['item']; $discrepancy = $it->discrepancy; @endphp
+                                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                                            <span class="font-medium text-gray-800 dark:text-gray-200">{{ $line['name'] }}</span>
+                                            <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($it->quantity, 2), '0'), '.') }}</span>
+                                            <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($it->received_quantity, 2), '0'), '.') }}</span>
+                                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full
+                                                @if($it->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                                @elseif($it->outcome === 'received_short') bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300
+                                                @else bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
+                                                @endif">
+                                                {{ str_replace('_', ' ', ucfirst($it->outcome ?? 'received_full')) }}
+                                            </span>
+                                            @if($discrepancy && $discrepancy->isOpen())
+                                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-600 text-white">
+                                                    ⚠ {{ rtrim(rtrim(number_format($discrepancy->missing_base_qty, 2), '0'), '.') }} unresolved
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    @if($pastTransfers->hasPages())
+                        <div class="mt-4 flex justify-center">
+                            {{ $pastTransfers->links() }}
+                        </div>
+                    @endif
+                @endif
+            </div>
         @endif
     </div>
 

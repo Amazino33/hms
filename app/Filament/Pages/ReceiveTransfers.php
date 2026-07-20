@@ -60,10 +60,13 @@ class ReceiveTransfers extends Page
             // Return lightweight default data while client-side load triggers the full retrieval
             return [
                 'transfers' => collect(),
+                'pastTransfers' => collect(),
                 'warehouseId' => $warehouseId,
                 'warehouseName' => $warehouseName,
             ];
         }
+
+        $pastPage = (int) request()->get('past_page', 1);
 
         if ($user->hasRole('storekeeper') || $user->hasRole('super_admin')) {
             // Storekeeper can see all transfers regardless of warehouse
@@ -73,8 +76,15 @@ class ReceiveTransfers extends Page
                     ->latest()
                     ->get()
             );
+            $pastTransfers = Cache::remember("receive_transfers:past:all:{$pastPage}", 5, fn () =>
+                StockTransfer::with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
+                    ->where('status', 'received')
+                    ->latest()
+                    ->paginate(10, ['*'], 'past_page', $pastPage)
+            );
             return [
                 'transfers' => $transfers,
+                'pastTransfers' => $pastTransfers,
                 'warehouseId' => 'all',
                 'warehouseName' => 'All Warehouses',
             ];
@@ -91,12 +101,14 @@ class ReceiveTransfers extends Page
             return [
                 'error' => 'No Warehouse Assigned - Your role is not mapped to a warehouse. Contact an administrator.',
                 'transfers' => collect(),
+                'pastTransfers' => collect(),
                 'warehouseId' => null,
                 'warehouseName' => null,
             ];
         }
 
         $transfers = collect();
+        $pastTransfers = collect();
         if ($warehouseId) {
             $cacheKey = "receive_transfers:wh:{$warehouseId}";
             $transfers = Cache::remember($cacheKey, 5, fn () =>
@@ -106,10 +118,19 @@ class ReceiveTransfers extends Page
                     ->latest()
                     ->get()
             );
+
+            $pastTransfers = Cache::remember("receive_transfers:past:wh:{$warehouseId}:{$pastPage}", 5, fn () =>
+                StockTransfer::where('to_warehouse_id', $warehouseId)
+                    ->where('status', 'received')
+                    ->with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
+                    ->latest()
+                    ->paginate(10, ['*'], 'past_page', $pastPage)
+            );
         }
 
         return [
             'transfers' => $transfers,
+            'pastTransfers' => $pastTransfers,
             'warehouseId' => $warehouseId,
             'warehouseName' => $warehouseName,
         ];
@@ -146,6 +167,14 @@ class ReceiveTransfers extends Page
 
         Cache::forget('receive_transfers:all');
         Cache::forget("receive_transfers:wh:{$item->transfer->to_warehouse_id}");
+
+        // A line receipt can flip the whole transfer to 'received' — clear
+        // every cached past-transfers page rather than guessing which one
+        // it would now land on.
+        for ($page = 1; $page <= 20; $page++) {
+            Cache::forget("receive_transfers:past:all:{$page}");
+            Cache::forget("receive_transfers:past:wh:{$item->transfer->to_warehouse_id}:{$page}");
+        }
     }
 
     public static function canAccess(): bool
