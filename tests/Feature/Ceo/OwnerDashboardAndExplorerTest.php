@@ -65,6 +65,12 @@ it('does not flag widening when the gap is flat', function () {
 });
 
 it('shows net position as indicative for a single day and non-indicative for a multi-day range', function () {
+    // Pinned to a Thursday: this_week is capped at today (see
+    // DateRangeResolver), so if "today" ever lands on the Monday week
+    // start, this_week collapses to a single day and this assertion
+    // would wrongly fail depending on which real-world day the suite runs.
+    CarbonImmutable::setTestNow('2026-07-16 12:00:00');
+
     $daily = Livewire::actingAs($this->user)->test(Dashboard::class)->set('preset', 'today');
     expect($daily->instance()->dashboardData()['owner']['net_position']['indicative'])->toBeTrue();
 

@@ -4,9 +4,8 @@
 // version bump) leaves old cached assets served forever via cache-first,
 // even after a fresh deploy. This was the real cause of a "notifications.js
 // throws e is not a function" mismatch after the kiosk/staff layout fix.
-const CACHE_NAME = 'hms-v2.5';
-const STATIC_CACHE = 'hms-static-v2.5';
-const DYNAMIC_CACHE = 'hms-dynamic-v2.5';
+const CACHE_NAME = 'hms-v2.6';
+const STATIC_CACHE = 'hms-static-v2.6';
 
 const STATIC_ASSETS = [
     '/offline.html',
@@ -35,27 +34,17 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-    const authPaths = ['/login', '/logout', '/register', '/forgot-password', '/reset-password', '/admin/login', '/admin/logout'];
-
+    // No dynamic HTML cache exists to prune anymore (see the fetch handler
+    // below) — every cache whose name doesn't match this version's
+    // STATIC_CACHE gets dropped, which also flushes any page HTML an
+    // older service worker version had cached (including hms-dynamic-*
+    // from before this fix).
     event.waitUntil(
-        caches.keys().then(names =>
-            Promise.all(
-                names.map(name =>
-                    (name !== STATIC_CACHE && name !== DYNAMIC_CACHE)
-                        ? caches.delete(name)
-                        : null
-                )
-            )
-        ).then(async () => {
-            // Delete any stale auth pages that may be sitting in the dynamic cache
-            const dynCache = await caches.open(DYNAMIC_CACHE);
-            const keys = await dynCache.keys();
-            await Promise.all(
-                keys
-                    .filter(req => authPaths.some(p => new URL(req.url).pathname.startsWith(p)))
-                    .map(req => dynCache.delete(req))
-            );
-        }).then(() => self.clients.claim())
+        caches.keys()
+            .then(names => Promise.all(
+                names.map(name => name !== STATIC_CACHE ? caches.delete(name) : null)
+            ))
+            .then(() => self.clients.claim())
     );
 });
 
@@ -85,39 +74,24 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // HTML/Navigation: NETWORK-FIRST (critical for Laravel)
-    // Auth pages: ALWAYS go to network, NEVER read from or write to cache.
-    // Serving a cached login page means a stale CSRF token → 419 Page Expired.
-    const noCachePaths = ['/login', '/logout', '/register', '/forgot-password', '/reset-password', '/admin/login', '/admin/logout'];
-    const isAuthPage = noCachePaths.some(p => url.pathname.startsWith(p));
-
+    // HTML/Navigation: NETWORK-FIRST, ALWAYS (critical for Laravel).
+    // Every page in this app past the idle screen is authenticated and
+    // carries a CSRF token + Livewire snapshot tied to the exact session
+    // that rendered it. Falling back to a cached copy of ANY such page on
+    // a network hiccup — not just /login — serves a stale token, which
+    // the server correctly rejects with 419 on the next action. A kiosk
+    // device is shared across many staff through a shift, so a stale
+    // cached page could even carry a PREVIOUS staff member's session
+    // state. The only safe fallback on a real network failure is the
+    // static, session-free /offline.html — never caches.match(request).
+    // Dynamic pages are therefore never written to cache either, since
+    // nothing ever reads them back.
     if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-        if (isAuthPage) {
-            // Completely bypass the service worker for auth pages — straight to network
-            event.respondWith(fetch(request));
-            return;
-        }
-
         event.respondWith(
-            fetch(request)
-                .then(response => {
-                    if (response.status === 200 && !response.bodyUsed) {
-                        const copy = response.clone();
-                        caches.open(DYNAMIC_CACHE).then(cache => {
-                            try { cache.put(request, copy); } catch (e) {}
-                        });
-                    }
-                    return response;
-                })
-                .catch(() =>
-                    // Offline fallback: use cached page if available, else offline.html
-                    // Auth pages already returned above so this never serves a stale login
-                    caches.match(request)
-                        .then(cached => cached || caches.match('/offline.html'))
-                )
+            fetch(request).catch(() => caches.match('/offline.html'))
         );
         return;
     }
 
-    event.respondWith(fetch(request));
+    event.respondWith(fetch(request).catch(() => Response.error()));
 });
