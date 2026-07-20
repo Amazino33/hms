@@ -103,6 +103,22 @@ class CountSessionService
             throw new \Exception('The witness cannot be the same person as the incoming custodian.');
         }
 
+        // One in-progress count per warehouse at a time — a second person
+        // opening their own competing session on the same warehouse while
+        // one is already counting/declared/pending_review would let two
+        // different "expected" baselines exist for the same physical stock
+        // at once, and whichever one seals second inherits a baseline that
+        // no longer matches what the first session already moved.
+        $existingOpenSession = CountSession::where('warehouse_id', $warehouseId)
+            ->whereIn('status', ['counting', 'declared', 'pending_review'])
+            ->first();
+
+        if ($existingOpenSession) {
+            throw new \Exception(
+                "A count is already in progress for this warehouse (opened by {$existingOpenSession->openedBy?->name}) — it must be finished or resolved before another can start."
+            );
+        }
+
         return DB::transaction(function () use ($type, $warehouseId, $openedByUserId, $outgoingUserId, $incomingUserId, $notes, $isClosing, $witnessUserId, $skipZero) {
             $session = CountSession::create([
                 'type' => $type,
@@ -130,13 +146,16 @@ class CountSessionService
             // audit, not a bartender/chef handover) — deliberately not
             // filtered.
             // A Main Store stocktake is meant to be the full physical audit
-            // — but a product whose very first InventoryItem row was ever
-            // created at another warehouse (Quick Inventory Update, a bulk
-            // import) has no row here at all, so it would be silently
-            // absent from the count sheet. Backfill it at quantity 0 before
-            // snapshotting, same non-destructive fix as
-            // app:backfill-main-store-inventory, just applied automatically
-            // going forward instead of as a one-off.
+            // — but a product/ingredient whose very first inventory row was
+            // ever created at another warehouse (Quick Inventory Update, a
+            // bulk import, a kitchen-side procurement) has no row here at
+            // all, so it would be silently absent from the count sheet.
+            // Backfill both at quantity 0 before snapshotting, same non-
+            // destructive fix as app:backfill-main-store-inventory (products
+            // side), just applied automatically going forward and extended
+            // to ingredients too — a storekeeper's stocktake needs to be
+            // able to count kitchen ingredients received into Main Store
+            // stock exactly the same way she counts products there.
             if ($type === 'main_store_stocktake') {
                 $existingProductIds = InventoryItem::where('warehouse_id', $warehouseId)->pluck('product_id');
                 $missingProductIds = Product::where('is_active', true)
@@ -150,9 +169,25 @@ class CountSessionService
                         'quantity' => 0,
                     ]);
                 }
+
+                $existingIngredientIds = IngredientInventoryItem::where('warehouse_id', $warehouseId)->pluck('ingredient_id');
+                $missingIngredientIds = Ingredient::whereNotIn('id', $existingIngredientIds)->pluck('id');
+
+                foreach ($missingIngredientIds as $ingredientId) {
+                    IngredientInventoryItem::create([
+                        'ingredient_id' => $ingredientId,
+                        'warehouse_id' => $warehouseId,
+                        'quantity' => 0,
+                    ]);
+                }
             }
 
-            if ($type === 'kitchen_handover') {
+            // kitchen_handover stays ingredient-only (a bartender/chef
+            // handover, not a full audit); bar_handover stays product-only
+            // (the bar never stocks ingredients). main_store_stocktake is
+            // the one type that snapshots both — it's the storekeeper's
+            // full physical audit of everything sitting in Main Store.
+            if ($type === 'kitchen_handover' || $type === 'main_store_stocktake') {
                 $rows = IngredientInventoryItem::where('warehouse_id', $warehouseId)
                     ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))
                     ->get();
@@ -165,7 +200,9 @@ class CountSessionService
                     ]);
                     $this->seedSubLocationSlots($item, $subLocationLabels);
                 }
-            } else {
+            }
+
+            if ($type !== 'kitchen_handover') {
                 $rows = InventoryItem::where('warehouse_id', $warehouseId)
                     ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))
                     ->get();

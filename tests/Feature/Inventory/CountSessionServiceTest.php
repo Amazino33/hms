@@ -367,3 +367,128 @@ it('does not backfill Main Store rows for an inactive product', function () {
     expect($session->items()->where('product_id', $discontinued->id)->exists())->toBeFalse();
     expect(InventoryItem::where('product_id', $discontinued->id)->where('warehouse_id', $mainStore->id)->exists())->toBeFalse();
 });
+
+it('lets a storekeeper count kitchen ingredients in a Main Store stocktake, the same way she counts products', function () {
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $mainStore->id, 'quantity' => 20]);
+    $ingredient = Ingredient::create(['name' => 'Rice', 'sku' => 'ING-RICE-MSC', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 5, 'category' => 'Dry Goods']);
+    IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $mainStore->id, 'quantity' => 15]);
+
+    $storekeeper = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+
+    $items = $session->items;
+    $productItem = $items->firstWhere('product_id', $product->id);
+    $ingredientItem = $items->firstWhere('ingredient_id', $ingredient->id);
+
+    expect($productItem)->not->toBeNull();
+    expect((int) $productItem->expected_quantity_at_open)->toBe(20);
+    expect($ingredientItem)->not->toBeNull();
+    expect($ingredientItem->item_type)->toBe('ingredient');
+    expect((float) $ingredientItem->expected_quantity_at_open)->toEqual(15.0);
+
+    // Counting an ingredient item works exactly the same way as a product.
+    $service->recordCount($ingredientItem, ['Shelf A' => 15]);
+    expect($ingredientItem->fresh()->subCounts()->sum('quantity'))->toEqual(15.0);
+});
+
+it('backfills a zero-quantity Main Store row for an ingredient only ever stocked in the kitchen', function () {
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $kitchen = WareHouse::create(['name' => 'Kitchen', 'type' => 'consumer']);
+    $ingredient = Ingredient::create(['name' => 'Rice', 'sku' => 'ING-RICE-BACKFILL', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 5, 'category' => 'Dry Goods']);
+    IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $kitchen->id, 'quantity' => 8]);
+
+    $storekeeper = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+
+    $ingredientItem = $session->items->firstWhere('ingredient_id', $ingredient->id);
+    expect($ingredientItem)->not->toBeNull();
+    expect((float) $ingredientItem->expected_quantity_at_open)->toEqual(0.0);
+
+    // Kitchen's own quantity is untouched.
+    expect((float) IngredientInventoryItem::where('ingredient_id', $ingredient->id)->where('warehouse_id', $kitchen->id)->value('quantity'))->toEqual(8.0);
+});
+
+it('does not add ingredients to a bar_handover session — the bar never stocks them', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $outgoing = User::factory()->create();
+    $incoming = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+
+    expect($session->items()->where('item_type', 'ingredient')->exists())->toBeFalse();
+    expect($session->items()->where('item_type', 'product')->count())->toBe(1);
+});
+
+it('refuses to open a second count session for a warehouse that already has one in progress', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $outgoing = User::factory()->create();
+    $incoming = User::factory()->create();
+    $rogue = User::factory()->create();
+
+    $service = new CountSessionService();
+    $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+
+    expect(fn () => $service->openSession('bar_handover', $bar->id, $rogue->id, $rogue->id, $incoming->id))
+        ->toThrow(Exception::class, "A count is already in progress for this warehouse (opened by {$outgoing->name}) — it must be finished or resolved before another can start.");
+});
+
+it('allows a new count session once the warehouse\'s previous one is reviewed', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+
+    $outgoing = User::factory()->create();
+    $incoming = User::factory()->create();
+    $manager = User::factory()->create();
+
+    $service = new CountSessionService();
+    $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $item = $session->items()->first();
+    $service->recordCount($item, ['Fridge' => 24]);
+    $service->confirmOutgoing($session, $outgoing->id);
+    $service->confirmIncoming($session, $incoming->id);
+    $session = $service->submitForReview($session->fresh());
+    $service->finalizeReview($session->fresh(), $manager->id);
+
+    $second = $service->openSession('bar_handover', $bar->id, $incoming->id, $incoming->id, $outgoing->id);
+
+    expect($second->id)->not->toBe($session->id);
+});
+
+it('does not block a count session for a different warehouse while one is in progress', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $kitchen = WareHouse::create(['name' => 'Kitchen', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $kitchen->id, 'quantity' => 10]);
+
+    $barOutgoing = User::factory()->create();
+    $barIncoming = User::factory()->create();
+    $chefOutgoing = User::factory()->create();
+    $chefIncoming = User::factory()->create();
+
+    $service = new CountSessionService();
+    $service->openSession('bar_handover', $bar->id, $barOutgoing->id, $barOutgoing->id, $barIncoming->id);
+
+    $kitchenSession = $service->openSession('kitchen_handover', $kitchen->id, $chefOutgoing->id, $chefOutgoing->id, $chefIncoming->id);
+
+    expect($kitchenSession->exists)->toBeTrue();
+});
