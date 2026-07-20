@@ -4,15 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\WareHouse;
-use App\Models\Category;
-use Spatie\Activitylog\Support\LogOptions;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Product extends Model
 {
     use HasFactory;
     use LogsActivity;
+    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -57,18 +57,34 @@ class Product extends Model
     public function warehouses()
     {
         return $this->belongsToMany(WareHouse::class, 'inventory_items')
-                    ->withPivot('quantity')
-                    ->withTimestamps();
+            ->withPivot('quantity')
+            ->withTimestamps();
     }
 
     public function warehouse()
     {
         return $this->belongsToMany(WareHouse::class, 'inventory_items')
-                    ->withPivot('quantity')
-                    ->withTimestamps();
+            ->withPivot('quantity')
+            ->withTimestamps();
     }
 
-    public function transactions() {
+    public function transactions()
+    {
         return $this->hasMany(InventoryTransaction::class);
+    }
+
+    public function stockAdjustments()
+    {
+        return $this->hasMany(StockAdjustment::class);
+    }
+
+    public function countSessionItems()
+    {
+        return $this->hasMany(CountSessionItem::class);
+    }
+
+    public function deletionRequests()
+    {
+        return $this->hasMany(ProductDeletionRequest::class);
     }
 }
