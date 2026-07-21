@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use Livewire\Component;
+use App\Models\OwnerTakeNote;
 use App\Models\Shift;
 use Filament\Notifications\Notification;
 
@@ -12,10 +13,13 @@ class ShiftManager extends Component
     public $shiftDuration;
     public $showModal = false;
     public $showDeclarationModal = false;
+    public $showOwnerTakeModal = false;
     public $isProcessing = false;
     public bool $ready = false;
     public $declaredCash = 0;
     public $declaredPos = 0;
+    public $ownerTakeAmount = null;
+    public $ownerTakeDescription = '';
 
     protected $listeners = [
         'open-shift-modal' => 'openModal',
@@ -126,6 +130,45 @@ class ShiftManager extends Component
         $this->showDeclarationModal = false;
         $this->declaredCash = 0;
         $this->declaredPos = 0;
+    }
+
+    public function cancelOwnerTake()
+    {
+        $this->showOwnerTakeModal = false;
+        $this->ownerTakeAmount = null;
+        $this->ownerTakeDescription = '';
+    }
+
+    /**
+     * Just a note against the shift — no status/approve-reject workflow.
+     * The cashier sees it during settlement and uses their own judgment
+     * (the existing manual Staff Debt form) to decide what to record; the
+     * CEO gets read-only visibility in /ceo. Deliberately doesn't touch
+     * stock, cash totals, or anything else — recording it never blocks or
+     * changes ending the shift afterward.
+     */
+    public function recordOwnerTake($ownerTakeAmount = null, $ownerTakeDescription = '')
+    {
+        if ($this->isProcessing || !auth()->check() || !$this->currentShift) {
+            return;
+        }
+
+        if (trim((string) $ownerTakeDescription) === '') {
+            Notification::make()->title('Add a short note about what was taken')->danger()->persistent()->send();
+            return;
+        }
+
+        OwnerTakeNote::create([
+            'shift_id' => $this->currentShift->id,
+            'recorded_by' => auth()->id(),
+            'amount' => $ownerTakeAmount !== null && $ownerTakeAmount !== '' ? (float) $ownerTakeAmount : null,
+            'description' => trim((string) $ownerTakeDescription),
+        ]);
+
+        Notification::make()->title('Noted — the cashier will see this when settling your shift')->success()->send();
+
+        $this->dispatch('owner-take-recorded');
+        $this->showOwnerTakeModal = false;
     }
 
     public function confirmShiftEnd($declaredCash = 0, $declaredPos = 0)

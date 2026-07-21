@@ -27,6 +27,20 @@
                 </div>
             </div>
 
+            <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-800 space-y-3"
+                x-data="{ ownerTakeAmount: @entangle('ownerTakeAmount') }">
+                <h3 class="font-bold text-gray-900 dark:text-white">Record Oga's Take</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                    This is just a note for the cashier and the owner — it doesn't change anything about your shift.
+                </p>
+                <x-mobile.numeric-pad model="ownerTakeAmount" :currency="true" label="Amount (if known)" />
+                <textarea wire:model="ownerTakeDescription" rows="3" placeholder="e.g. Oga took cash from the drawer"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"></textarea>
+                <button type="button" wire:click="recordOwnerTake" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold touch-manipulation">
+                    Save Note
+                </button>
+            </div>
+
             <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3"
                 x-data="{ declaredCash: @entangle('declaredCash'), declaredPos: @entangle('declaredPos') }">
                 <h3 class="font-bold text-gray-900 dark:text-white">Declare end of shift</h3>

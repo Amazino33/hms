@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\OwnerTakeNote;
 use App\Services\PermissionService;
 use App\Services\ReceptionistShiftService;
 use BackedEnum;
@@ -38,6 +39,10 @@ class ReceptionistShift extends Page
     public ?float $declaredCash = null;
 
     public ?float $declaredPos = null;
+
+    public ?float $ownerTakeAmount = null;
+
+    public string $ownerTakeDescription = '';
 
     /**
      * Not User::currentShift() (whereNull('ended_at')) — once declareEnd()
@@ -77,6 +82,39 @@ class ReceptionistShift extends Page
         } catch (\Exception $e) {
             Notification::make()->title('Could not start shift')->body($e->getMessage())->danger()->persistent()->send();
         }
+    }
+
+    /**
+     * Same as ShiftManager::recordOwnerTake() for waiter/cashier — just a
+     * note against the shift, no status/approve-reject workflow. The
+     * cashier sees it during settlement and the CEO gets read-only
+     * visibility in /ceo. Never blocks or changes ending the shift.
+     */
+    public function recordOwnerTake(): void
+    {
+        $shift = $this->currentShift();
+
+        if (! $shift) {
+            Notification::make()->title('No active shift')->warning()->send();
+            return;
+        }
+
+        if (trim($this->ownerTakeDescription) === '') {
+            Notification::make()->title('Add a short note about what was taken')->danger()->persistent()->send();
+            return;
+        }
+
+        OwnerTakeNote::create([
+            'shift_id' => $shift->id,
+            'recorded_by' => auth()->id(),
+            'amount' => $this->ownerTakeAmount,
+            'description' => trim($this->ownerTakeDescription),
+        ]);
+
+        $this->ownerTakeAmount = null;
+        $this->ownerTakeDescription = '';
+
+        Notification::make()->title('Noted — the cashier will see this when settling your shift')->success()->send();
     }
 
     public function declareEnd(): void

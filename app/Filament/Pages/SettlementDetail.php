@@ -9,7 +9,6 @@ use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Http\Request;
-use UnitEnum;
 
 /**
  * Shared by the cashier (primary confirmer) and a supervisor (fallback,
@@ -61,14 +60,27 @@ class SettlementDetail extends Page
         return $this->shiftId ? Shift::with(['user', 'cashConfirmedBy', 'posConfirmedBy'])->find($this->shiftId) : null;
     }
 
+    /**
+     * Just visibility for the cashier while settling — recording it never
+     * blocked ending the shift, and confirming here never touches it
+     * either. The cashier uses their own judgment (the existing manual
+     * Staff Debt form) to decide what, if anything, to record.
+     */
+    public function ownerTakeNotes()
+    {
+        return $this->shiftId
+            ? \App\Models\OwnerTakeNote::where('shift_id', $this->shiftId)->latest()->get()
+            : collect();
+    }
+
     public function expectedCash(): float
     {
-        return (new CashierSettlementService())->expectedCash($this->shift());
+        return (new CashierSettlementService)->expectedCash($this->shift());
     }
 
     public function expectedPosMachine(): float
     {
-        return (new CashierSettlementService())->expectedPosMachine($this->shift());
+        return (new CashierSettlementService)->expectedPosMachine($this->shift());
     }
 
     public function transferSummary(): array
@@ -85,13 +97,13 @@ class SettlementDetail extends Page
             $resolved = (clone $query)->where(fn ($q) => $q->where('verified', true)->orWhereNotNull('ruling'))->count();
         }
 
-        return ['total' => $total, 'resolved' => $resolved, 'complete' => (new CashierSettlementService())->transferChannelComplete($shift)];
+        return ['total' => $total, 'resolved' => $resolved, 'complete' => (new CashierSettlementService)->transferChannelComplete($shift)];
     }
 
     public function confirmCash(): void
     {
         try {
-            (new CashierSettlementService())->confirmCash($this->shift(), (float) $this->cashierCountedCash, auth()->id());
+            (new CashierSettlementService)->confirmCash($this->shift(), (float) $this->cashierCountedCash, auth()->id());
 
             $this->cashierCountedCash = null;
             Notification::make()->title('Cash confirmed')->success()->send();
@@ -103,7 +115,7 @@ class SettlementDetail extends Page
     public function confirmPos(): void
     {
         try {
-            (new CashierSettlementService())->confirmPos($this->shift(), (float) $this->posMachineAmount, auth()->id());
+            (new CashierSettlementService)->confirmPos($this->shift(), (float) $this->posMachineAmount, auth()->id());
 
             $this->posMachineAmount = null;
             Notification::make()->title('POS total confirmed')->success()->send();

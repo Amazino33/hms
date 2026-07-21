@@ -5,8 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Shift extends Model
 {
@@ -117,6 +117,11 @@ class Shift extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function ownerTakeNotes(): HasMany
+    {
+        return $this->hasMany(OwnerTakeNote::class);
+    }
+
     public function debts(): HasMany
     {
         return $this->hasMany(StaffDebt::class);
@@ -195,8 +200,10 @@ class Shift extends Model
     // Get shift duration in minutes
     public function getDurationAttribute(): ?int
     {
-        if (!$this->ended_at) return null;
-        
+        if (! $this->ended_at) {
+            return null;
+        }
+
         return $this->started_at->diffInMinutes($this->ended_at);
     }
 

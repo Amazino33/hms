@@ -11,6 +11,21 @@
                 </div>
             </div>
 
+            @if($this->ownerTakeNotes()->isNotEmpty())
+                <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-800">
+                    <div class="font-bold text-amber-800 dark:text-amber-300">Oga's Take — noted by {{ $shift->user?->name }}</div>
+                    <ul class="mt-2 space-y-1">
+                        @foreach($this->ownerTakeNotes() as $note)
+                            <li class="text-sm text-amber-900 dark:text-amber-200">
+                                @if($note->amount) <span class="font-bold">₦{{ number_format($note->amount, 2) }}</span> — @endif
+                                {{ $note->description }}
+                                <span class="text-amber-700 dark:text-amber-400">({{ $note->created_at->format('g:ia') }})</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             @if($shift->hasOpenFlag())
                 <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-800">
                     <div class="font-bold text-red-700 dark:text-red-400">Blocked — awaiting supervisor ruling</div>

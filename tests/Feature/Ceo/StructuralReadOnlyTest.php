@@ -4,6 +4,7 @@ use App\Filament\Ceo\Resources\Folios\FolioResource;
 use App\Filament\Ceo\Resources\HandoverCounts\HandoverCountResource;
 use App\Filament\Ceo\Resources\InventoryTransactions\InventoryTransactionResource;
 use App\Filament\Ceo\Resources\Orders\OrderResource;
+use App\Filament\Ceo\Resources\OwnerTakeNotes\OwnerTakeNoteResource;
 use App\Filament\Ceo\Resources\Procurements\ProcurementResource;
 use App\Filament\Ceo\Resources\ReceptionistShiftSettlements\ReceptionistShiftSettlementResource;
 use App\Filament\Ceo\Resources\Reservations\ReservationResource;
@@ -17,6 +18,7 @@ $resources = [
     OrderResource::class, WaiterShiftSettlementResource::class, ReceptionistShiftSettlementResource::class,
     FolioResource::class, ReservationResource::class, HandoverCountResource::class,
     StaffDebtResource::class, InventoryTransactionResource::class, ProcurementResource::class,
+    OwnerTakeNoteResource::class,
 ];
 
 it('registers no create/edit/delete routes anywhere in the CEO panel', function () {

@@ -2,12 +2,16 @@
      x-data="{
          showModal: false,
          showDeclarationModal: false,
+         showOwnerTakeModal: false,
          declaredCash: 0,
-         declaredPos: 0
+         declaredPos: 0,
+         ownerTakeAmount: '',
+         ownerTakeDescription: ''
      }"
      @open-shift-modal.window="showModal = true"
      @shift-started.window="showModal = false"
-     @shift-ended.window="showModal = false; showDeclarationModal = false; declaredCash = 0; declaredPos = 0;">
+     @shift-ended.window="showModal = false; showDeclarationModal = false; declaredCash = 0; declaredPos = 0;"
+     @owner-take-recorded.window="showOwnerTakeModal = false; ownerTakeAmount = ''; ownerTakeDescription = '';">
 @if(! $ready)
     {{-- Skeleton shown until load() fires and $ready becomes true --}}
     <div></div>
@@ -94,11 +98,18 @@
                                 <span>End Shift</span>
                             </button>
                         @else
-                            <button @click="showDeclarationModal = true"
-                                @if($isProcessing) disabled @endif
-                                class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
-                                <span>End Shift</span>
-                            </button>
+                            <div class="flex items-center space-x-2">
+                                <button @click="showOwnerTakeModal = true"
+                                    @if($isProcessing) disabled @endif
+                                    class="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
+                                    <span>Record Oga's Take</span>
+                                </button>
+                                <button @click="showDeclarationModal = true"
+                                    @if($isProcessing) disabled @endif
+                                    class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
+                                    <span>End Shift</span>
+                                </button>
+                            </div>
                         @endif
                     </div>
 
@@ -279,6 +290,82 @@
                         </svg>
                         <span wire:loading.remove wire:target="confirmShiftEnd">Confirm & End</span>
                         <span wire:loading wire:target="confirmShiftEnd">Processing...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RECORD OGA'S TAKE MODAL -->
+    <div x-show="showOwnerTakeModal" x-cloak class="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto relative">
+            <div wire:loading wire:target="recordOwnerTake" class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-10 rounded-2xl">
+                <div class="flex flex-col items-center space-y-3">
+                    <div class="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Saving...</p>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">Record Oga's Take</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    This is just a note for the cashier and the owner — it doesn't change anything about your shift.
+                </p>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <div>
+                    <label for="ownerTakeAmount" class="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                        Amount (if known)
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-3 text-gray-600 dark:text-gray-400 font-bold">₦</span>
+                        <input
+                            type="number"
+                            id="ownerTakeAmount"
+                            x-model.number="ownerTakeAmount"
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                            wire:loading.attr="disabled"
+                            wire:target="recordOwnerTake"
+                            class="w-full pl-8 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent disabled:opacity-50"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label for="ownerTakeDescription" class="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                        What happened
+                    </label>
+                    <textarea
+                        id="ownerTakeDescription"
+                        x-model="ownerTakeDescription"
+                        rows="3"
+                        placeholder="e.g. Oga took 2 crates of beer"
+                        wire:loading.attr="disabled"
+                        wire:target="recordOwnerTake"
+                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent disabled:opacity-50"
+                    ></textarea>
+                </div>
+
+                <div class="flex gap-3">
+                    <button
+                        @click="showOwnerTakeModal = false; ownerTakeAmount = ''; ownerTakeDescription = '';"
+                        wire:loading.attr="disabled"
+                        wire:target="recordOwnerTake"
+                        class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        @click="$wire.call('recordOwnerTake', ownerTakeAmount, ownerTakeDescription)"
+                        wire:loading.attr="disabled"
+                        @if($isProcessing) disabled @endif
+                        class="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+                    >
+                        <span wire:loading.remove wire:target="recordOwnerTake">Save Note</span>
+                        <span wire:loading wire:target="recordOwnerTake">Saving...</span>
                     </button>
                 </div>
             </div>
