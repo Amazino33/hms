@@ -34,6 +34,17 @@ class ShiftManager extends Component
         $this->loadCurrentShift();
     }
 
+    /**
+     * Bartender/chef shifts only ever start through a reviewed opening
+     * count or a declared handover — the generic Start Shift button below
+     * is swapped for a redirect to My Handover Count for these two roles,
+     * mirroring the existing End Shift swap for the same reason.
+     */
+    public function isBartenderOrChef(): bool
+    {
+        return auth()->check() && auth()->user()->hasAnyRole(['bartender', 'chef']);
+    }
+
     public function loadCurrentShift()
     {
         // Skip if modal is open and we're processing to avoid hydration conflicts

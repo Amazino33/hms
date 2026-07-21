@@ -151,9 +151,9 @@ class User extends Authenticatable implements FilamentUser
      */
     public function startShift(): Shift
     {
-        if ($currentShift = $this->currentShift()) {
-            $requestedType = $this->shiftTypeFromRole();
+        $requestedType = $this->shiftTypeFromRole();
 
+        if ($currentShift = $this->currentShift()) {
             if ($currentShift->type === $requestedType) {
                 return $currentShift;
             }
@@ -161,12 +161,27 @@ class User extends Authenticatable implements FilamentUser
             throw new \Exception("You have an active {$currentShift->type} shift — end it before starting a {$requestedType} shift.");
         }
 
+        // Bartender/chef shifts only ever start through a reviewed opening
+        // count or a declared handover (BartenderChefShiftService) — never
+        // this generic control. Without this block, this path bypassed the
+        // entire single-custodian handover system: it doesn't check whether
+        // another bartender/chef already holds the shift, doesn't require
+        // any count session at all, and let two people show active for the
+        // same role at once with nothing to reconcile between them.
+        if (in_array($requestedType, ['bartender', 'chef'], true)) {
+            $role = ucfirst($requestedType);
+
+            throw new \Exception(
+                "{$role} shifts can only start through a reviewed opening count or a declared handover — use My Handover Count, not this control."
+            );
+        }
+
         if (Shift::hasUnsettledFor($this->id) && ! SettingsService::getBool('allow_shift_start_with_unsettled')) {
             throw new \Exception('Your last settlement is awaiting cashier confirmation and must be resolved before you can start a new shift.');
         }
 
         return $this->shifts()->create([
-            'type' => $this->shiftTypeFromRole(),
+            'type' => $requestedType,
             'started_at' => now(),
             'status' => 'active',
         ]);

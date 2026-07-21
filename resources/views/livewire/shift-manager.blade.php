@@ -163,17 +163,25 @@
                         </svg>
                     </div>
                     <h4 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">Ready to Start?</h4>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">Begin your shift to start processing orders</p>
-                    <button @click="$wire.call('startShift')"
-                        wire:loading.attr="disabled"
-                        @if($isProcessing) disabled @endif
-                        class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95 flex items-center justify-center space-x-2">
-                        <svg wire:loading wire:target="startShift" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        <span wire:loading.remove wire:target="startShift">🚀 Start Shift</span>
-                        <span wire:loading wire:target="startShift">Starting Shift...</span>
-                    </button>
+                    @if($this->isBartenderOrChef())
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">Bartender/chef shifts start from a reviewed opening count or a handover, not here.</p>
+                        <button wire:click="goToHandoverCount"
+                            class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95 flex items-center justify-center space-x-2">
+                            <span>Go to My Handover Count</span>
+                        </button>
+                    @else
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">Begin your shift to start processing orders</p>
+                        <button @click="$wire.call('startShift')"
+                            wire:loading.attr="disabled"
+                            @if($isProcessing) disabled @endif
+                            class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95 flex items-center justify-center space-x-2">
+                            <svg wire:loading wire:target="startShift" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            <span wire:loading.remove wire:target="startShift">🚀 Start Shift</span>
+                            <span wire:loading wire:target="startShift">Starting Shift...</span>
+                        </button>
+                    @endif
                 </div>
             @endif
         </div>
