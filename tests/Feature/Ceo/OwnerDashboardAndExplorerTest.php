@@ -136,6 +136,48 @@ it('excludes voided expenses from the total but still lists them', function () {
     expect($data['rows'])->toHaveCount(2); // both still visible
 });
 
+/**
+ * rangeSeries() deliberately drops a past day with no computed snapshot
+ * rather than compute it live (see DailyMetricsService) — profit/cash/gap
+ * silently sum as if that day never happened, while Total Revenue (always
+ * live, computed separately) still shows correctly. This is the exact "why
+ * is profit ₦0 for yesterday when revenue isn't?" report — the dashboard
+ * must at least surface that the data is incomplete, not hide it.
+ */
+it('flags a past day in range with no computed snapshot as missing, and does not flag today', function () {
+    CarbonImmutable::setTestNow('2026-07-21 10:00:00');
+
+    $component = Livewire::actingAs($this->user)->test(Dashboard::class)->set('preset', 'yesterday');
+    $missing = $component->instance()->dashboardData()['owner']['missing_snapshot_dates'];
+
+    expect($missing)->toBe(['2026-07-20']);
+
+    $todayComponent = Livewire::actingAs($this->user)->test(Dashboard::class)->set('preset', 'today');
+    expect($todayComponent->instance()->dashboardData()['owner']['missing_snapshot_dates'])->toBe([]);
+});
+
+it('stops flagging a day once its snapshot has been computed', function () {
+    CarbonImmutable::setTestNow('2026-07-21 10:00:00');
+    Artisan::call('hms:compute-daily-snapshot', ['date' => '2026-07-20']);
+
+    $component = Livewire::actingAs($this->user)->test(Dashboard::class)->set('preset', 'yesterday');
+
+    expect($component->instance()->dashboardData()['owner']['missing_snapshot_dates'])->toBe([]);
+});
+
+it('lets the CEO compute a missing snapshot themselves from the dashboard, no server access needed', function () {
+    CarbonImmutable::setTestNow('2026-07-21 10:00:00');
+
+    expect(DailyBusinessSnapshot::whereDate('business_date', '2026-07-20')->exists())->toBeFalse();
+
+    Livewire::actingAs($this->user)
+        ->test(Dashboard::class)
+        ->set('preset', 'yesterday')
+        ->call('computeMissingSnapshots');
+
+    expect(DailyBusinessSnapshot::whereDate('business_date', '2026-07-20')->exists())->toBeTrue();
+});
+
 it('blocks a non-ceo, non-super-admin role from the report explorer route', function () {
     Role::firstOrCreate(['name' => 'waiter']);
     $waiter = User::factory()->create();

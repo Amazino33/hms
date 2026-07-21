@@ -18,7 +18,9 @@ use App\Services\Ceo\RevenueReportService;
 use App\Services\Ceo\StockAlertService;
 use App\Support\BusinessDay;
 use Carbon\CarbonImmutable;
+use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
+use Illuminate\Support\Facades\Artisan;
 
 class Dashboard extends BaseDashboard
 {
@@ -181,6 +183,7 @@ class Dashboard extends BaseDashboard
         $expenses = (float) $series->sum('expenses_total');
 
         return [
+            'missing_snapshot_dates' => $this->missingSnapshotDates($range, $series),
             'profit' => [
                 'value' => $profit,
                 'delta' => $comparisonProfit !== null ? $this->resolver->delta($profit, $comparisonProfit) : null,
@@ -237,6 +240,57 @@ class Dashboard extends BaseDashboard
                 'open_folio_balance' => $latestDay['gap_open_folio_balance'] ?? 0.0,
             ],
         ];
+    }
+
+    /**
+     * A past (closed) business day within the selected range that
+     * rangeSeries() silently dropped because nobody has computed its
+     * snapshot yet — profit/cash/gap for that day sum as if it never
+     * happened, while revenue (computed independently, always live)
+     * still shows correctly. This is normally caught by the nightly
+     * hms:compute-daily-snapshot schedule; a gap here means that either
+     * hasn't run yet for a very recent day, or the server's cron isn't
+     * actually calling `php artisan schedule:run`.
+     *
+     * @param  \Illuminate\Support\Collection<int, array>  $series
+     * @return string[]
+     */
+    private function missingSnapshotDates(DateRange $range, \Illuminate\Support\Collection $series): array
+    {
+        $today = BusinessDay::today();
+        $present = $series->pluck('business_date')->all();
+
+        return collect($range->eachDate())
+            ->map(fn (CarbonImmutable $d) => $d->toDateString())
+            ->filter(fn (string $date) => $date < $today && ! in_array($date, $present, true))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Self-serve backfill for the exact gap missingSnapshotDates() flags —
+     * lets whoever's looking at the dashboard fix it themselves instead of
+     * needing someone with server/SSH access to run the artisan command.
+     */
+    public function computeMissingSnapshots(): void
+    {
+        $missing = $this->missingSnapshotDates($this->range(), (new DailyMetricsService())->rangeSeries($this->range()));
+
+        if (empty($missing)) {
+            Notification::make()->title('Nothing to compute — every day in this range already has a snapshot')->success()->send();
+
+            return;
+        }
+
+        foreach ($missing as $date) {
+            Artisan::call('hms:compute-daily-snapshot', ['date' => $date]);
+        }
+
+        Notification::make()
+            ->title('Computed '.count($missing).' missing snapshot(s)')
+            ->body(implode(', ', $missing))
+            ->success()
+            ->send();
     }
 
     /**

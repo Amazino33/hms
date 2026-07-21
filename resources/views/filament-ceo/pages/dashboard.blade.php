@@ -56,6 +56,24 @@
         </div>
     </div>
 
+    @if(!empty($owner['missing_snapshot_dates']))
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-4 mt-4 flex items-start justify-between gap-4">
+            <div>
+                <div class="text-sm font-bold text-amber-800 dark:text-amber-300">Data incomplete for this range</div>
+                <p class="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    Profit, Cash in Hand, and Gap below do not include
+                    {{ count($owner['missing_snapshot_dates']) === 1 ? 'this day' : 'these days' }}
+                    (no snapshot computed yet — Total Revenue is unaffected, it's calculated separately):
+                    <strong>{{ implode(', ', $owner['missing_snapshot_dates']) }}</strong>.
+                </p>
+            </div>
+            <button wire:click="computeMissingSnapshots" wire:loading.attr="disabled"
+                class="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50">
+                Compute Now
+            </button>
+        </div>
+    @endif
+
     {{-- ══════════════════════════════════════════════════════════════
          FINANCIAL OVERVIEW — the four "how's the money" numbers, together
          ══════════════════════════════════════════════════════════════ --}}
