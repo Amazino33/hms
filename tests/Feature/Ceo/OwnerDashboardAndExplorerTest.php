@@ -117,6 +117,12 @@ it('marks a sales-tab row cost as estimated when unit_cost_at_sale is missing, a
 });
 
 it('excludes voided expenses from the total but still lists them', function () {
+    // Pinned to a WAT daytime hour: an unpinned "now" run before the 9am
+    // WAT close (see BusinessDay) would resolve "today" 's business day to
+    // yesterday's label, while date_incurred still stamps the real
+    // calendar date — landing the expense outside its own default range.
+    CarbonImmutable::setTestNow('2026-07-16 12:00:00');
+
     $category = ExpenseCategory::create(['name' => 'Utilities', 'is_active' => true]);
     $user = User::factory()->create();
 

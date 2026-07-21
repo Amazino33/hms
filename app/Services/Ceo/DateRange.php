@@ -7,7 +7,7 @@ use Carbon\CarbonImmutable;
 
 /**
  * A closed, inclusive [start, end] range of business-day labels (see
- * BusinessDay — a business day runs 4am WAT to 4am WAT, not midnight to
+ * BusinessDay — a business day runs 9am WAT to 9am WAT, not midnight to
  * midnight). start/end are themselves just date labels; callers needing
  * an actual query boundary use startBoundary()/endBoundary(), which
  * resolve through BusinessDay so every report reads the same instants

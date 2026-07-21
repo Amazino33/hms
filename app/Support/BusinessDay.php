@@ -5,11 +5,15 @@ namespace App\Support;
 use Carbon\CarbonImmutable;
 
 /**
- * The venue's trading day for owner/CEO reporting: closes at 4am WAT
+ * The venue's trading day for owner/CEO reporting: closes at 9am WAT
  * (Africa/Lagos, fixed UTC+1, no DST) rather than midnight, so a 1am sale
  * still belongs to "last night" — the standard hospitality night-audit
  * convention. Shifts here are unscheduled (no fixed clock handover time),
  * so this hour is a deliberate convention, not derived from shift data.
+ * Set to 9am specifically (not the more typical 4am) so overnight staff
+ * have until morning to sort themselves out — settle up, hand over,
+ * reconcile — before the previous night's business day closes out from
+ * under them.
  *
  * This differs from the app's configured UTC server timezone and from
  * the plain calendar-day boundaries every pre-existing CEO report used
@@ -22,7 +26,7 @@ class BusinessDay
 {
     public const TIMEZONE = 'Africa/Lagos';
 
-    public const CLOSE_HOUR = 4;
+    public const CLOSE_HOUR = 9;
 
     /**
      * Which business day a given instant belongs to, as a Y-m-d string.

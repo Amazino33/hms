@@ -14,7 +14,7 @@ use Carbon\CarbonImmutable;
  * request, not re-evaluated differently in different places.
  *
  * "Today" here means the current business day (BusinessDay::today(),
- * 4am WAT boundary) — not the calendar day in the app's UTC server
+ * 9am WAT boundary) — not the calendar day in the app's UTC server
  * timezone.
  */
 class DateRangeResolver

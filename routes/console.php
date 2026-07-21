@@ -15,8 +15,8 @@ Schedule::command('activitylog:clean')->daily();
 // without needing a precise minute-level cron entry.
 Schedule::command('hms:auto-release-reservations')->hourly();
 
-// Snapshots the business day that just closed (4am WAT, see BusinessDay).
-// Scheduled for 04:15 WAT (03:15 UTC) — 15 minutes after close, so any
+// Snapshots the business day that just closed (9am WAT, see BusinessDay).
+// Scheduled for 09:15 WAT (08:15 UTC) — 15 minutes after close, so any
 // same-second edge-case writes have settled. Idempotent: a date that
 // already has a snapshot is skipped, so a missed run just gets caught by
 // the next one, and a double-fire (e.g. after a redeploy) is a no-op.
@@ -24,7 +24,7 @@ Schedule::command('hms:auto-release-reservations')->hourly();
 // This entry only fires if the server actually runs Laravel's scheduler
 // (`php artisan schedule:run` once a minute via cron) — confirm that
 // cron entry exists before relying on this in production.
-Schedule::command('hms:compute-daily-snapshot')->dailyAt('03:15');
+Schedule::command('hms:compute-daily-snapshot')->dailyAt('08:15');
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());

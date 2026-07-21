@@ -68,18 +68,18 @@ it('falls back to current cost and increments the estimated count when unit_cost
     expect($data['cogs_estimated_count'])->toBe(1);
 });
 
-it('assigns a 2am sale to the previous business day, and a 5am sale to the same calendar day', function () {
+it('assigns an 8am sale to the previous business day, and a 10am sale to the same calendar day', function () {
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $beer = Product::create(['name' => 'Beer', 'price' => 500, 'cost_price' => 200, 'category_id' => $category->id, 'is_active' => true]);
     $waiter = User::factory()->create();
 
-    // 2am WAT on the 17th = 1am UTC on the 17th = still business day "16th" (before the 4am WAT close).
-    CarbonImmutable::setTestNow('2026-07-17 01:00:00');
+    // 8am WAT on the 17th = 7am UTC on the 17th = still business day "16th" (before the 9am WAT close).
+    CarbonImmutable::setTestNow('2026-07-17 07:00:00');
     $lateOrder = Order::create(['order_number' => 'LATE-'.uniqid(), 'user_id' => $waiter->id, 'status' => 'paid', 'total_amount' => 500, 'amount_paid' => 500]);
     OrderItem::create(['order_id' => $lateOrder->id, 'product_id' => $beer->id, 'product_name' => 'Beer', 'item_type' => 'product', 'quantity' => 1, 'unit_price' => 500, 'subtotal' => 500]);
 
-    // 5am WAT on the 17th = 4am UTC = business day "17th".
-    CarbonImmutable::setTestNow('2026-07-17 04:00:00');
+    // 10am WAT on the 17th = 9am UTC = business day "17th".
+    CarbonImmutable::setTestNow('2026-07-17 09:00:00');
     $earlyOrder = Order::create(['order_number' => 'EARLY-'.uniqid(), 'user_id' => $waiter->id, 'status' => 'paid', 'total_amount' => 700, 'amount_paid' => 700]);
     OrderItem::create(['order_id' => $earlyOrder->id, 'product_id' => $beer->id, 'product_name' => 'Beer', 'item_type' => 'product', 'quantity' => 1, 'unit_price' => 700, 'subtotal' => 700]);
 
@@ -208,7 +208,7 @@ it('live "today" and the snapshot the job would produce for the same closed day 
 
     // Move the clock forward past close, then run the same command the
     // scheduler would run for the day that just closed.
-    CarbonImmutable::setTestNow('2026-07-17 05:00:00');
+    CarbonImmutable::setTestNow('2026-07-17 10:00:00');
     Artisan::call('hms:compute-daily-snapshot', ['date' => '2026-07-16']);
     $snapshot = DailyBusinessSnapshot::latestFor('2026-07-16');
 
@@ -217,8 +217,9 @@ it('live "today" and the snapshot the job would produce for the same closed day 
     expect((float) $snapshot->gross_profit)->toBe($liveToday['gross_profit']);
 });
 
-it('BusinessDay assigns pre-4am-WAT instants to the previous calendar day', function () {
-    expect(BusinessDay::labelFor(CarbonImmutable::parse('2026-07-17 02:00:00')))->toBe('2026-07-16'); // 3am WAT
-    expect(BusinessDay::labelFor(CarbonImmutable::parse('2026-07-17 03:00:00')))->toBe('2026-07-17'); // 4am WAT exactly
-    expect(BusinessDay::labelFor(CarbonImmutable::parse('2026-07-17 12:00:00')))->toBe('2026-07-17');
+it('BusinessDay assigns pre-9am-WAT instants to the previous calendar day', function () {
+    expect(BusinessDay::labelFor(CarbonImmutable::parse('2026-07-17 06:00:00')))->toBe('2026-07-16'); // 7am WAT
+    expect(BusinessDay::labelFor(CarbonImmutable::parse('2026-07-17 07:59:00')))->toBe('2026-07-16'); // 8:59am WAT, just before close
+    expect(BusinessDay::labelFor(CarbonImmutable::parse('2026-07-17 08:00:00')))->toBe('2026-07-17'); // 9am WAT exactly
+    expect(BusinessDay::labelFor(CarbonImmutable::parse('2026-07-17 12:00:00')))->toBe('2026-07-17'); // 1pm WAT
 });

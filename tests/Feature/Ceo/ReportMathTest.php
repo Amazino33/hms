@@ -52,9 +52,9 @@ it('computes shift shortfall rate as shortfall over that shift\'s total sales', 
 
 it('computes revenue contribution percent and margin percent per product', function () {
     // Pinned to a WAT daytime hour: a single-day DateRange resolves its
-    // boundary via BusinessDay's 4am WAT cutoff (see DateRange), so an
-    // unpinned "now" run between 00:00-02:59 UTC would fall before that
-    // day's business-day open and be excluded from its own range.
+    // boundary via BusinessDay's 9am WAT cutoff (see DateRange), so an
+    // unpinned "now" run before that hour would fall before that day's
+    // business-day open and be excluded from its own range.
     CarbonImmutable::setTestNow('2026-07-15 12:00:00');
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $beer = Product::create(['name' => 'Beer', 'price' => 500, 'cost_price' => 200, 'category_id' => $category->id, 'is_active' => true]);

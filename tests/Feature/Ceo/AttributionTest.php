@@ -18,9 +18,9 @@ afterEach(function () {
 
 it('attributes a folio-billed food item to Restaurant (what-was-sold) and flags it billed via folio (secondary dimension)', function () {
     // Pinned to a WAT daytime hour: a single-day DateRange resolves its
-    // boundary via BusinessDay's 4am WAT cutoff (see DateRange), so an
-    // unpinned "now" run between 00:00-02:59 UTC would fall before that
-    // day's business-day open and be excluded from its own range.
+    // boundary via BusinessDay's 9am WAT cutoff (see DateRange), so an
+    // unpinned "now" run before that hour would fall before that day's
+    // business-day open and be excluded from its own range.
     CarbonImmutable::setTestNow('2026-07-15 12:00:00');
     $room = Room::create(['number' => '901', 'type' => 'Deluxe', 'price_per_night' => 20000, 'status' => 'available', 'housekeeping' => 'clean']);
     $receptionist = User::factory()->create();
