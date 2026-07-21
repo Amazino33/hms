@@ -61,7 +61,22 @@
                 <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold kiosk-tap kiosk-primary-pulse">
                     {{ $isClosing ? 'Start Closing Count' : 'Start Handover Count' }}
                 </button>
-            @elseif($this->otherActiveCustodian)
+            @elseif($this->otherActiveCustodian && !$showUnwitnessedOption)
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Waiting on {{ $this->otherActiveCustodian->name }}'s handover</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    {{ $this->otherActiveCustodian->name }} is still on shift. Ask them to start the handover count
+                    from their own login — you'll be able to accept it here as soon as they do.
+                </p>
+
+                <button wire:click="checkAgain" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold kiosk-tap mb-3">
+                    Check Again
+                </button>
+
+                <button type="button" wire:click="$set('showUnwitnessedOption', true)"
+                    class="w-full text-sm text-gray-500 dark:text-gray-400 underline">
+                    {{ $this->otherActiveCustodian->name }} not available right now? Count alone with a witness
+                </button>
+            @elseif($this->otherActiveCustodian && $showUnwitnessedOption)
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Start an Unwitnessed Handover</h3>
                 <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
                     {{ $this->otherActiveCustodian->name }} is still shown on shift but isn't here to count with you.
@@ -77,8 +92,13 @@
                     @endforeach
                 </select>
 
-                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold kiosk-tap kiosk-primary-pulse">
+                <button wire:click="startCount" class="w-full px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold kiosk-tap kiosk-primary-pulse mb-3">
                     Start Unwitnessed Count
+                </button>
+
+                <button type="button" wire:click="$set('showUnwitnessedOption', false)"
+                    class="w-full text-sm text-gray-500 dark:text-gray-400 underline">
+                    Back
                 </button>
             @else
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Start Your Opening Count</h3>

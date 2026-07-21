@@ -999,6 +999,22 @@ new class extends Component {
         return \App\Services\InventoryService::getWarehouseForProduct($product);
     }
 
+    /**
+     * Who currently holds the bar/kitchen custodian shift, for the header
+     * badge — a waiter placing a bar order, or a kiosk user in general, has
+     * no other way to see who's actually on duty right now without
+     * navigating away to a different page. Re-evaluated on every render,
+     * so the existing wire:poll.10s="loadCurrentShift" on the header this
+     * lives in keeps it fresh automatically.
+     */
+    public function onDutyStaff(): array
+    {
+        return [
+            'bartender' => \App\Models\Shift::query()->ofType('bartender')->activeNonStale('bartender')->first()?->user?->name,
+            'chef' => \App\Models\Shift::query()->ofType('chef')->activeNonStale('chef')->first()?->user?->name,
+        ];
+    }
+
     public function openReturnModal($key)
     {
         if (!isset($this->existingItems[$key])) {
@@ -1157,6 +1173,22 @@ new class extends Component {
                     {{ now()->format('M j, Y g:i A') }}
                 </div>
             </div>
+        </div>
+        @php $onDuty = $this->onDutyStaff(); @endphp
+        <div class="flex items-center gap-4 mt-2 text-xs">
+            <span class="font-semibold text-gray-500 dark:text-gray-400">On duty:</span>
+            {{-- "Bartender:"/"Chef:", not "Bar:"/"Kitchen:" — the kiosk
+                 deliberately never shows a raw "Bar: N" stock-count label
+                 (blind counting), and this is a completely different kind
+                 of "Bar:" (who's on duty, not a quantity), but sharing the
+                 literal text would make that guarantee untestable by
+                 substring. --}}
+            <span class="flex items-center gap-1 {{ $onDuty['bartender'] ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 italic' }}">
+                🍸 Bartender: {{ $onDuty['bartender'] ?? 'nobody' }}
+            </span>
+            <span class="flex items-center gap-1 {{ $onDuty['chef'] ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 italic' }}">
+                🍳 Chef: {{ $onDuty['chef'] ?? 'nobody' }}
+            </span>
         </div>
     </div>
 

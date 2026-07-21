@@ -174,7 +174,27 @@ it('still lets a bartender reach the count session detail page directly, without
     expect(\App\Filament\Pages\CountSessionDetail::canAccess())->toBeTrue();
 });
 
-it('offers an unwitnessed handover instead of a solo opening count when someone else is still on shift', function () {
+it('alerts the incoming user to wait for the outgoing custodian, instead of offering an unwitnessed count by default', function () {
+    grantMyCountPagePermissions();
+    WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'type' => 'consumer']);
+
+    $absentOutgoing = User::factory()->create();
+    $absentOutgoing->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+    Shift::create(['user_id' => $absentOutgoing->id, 'type' => 'bartender', 'started_at' => now()->subHours(2), 'status' => 'active']);
+
+    $incoming = User::factory()->create();
+    $incoming->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+
+    Livewire::actingAs($incoming)
+        ->test(MyCount::class)
+        ->assertSee("Waiting on {$absentOutgoing->name}'s handover", false)
+        ->assertDontSee('Start an Unwitnessed Handover')
+        ->assertDontSee('Start Your Opening Count');
+
+    expect(CountSession::count())->toBe(0);
+});
+
+it('lets the incoming user fall through to an unwitnessed handover once they say the outgoing is not available', function () {
     grantMyCountPagePermissions();
     WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'type' => 'consumer']);
 
@@ -191,6 +211,7 @@ it('offers an unwitnessed handover instead of a solo opening count when someone 
 
     Livewire::actingAs($incoming)
         ->test(MyCount::class)
+        ->set('showUnwitnessedOption', true)
         ->assertSee('Start an Unwitnessed Handover')
         ->assertDontSee('Start Your Opening Count')
         ->call('startCount') // no witnessUserId set yet
@@ -200,6 +221,7 @@ it('offers an unwitnessed handover instead of a solo opening count when someone 
 
     Livewire::actingAs($incoming)
         ->test(MyCount::class)
+        ->set('showUnwitnessedOption', true)
         ->set('witnessUserId', $witness->id)
         ->call('startCount')
         ->assertRedirect();
@@ -210,6 +232,23 @@ it('offers an unwitnessed handover instead of a solo opening count when someone 
     expect($session->incoming_user_id)->toBe($incoming->id);
     expect($session->witness_user_id)->toBe($witness->id);
     expect($session->isUnwitnessed())->toBeTrue();
+});
+
+it('checkAgain is a harmless no-op that keeps the alert state (nothing changed on the outgoing side)', function () {
+    grantMyCountPagePermissions();
+    WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'type' => 'consumer']);
+
+    $absentOutgoing = User::factory()->create();
+    $absentOutgoing->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+    Shift::create(['user_id' => $absentOutgoing->id, 'type' => 'bartender', 'started_at' => now()->subHours(2), 'status' => 'active']);
+
+    $incoming = User::factory()->create();
+    $incoming->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+
+    Livewire::actingAs($incoming)
+        ->test(MyCount::class)
+        ->call('checkAgain')
+        ->assertSee("Waiting on {$absentOutgoing->name}'s handover", false);
 });
 
 /**

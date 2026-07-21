@@ -52,6 +52,27 @@ class MyCount extends Page
      */
     public bool $isClosing = false;
 
+    /**
+     * The "count alone with a witness" path is a fallback for when the
+     * outgoing custodian genuinely isn't available — not the default
+     * experience. Without this, an incoming bartender/chef landed straight
+     * on that form the instant they opened this page, before the outgoing
+     * had even had a chance to start their own handover count, which read
+     * as an invitation to bypass them rather than wait. False shows a
+     * plain "waiting on them" message first.
+     */
+    public bool $showUnwitnessedOption = false;
+
+    /**
+     * No-op — exists purely so "Check again" is a real network round trip.
+     * otherActiveCustodian()/myOpenSession() are re-evaluated on every
+     * request, so this alone is enough to pick up the outgoing custodian
+     * having started their count in the meantime.
+     */
+    public function checkAgain(): void
+    {
+    }
+
     public function myRole(): ?string
     {
         foreach (self::ROLE_TYPE as $role => $type) {
