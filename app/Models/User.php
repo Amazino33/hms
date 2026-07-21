@@ -176,6 +176,22 @@ class User extends Authenticatable implements FilamentUser
             );
         }
 
+        // Same class of gap as bartender/chef above, minus the physical-
+        // stock handover: a receptionist's accountability is a cash float
+        // (ReceptionistShiftService::startShift() records it), which this
+        // generic path has no field for at all. Without this block, a
+        // receptionist could start here with no float recorded, silently
+        // understating expectedCashRemittance() by that exact amount at
+        // settlement time. The front desk is also single-custodian (one
+        // receptionist at a time) — that check lives in
+        // ReceptionistShiftService::startShift() itself, since it needs to
+        // inspect OTHER users' shifts, not just this one's.
+        if ($requestedType === 'receptionist') {
+            throw new \Exception(
+                'Receptionist shifts start from the Receptionist Shift page, where your starting cash float is recorded — use that, not this control.'
+            );
+        }
+
         if (Shift::hasUnsettledFor($this->id) && ! SettingsService::getBool('allow_shift_start_with_unsettled')) {
             throw new \Exception('Your last settlement is awaiting cashier confirmation and must be resolved before you can start a new shift.');
         }

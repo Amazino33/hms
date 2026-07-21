@@ -97,6 +97,12 @@
                                 class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
                                 <span>End Shift</span>
                             </button>
+                        @elseif($currentShift && $currentShift->type === 'receptionist')
+                            <button wire:click="goToReceptionistShift"
+                                @if($isProcessing) disabled @endif
+                                class="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs rounded-lg font-medium transition-colors touch-manipulation flex items-center justify-center space-x-1">
+                                <span>End Shift</span>
+                            </button>
                         @else
                             <div class="flex items-center space-x-2">
                                 <button @click="showOwnerTakeModal = true"
@@ -179,6 +185,12 @@
                         <button wire:click="goToHandoverCount"
                             class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95 flex items-center justify-center space-x-2">
                             <span>Go to My Handover Count</span>
+                        </button>
+                    @elseif($this->isReceptionist())
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">Receptionist shifts start from the Receptionist Shift page, where your starting cash float is recorded.</p>
+                        <button wire:click="goToReceptionistShift"
+                            class="w-full px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-base transition-colors touch-manipulation active:scale-95 flex items-center justify-center space-x-2">
+                            <span>Go to Receptionist Shift</span>
                         </button>
                     @else
                         <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">Begin your shift to start processing orders</p>

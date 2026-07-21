@@ -44,6 +44,35 @@ it('refuses to start a receptionist shift while a different-typed shift is still
     expect($waiterShift->fresh()->status)->toBe('active');
 });
 
+/**
+ * The front desk is single-custodian, same as bartender/chef: one
+ * receptionist on shift at a time. This is the exact production incident
+ * that guard closes for bartender/chef, applied here — a second
+ * receptionist should never be able to start while the first is still
+ * active.
+ */
+it('blocks a second receptionist from starting while another is still active', function () {
+    $receptionistA = User::factory()->create(['name' => 'Receptionist A']);
+    (new ReceptionistShiftService())->startShift($receptionistA, 5000);
+
+    $receptionistB = User::factory()->create();
+
+    expect(fn () => (new ReceptionistShiftService())->startShift($receptionistB, 3000))
+        ->toThrow(Exception::class, 'Receptionist A is currently on shift as receptionist — wait for them to end their shift before starting yours.');
+});
+
+it('lets a second receptionist start immediately once the first declares end, before the cashier confirms', function () {
+    $receptionistA = User::factory()->create();
+    $shiftA = (new ReceptionistShiftService())->startShift($receptionistA, 5000);
+    (new ReceptionistShiftService())->declareEnd($shiftA, 5000, 0);
+
+    $receptionistB = User::factory()->create();
+    $shiftB = (new ReceptionistShiftService())->startShift($receptionistB, 2000);
+
+    expect($shiftB->status)->toBe('active');
+    expect($shiftA->fresh()->status)->toBe('awaiting_cashier');
+});
+
 it('is idempotent: starting again while already on an active receptionist shift returns it unchanged', function () {
     $user = User::factory()->create();
     $user->assignRole(Role::firstOrCreate(['name' => 'receptionist']));
@@ -176,13 +205,21 @@ it('refuses to end a receptionist shift through the generic waiter-style endShif
     expect(fn () => $receptionist->endShift())->toThrow(Exception::class);
 });
 
-it('maps a receptionist role to a receptionist-typed shift via the generic startShift()', function () {
+/**
+ * Same class of gap as bartender/chef: the generic startShift() has no
+ * field for a starting cash float at all, so letting a receptionist
+ * through it would silently record a shift with no float, understating
+ * expectedCashRemittance() by exactly that amount at settlement time.
+ * Superseded by ShiftManagerReceptionistStartGuardTest — the generic
+ * path now refuses receptionist outright, directing them to the
+ * dedicated Receptionist Shift page instead.
+ */
+it('refuses to map a receptionist role to a shift via the generic startShift(), directing them to the Receptionist Shift page', function () {
     $receptionist = User::factory()->create();
     $receptionist->assignRole(Role::firstOrCreate(['name' => 'receptionist']));
 
-    $shift = $receptionist->startShift();
-
-    expect($shift->type)->toBe('receptionist');
+    expect(fn () => $receptionist->startShift())
+        ->toThrow(Exception::class, 'Receptionist shifts start from the Receptionist Shift page, where your starting cash float is recorded — use that, not this control.');
 });
 
 it('drives the receptionist shift page end to end: start with a float, then declare end', function () {

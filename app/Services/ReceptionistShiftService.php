@@ -30,6 +30,22 @@ class ReceptionistShiftService
             throw new \Exception("You have an active {$current->type} shift — end it before starting a receptionist shift.");
         }
 
+        // The front desk is single-custodian, same as bartender/chef: one
+        // receptionist on shift at a time. declareEnd() stamps ended_at
+        // immediately (status flips to awaiting_cashier), so the slot
+        // frees up the moment the outgoing receptionist declares — the
+        // cashier's later confirmation doesn't need to happen first.
+        $otherActive = Shift::where('user_id', '!=', $user->id)
+            ->ofType('receptionist')
+            ->activeNonStale('receptionist')
+            ->first();
+
+        if ($otherActive) {
+            throw new \Exception(
+                "{$otherActive->user?->name} is currently on shift as receptionist — wait for them to end their shift before starting yours."
+            );
+        }
+
         if (Shift::hasUnsettledFor($user->id) && ! SettingsService::getBool('allow_shift_start_with_unsettled')) {
             throw new \Exception('Your last settlement is awaiting cashier confirmation and must be resolved before you can start a new shift.');
         }

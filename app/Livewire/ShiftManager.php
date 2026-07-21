@@ -2,28 +2,38 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
 use App\Models\OwnerTakeNote;
 use App\Models\Shift;
 use Filament\Notifications\Notification;
+use Livewire\Component;
 
 class ShiftManager extends Component
 {
     public $currentShift;
+
     public $shiftDuration;
+
     public $showModal = false;
+
     public $showDeclarationModal = false;
+
     public $showOwnerTakeModal = false;
+
     public $isProcessing = false;
+
     public bool $ready = false;
+
     public $declaredCash = 0;
+
     public $declaredPos = 0;
+
     public $ownerTakeAmount = null;
+
     public $ownerTakeDescription = '';
 
     protected $listeners = [
         'open-shift-modal' => 'openModal',
-        'close-modal-safely' => 'closeModalSafely'
+        'close-modal-safely' => 'closeModalSafely',
     ];
 
     public function mount()
@@ -49,6 +59,17 @@ class ShiftManager extends Component
         return auth()->check() && auth()->user()->hasAnyRole(['bartender', 'chef']);
     }
 
+    /**
+     * Same reasoning as isBartenderOrChef() above: receptionist shifts
+     * track a cash float this generic control has no field for at all
+     * (ReceptionistShiftService), so both Start and End are swapped for a
+     * redirect to the dedicated Receptionist Shift page instead.
+     */
+    public function isReceptionist(): bool
+    {
+        return auth()->check() && auth()->user()->hasRole('receptionist');
+    }
+
     public function loadCurrentShift()
     {
         // Skip if modal is open and we're processing to avoid hydration conflicts
@@ -56,9 +77,10 @@ class ShiftManager extends Component
             return;
         }
 
-        if (!auth()->check()) {
+        if (! auth()->check()) {
             $this->currentShift = null;
             $this->shiftDuration = null;
+
             return;
         }
 
@@ -67,16 +89,16 @@ class ShiftManager extends Component
             // Calculate elapsed time (always positive)
             $seconds = $this->currentShift->started_at->diffInSeconds(now());
             $minutes = round($seconds / 60);
-            
+
             if ($minutes < 60) {
-                $this->shiftDuration = $minutes . 'm';
+                $this->shiftDuration = $minutes.'m';
             } else {
                 $hours = floor($minutes / 60);
                 $remainingMinutes = $minutes % 60;
                 if ($remainingMinutes > 0) {
-                    $this->shiftDuration = $hours . 'h ' . $remainingMinutes . 'm';
+                    $this->shiftDuration = $hours.'h '.$remainingMinutes.'m';
                 } else {
-                    $this->shiftDuration = $hours . 'h';
+                    $this->shiftDuration = $hours.'h';
                 }
             }
         } else {
@@ -86,7 +108,7 @@ class ShiftManager extends Component
 
     public function startShift()
     {
-        if ($this->isProcessing || !auth()->check()) {
+        if ($this->isProcessing || ! auth()->check()) {
             return;
         }
 
@@ -95,7 +117,7 @@ class ShiftManager extends Component
         try {
             $shift = auth()->user()->startShift();
             $this->loadCurrentShift();
-            
+
             Notification::make()->title('Shift Started')->success()->send();
 
             // Signal Alpine to close the modal instantly
@@ -105,7 +127,7 @@ class ShiftManager extends Component
             $this->showModal = false;
 
         } catch (\Exception $e) {
-            Notification::make()->title('Error starting shift: ' . $e->getMessage())->danger()->persistent()->send();
+            Notification::make()->title('Error starting shift: '.$e->getMessage())->danger()->persistent()->send();
         } finally {
             $this->isProcessing = false;
         }
@@ -123,6 +145,11 @@ class ShiftManager extends Component
     public function goToHandoverCount()
     {
         $this->redirect('/admin/my-count');
+    }
+
+    public function goToReceptionistShift()
+    {
+        $this->redirect('/admin/receptionist-shift');
     }
 
     public function cancelDeclaration()
@@ -149,12 +176,13 @@ class ShiftManager extends Component
      */
     public function recordOwnerTake($ownerTakeAmount = null, $ownerTakeDescription = '')
     {
-        if ($this->isProcessing || !auth()->check() || !$this->currentShift) {
+        if ($this->isProcessing || ! auth()->check() || ! $this->currentShift) {
             return;
         }
 
         if (trim((string) $ownerTakeDescription) === '') {
             Notification::make()->title('Add a short note about what was taken')->danger()->persistent()->send();
+
             return;
         }
 
@@ -173,13 +201,14 @@ class ShiftManager extends Component
 
     public function confirmShiftEnd($declaredCash = 0, $declaredPos = 0)
     {
-        if ($this->isProcessing || !auth()->check()) {
+        if ($this->isProcessing || ! auth()->check()) {
             return;
         }
 
         // Validate amounts
         if ($declaredCash < 0 || $declaredPos < 0) {
             Notification::make()->title('Cash and POS amounts cannot be negative')->danger()->persistent()->send();
+
             return;
         }
 
@@ -187,7 +216,7 @@ class ShiftManager extends Component
 
         try {
             $shift = auth()->user()->endShift();
-            
+
             // Update shift with declared amounts
             if ($shift) {
                 $shift->update([
@@ -195,9 +224,9 @@ class ShiftManager extends Component
                     'declared_pos' => $declaredPos,
                 ]);
             }
-            
+
             $this->loadCurrentShift();
-            
+
             Notification::make()->title('Shift Ended Successfully')->success()->send();
 
             // Signal Alpine to close both modals instantly
@@ -210,7 +239,7 @@ class ShiftManager extends Component
             $this->declaredPos = 0;
 
         } catch (\Exception $e) {
-            Notification::make()->title('Error ending shift: ' . $e->getMessage())->danger()->persistent()->send();
+            Notification::make()->title('Error ending shift: '.$e->getMessage())->danger()->persistent()->send();
         } finally {
             $this->isProcessing = false;
         }
@@ -226,6 +255,7 @@ class ShiftManager extends Component
                 ->warning()
                 ->duration(3000)
                 ->send();
+
             return;
         }
 
