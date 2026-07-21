@@ -203,20 +203,20 @@
                         <button type="button" @click="creatingNew = true; selectedId = ''; itemSearch = ''"
                                 class="min-h-[48px] px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold whitespace-nowrap touch-manipulation">+ New</button>
                     </div>
-                    <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                         <template x-for="item in filteredList" :key="item.id">
                             <button type="button" @click="selectItem(item.id)"
-                                class="min-h-[48px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:border-primary-500 touch-manipulation truncate"
+                                class="min-w-0 min-h-[48px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:border-primary-500 touch-manipulation truncate"
                                 x-text="item.name"></button>
                         </template>
-                        <p x-show="filteredList.length === 0" class="col-span-2 text-sm text-gray-400 py-2">No match.</p>
+                        <p x-show="filteredList.length === 0" class="sm:col-span-2 text-sm text-gray-400 py-2">No match.</p>
                     </div>
                 </div>
             </template>
 
             <template x-if="!creatingNew && selected">
                 <div class="mb-4 flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                    <span class="text-sm font-semibold text-gray-900 dark:text-white truncate" x-text="selected.name"></span>
+                    <span class="min-w-0 text-sm font-semibold text-gray-900 dark:text-white truncate" x-text="selected.name"></span>
                     <button type="button" @click="selectedId = ''"
                         class="shrink-0 min-h-[48px] px-3 py-2 rounded-lg text-primary-600 text-sm font-bold touch-manipulation">Change</button>
                 </div>
