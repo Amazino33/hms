@@ -19,7 +19,40 @@
             @endif
         </div>
     @else
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-24 lg:pb-0" x-data="{ cartOpen: false }">
+        {{-- Cart is Alpine-managed (instant add/remove, no round-trip per
+             click) — same optimistic pattern as pos.blade.php's posCart(),
+             just without the payment/checkout logic this screen doesn't
+             need. The server only ever sees the cart once, on submit. --}}
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-24 lg:pb-0"
+            x-data="{
+                cart: {},
+                cartOpen: false,
+                isSubmitting: false,
+                get cartLines() { return Object.entries(this.cart).map(([key, line]) => ({ key, ...line })); },
+                get cartCount() { return Object.values(this.cart).reduce((sum, i) => sum + i.quantity, 0); },
+                get cartTotal() { return Object.values(this.cart).reduce((sum, i) => sum + i.price * i.quantity, 0); },
+                addToCart(key, name, price) {
+                    if (this.cart[key]) {
+                        this.cart[key].quantity++;
+                    } else {
+                        this.cart[key] = { name, price, quantity: 1 };
+                    }
+                },
+                decrementLine(key) {
+                    if (!this.cart[key]) return;
+                    this.cart[key].quantity--;
+                    if (this.cart[key].quantity <= 0) delete this.cart[key];
+                },
+                removeLine(key) {
+                    delete this.cart[key];
+                },
+                submitOrder() {
+                    if (Object.keys(this.cart).length === 0 || this.isSubmitting) return;
+                    this.isSubmitting = true;
+                    $wire.call('submitOrder', this.cart).then(() => { this.isSubmitting = false; });
+                },
+            }"
+            @room-order-submitted.window="cart = {}; cartOpen = false;">
             <div class="lg:col-span-2 space-y-4">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
@@ -47,15 +80,15 @@
 
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     @foreach($products as $product)
-                        <button type="button" wire:click="addProductToCart({{ $product->id }}, '{{ addslashes($product->name) }}', {{ $product->price }})"
-                            class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 text-left bg-white dark:bg-gray-800">
+                        <button type="button" @click="addToCart('{{ $product->id }}', '{{ addslashes($product->name) }}', {{ $product->price }})"
+                            class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 text-left bg-white dark:bg-gray-800 touch-manipulation">
                             <div class="font-bold text-sm text-gray-900 dark:text-white">{{ $product->name }}</div>
                             <div class="text-xs text-gray-500">₦{{ number_format($product->price, 2) }}</div>
                         </button>
                     @endforeach
                     @foreach($menuItems as $menuItem)
-                        <button type="button" wire:click="addMenuItemToCart({{ $menuItem->id }}, '{{ addslashes($menuItem->name) }}', {{ $menuItem->sale_price }})"
-                            class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 text-left bg-white dark:bg-gray-800">
+                        <button type="button" @click="addToCart('menu_{{ $menuItem->id }}', '{{ addslashes($menuItem->name) }}', {{ $menuItem->sale_price }})"
+                            class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 text-left bg-white dark:bg-gray-800 touch-manipulation">
                             <div class="font-bold text-sm text-gray-900 dark:text-white">{{ $menuItem->name }}</div>
                             <div class="text-xs text-gray-500">₦{{ number_format($menuItem->sale_price, 2) }}</div>
                         </button>
@@ -66,72 +99,75 @@
             <div class="hidden lg:block bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 h-fit">
                 <h3 class="font-bold text-gray-900 dark:text-white">Cart</h3>
 
-                @forelse($cart as $key => $line)
+                <template x-if="cartLines.length === 0">
+                    <p class="text-gray-400 text-sm">No items yet — tap a product to add it.</p>
+                </template>
+                <template x-for="line in cartLines" :key="line.key">
                     <div class="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-2">
                         <div>
-                            <div class="font-bold text-gray-900 dark:text-white">{{ $line['name'] }}</div>
-                            <div class="text-gray-500">₦{{ number_format($line['price'], 2) }} x {{ $line['quantity'] }}</div>
+                            <div class="font-bold text-gray-900 dark:text-white" x-text="line.name"></div>
+                            <div class="text-gray-500" x-text="'₦' + line.price.toLocaleString() + ' x ' + line.quantity"></div>
                         </div>
                         <div class="flex items-center gap-1">
-                            <button type="button" wire:click="decrementCartLine('{{ $key }}')" class="w-6 h-6 rounded bg-gray-200 dark:bg-gray-600 font-bold">-</button>
-                            <button type="button" wire:click="removeFromCart('{{ $key }}')" class="text-red-500 text-xs ml-2">Remove</button>
+                            <button type="button" @click="decrementLine(line.key)" class="w-6 h-6 rounded bg-gray-200 dark:bg-gray-600 font-bold">-</button>
+                            <button type="button" @click="removeLine(line.key)" class="text-red-500 text-xs ml-2">Remove</button>
                         </div>
                     </div>
-                @empty
-                    <p class="text-gray-400 text-sm">No items yet — tap a product to add it.</p>
-                @endforelse
+                </template>
 
                 <div class="flex justify-between font-bold text-gray-900 dark:text-white pt-2">
                     <span>Total</span>
-                    <span>₦{{ number_format($this->cartTotal(), 2) }}</span>
+                    <span x-text="'₦' + cartTotal.toLocaleString()"></span>
                 </div>
 
-                <button type="button" wire:click="submitOrder" class="w-full px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-                    Send to Kitchen/Bar
+                <button type="button" @click="submitOrder" :disabled="cartCount === 0 || isSubmitting"
+                    class="w-full px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold">
+                    <span x-show="!isSubmitting">Send to Kitchen/Bar</span>
+                    <span x-show="isSubmitting" x-cloak>Sending…</span>
                 </button>
             </div>
-        </div>
 
-        {{-- Mobile: cart collapses into a sticky bottom bar, tap to expand
-             into a bottom sheet for line edits — matches every other
-             multi-step flow's sticky-CTA treatment instead of sinking below
-             a potentially long product grid. --}}
-        <div class="lg:hidden">
-            <x-mobile.sticky-cta-bar>
-                <x-slot:context>
-                    <button type="button" @click="cartOpen = true" class="w-full text-center">
-                        {{ count($cart) }} item(s) · ₦{{ number_format($this->cartTotal(), 2) }} — tap to review
+            {{-- Mobile: cart collapses into a sticky bottom bar, tap to expand
+                 into a bottom sheet for line edits — matches every other
+                 multi-step flow's sticky-CTA treatment instead of sinking below
+                 a potentially long product grid. --}}
+            <div class="lg:hidden">
+                <x-mobile.sticky-cta-bar>
+                    <x-slot:context>
+                        <button type="button" @click="cartOpen = true" class="w-full text-center">
+                            <span x-text="cartCount"></span> item(s) · ₦<span x-text="cartTotal.toLocaleString()"></span> — tap to review
+                        </button>
+                    </x-slot:context>
+                    <button type="button" @click="submitOrder" :disabled="cartCount === 0 || isSubmitting"
+                        class="w-full min-h-[48px] py-4 rounded-xl text-white text-lg font-bold touch-manipulation"
+                        :class="cartCount > 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-400 cursor-not-allowed'">
+                        <span x-show="!isSubmitting">Send to Kitchen/Bar</span>
+                        <span x-show="isSubmitting" x-cloak>Sending…</span>
                     </button>
-                </x-slot:context>
-                <button type="button" wire:click="submitOrder" wire:loading.attr="disabled" wire:target="submitOrder"
-                    @if(count($cart) === 0) disabled @endif
-                    class="w-full min-h-[48px] py-4 rounded-xl text-white text-lg font-bold touch-manipulation
-                        {{ count($cart) > 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-400 cursor-not-allowed' }}">
-                    <span wire:loading.remove wire:target="submitOrder">Send to Kitchen/Bar</span>
-                    <span wire:loading wire:target="submitOrder">Sending…</span>
-                </button>
-            </x-mobile.sticky-cta-bar>
+                </x-mobile.sticky-cta-bar>
 
-            <x-mobile.bottom-sheet show="cartOpen" title="Cart">
-                @forelse($cart as $key => $line)
-                    <div class="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 py-2">
-                        <div>
-                            <div class="font-bold text-gray-900 dark:text-white">{{ $line['name'] }}</div>
-                            <div class="text-gray-500">₦{{ number_format($line['price'], 2) }} x {{ $line['quantity'] }}</div>
+                <x-mobile.bottom-sheet show="cartOpen" title="Cart">
+                    <template x-if="cartLines.length === 0">
+                        <p class="text-gray-400 text-sm py-4 text-center">No items yet — tap a product to add it.</p>
+                    </template>
+                    <template x-for="line in cartLines" :key="line.key">
+                        <div class="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 py-2">
+                            <div>
+                                <div class="font-bold text-gray-900 dark:text-white" x-text="line.name"></div>
+                                <div class="text-gray-500" x-text="'₦' + line.price.toLocaleString() + ' x ' + line.quantity"></div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="decrementLine(line.key)" class="min-w-[44px] min-h-[44px] rounded-lg bg-gray-200 dark:bg-gray-600 font-bold touch-manipulation">-</button>
+                                <button type="button" @click="removeLine(line.key)" class="min-h-[44px] px-2 text-red-500 text-xs font-bold touch-manipulation">Remove</button>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <button type="button" wire:click="decrementCartLine('{{ $key }}')" class="min-w-[44px] min-h-[44px] rounded-lg bg-gray-200 dark:bg-gray-600 font-bold touch-manipulation">-</button>
-                            <button type="button" wire:click="removeFromCart('{{ $key }}')" class="min-h-[44px] px-2 text-red-500 text-xs font-bold touch-manipulation">Remove</button>
-                        </div>
+                    </template>
+                    <div class="flex justify-between font-bold text-gray-900 dark:text-white pt-3">
+                        <span>Total</span>
+                        <span x-text="'₦' + cartTotal.toLocaleString()"></span>
                     </div>
-                @empty
-                    <p class="text-gray-400 text-sm py-4 text-center">No items yet — tap a product to add it.</p>
-                @endforelse
-                <div class="flex justify-between font-bold text-gray-900 dark:text-white pt-3">
-                    <span>Total</span>
-                    <span>₦{{ number_format($this->cartTotal(), 2) }}</span>
-                </div>
-            </x-mobile.bottom-sheet>
+                </x-mobile.bottom-sheet>
+            </div>
         </div>
     @endif
 

@@ -19,10 +19,13 @@ use UnitEnum;
  * A purpose-built, simpler product grid for room orders — not the POS grid
  * (resources/views/livewire/pos.blade.php), which is a single 2,700+ line
  * file with its own client-side cart and payment/checkout/returns logic
- * that's explicitly off-limits to touch. Cart state lives server-side in
- * a plain Livewire property here rather than Alpine, trading a little
- * snappiness for a much smaller, easier-to-test component — acceptable
- * for this screen's lower interaction volume.
+ * that's explicitly off-limits to touch. Cart state lives client-side in
+ * Alpine (mirroring pos.blade.php's optimistic-add pattern) rather than a
+ * server-side Livewire property — every add/remove/decrement is instant,
+ * with no round-trip, and the server only ever sees the cart once, on
+ * submitOrder(). Safe because OrderSplitter already never trusts a
+ * client-supplied price or quantity clamp — it re-fetches the real price
+ * and re-derives everything server-side regardless of where the cart lived.
  */
 class RoomOrder extends Page
 {
@@ -46,8 +49,6 @@ class RoomOrder extends Page
     public ?string $roomNumber = null;
 
     public ?int $bookingId = null;
-
-    public array $cart = [];
 
     public ?int $activeCategoryId = null;
 
@@ -73,13 +74,13 @@ class RoomOrder extends Page
 
         if (! $booking) {
             Notification::make()->title('This room has no checked-in guest')->warning()->send();
+
             return;
         }
 
         $this->roomId = $roomId;
         $this->roomNumber = $booking->room->number;
         $this->bookingId = $booking->id;
-        $this->cart = [];
     }
 
     public function changeRoom(): void
@@ -87,7 +88,6 @@ class RoomOrder extends Page
         $this->roomId = null;
         $this->roomNumber = null;
         $this->bookingId = null;
-        $this->cart = [];
     }
 
     public function categories()
@@ -121,66 +121,31 @@ class RoomOrder extends Page
         return $query->orderBy('name')->limit(60)->get();
     }
 
-    public function addProductToCart(int $productId, string $name, float $price): void
-    {
-        $this->addToCart((string) $productId, $name, $price);
-    }
-
-    public function addMenuItemToCart(int $menuItemId, string $name, float $price): void
-    {
-        $this->addToCart('menu_' . $menuItemId, $name, $price);
-    }
-
-    private function addToCart(string $key, string $name, float $price): void
-    {
-        if (isset($this->cart[$key])) {
-            $this->cart[$key]['quantity']++;
-        } else {
-            $this->cart[$key] = ['name' => $name, 'price' => $price, 'quantity' => 1];
-        }
-    }
-
-    public function decrementCartLine(string $key): void
-    {
-        if (! isset($this->cart[$key])) {
-            return;
-        }
-
-        $this->cart[$key]['quantity']--;
-
-        if ($this->cart[$key]['quantity'] <= 0) {
-            unset($this->cart[$key]);
-        }
-    }
-
-    public function removeFromCart(string $key): void
-    {
-        unset($this->cart[$key]);
-    }
-
-    public function cartTotal(): float
-    {
-        return collect($this->cart)->sum(fn (array $i) => $i['price'] * $i['quantity']);
-    }
-
-    public function submitOrder(): void
+    /**
+     * The whole cart arrives here in one call, from Alpine — same
+     * client-supplied-price-is-never-trusted contract OrderSplitter
+     * already enforces for the POS cart.
+     */
+    public function submitOrder(array $cart): void
     {
         if (! $this->roomId) {
             Notification::make()->title('Select a room first')->warning()->send();
+
             return;
         }
 
-        if (empty($this->cart)) {
+        if (empty($cart)) {
             Notification::make()->title('Cart is empty')->warning()->send();
+
             return;
         }
 
         try {
-            $orders = (new RoomOrderService())->placeOrder($this->roomId, $this->cart, auth()->id());
+            $orders = (new RoomOrderService)->placeOrder($this->roomId, $cart, auth()->id());
 
             $this->dispatchTickets($orders);
 
-            $this->cart = [];
+            $this->dispatch('room-order-submitted');
 
             Notification::make()->title('Room order sent to kitchen/bar')->success()->send();
         } catch (\Exception $e) {

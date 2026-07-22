@@ -3,7 +3,6 @@
 use App\Filament\Pages\BarDisplay;
 use App\Filament\Pages\RoomOrder;
 use App\Models\Category;
-use App\Models\FolioLine;
 use App\Models\InventoryItem;
 use App\Models\Product;
 use App\Models\Room;
@@ -29,11 +28,11 @@ function seedRoomOrderFixture(): array
     $room = Room::create(['number' => '501', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
     $receptionist = User::factory()->create();
 
-    $booking = (new ReservationService())->createReservation([
-        'room_id' => $room->id, 'guest_name' => 'Room Order Guest', 'guest_phone' => '0804' . fake()->numerify('#######'),
+    $booking = (new ReservationService)->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Room Order Guest', 'guest_phone' => '0804'.fake()->numerify('#######'),
         'check_in' => now()->toDateString(), 'check_out' => now()->addDay()->toDateString(), 'deposit' => null,
     ], $receptionist->id);
-    $booking = (new BookingService())->checkIn($booking, $receptionist->id);
+    $booking = (new BookingService)->checkIn($booking, $receptionist->id);
 
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $beer = Product::create(['name' => 'Room Beer', 'price' => 800, 'category_id' => $category->id, 'is_active' => true]);
@@ -50,7 +49,7 @@ it('places a room order without a waiter shift, billing the folio but not touchi
     $stockBefore = (int) InventoryItem::where('product_id', $beer->id)->where('warehouse_id', 4)->value('quantity');
 
     $cart = [(string) $beer->id => ['name' => $beer->name, 'price' => 800, 'quantity' => 2]];
-    $orders = (new RoomOrderService())->placeOrder($room->id, $cart, $receptionist->id);
+    $orders = (new RoomOrderService)->placeOrder($room->id, $cart, $receptionist->id);
 
     expect($orders)->toHaveCount(1);
     $order = $orders[0];
@@ -78,7 +77,7 @@ it('deducts stock exactly once, at the moment the bar display marks the room ord
     $stockBefore = (int) InventoryItem::where('product_id', $beer->id)->where('warehouse_id', 4)->value('quantity');
 
     $cart = [(string) $beer->id => ['name' => $beer->name, 'price' => 800, 'quantity' => 3]];
-    $orders = (new RoomOrderService())->placeOrder($room->id, $cart, $receptionist->id);
+    $orders = (new RoomOrderService)->placeOrder($room->id, $cart, $receptionist->id);
     $order = $orders[0];
 
     $component = Livewire::actingAs($bartender)->test(BarDisplay::class);
@@ -93,7 +92,7 @@ it('rejects a room order for a room with no checked-in booking', function () {
     $room = Room::create(['number' => '502', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
     $receptionist = User::factory()->create();
 
-    expect(fn () => (new RoomOrderService())->placeOrder($room->id, ['1' => ['name' => 'x', 'price' => 100, 'quantity' => 1]], $receptionist->id))
+    expect(fn () => (new RoomOrderService)->placeOrder($room->id, ['1' => ['name' => 'x', 'price' => 100, 'quantity' => 1]], $receptionist->id))
         ->toThrow(Exception::class);
 });
 
@@ -103,7 +102,7 @@ it('still requires an active bartender shift for a room order routed to the bar'
 
     $cart = [(string) $beer->id => ['name' => $beer->name, 'price' => 800, 'quantity' => 1]];
 
-    expect(fn () => (new RoomOrderService())->placeOrder($room->id, $cart, $receptionist->id))->toThrow(Exception::class);
+    expect(fn () => (new RoomOrderService)->placeOrder($room->id, $cart, $receptionist->id))->toThrow(Exception::class);
 });
 
 it('shows "Room N" as the origin label for a room order instead of Takeaway', function () {
@@ -111,7 +110,7 @@ it('shows "Room N" as the origin label for a room order instead of Takeaway', fu
     Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
 
     $cart = [(string) $beer->id => ['name' => $beer->name, 'price' => 800, 'quantity' => 1]];
-    $order = (new RoomOrderService())->placeOrder($room->id, $cart, $receptionist->id)[0];
+    $order = (new RoomOrderService)->placeOrder($room->id, $cart, $receptionist->id)[0];
 
     expect($order->fresh()->origin_label)->toBe('Room 501');
 });
@@ -127,13 +126,11 @@ it('drives the room order screen end to end: pick a checked-in room, add items, 
     $component->call('selectRoom', $room->id);
     expect($component->get('bookingId'))->toBe($booking->id);
 
-    $component->call('addProductToCart', $beer->id, $beer->name, (float) $beer->price);
-    expect($component->get('cart'))->toHaveKey((string) $beer->id);
-
-    $component->call('submitOrder');
+    // Cart is Alpine-managed (client-side) now — the whole cart arrives
+    // in one call, same as pos.blade.php submits its own cart.
+    $component->call('submitOrder', [(string) $beer->id => ['name' => $beer->name, 'price' => (float) $beer->price, 'quantity' => 1]]);
 
     expect(\App\Models\Order::where('booking_id', $booking->id)->exists())->toBeTrue();
-    expect($component->get('cart'))->toBe([]);
 });
 
 it('refuses to select a room with no checked-in booking on the room order screen', function () {

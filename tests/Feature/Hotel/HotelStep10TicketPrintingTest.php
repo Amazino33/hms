@@ -24,11 +24,11 @@ it('dispatches a print-room-ticket event with room, order and item details after
     $room = Room::create(['number' => '1001', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
     $receptionist = User::factory()->create();
     $receptionist->assignRole(Role::firstOrCreate(['name' => 'receptionist']));
-    $booking = (new ReservationService())->createReservation([
-        'room_id' => $room->id, 'guest_name' => 'Ticket Guest', 'guest_phone' => '0815' . fake()->numerify('#######'),
+    $booking = (new ReservationService)->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Ticket Guest', 'guest_phone' => '0815'.fake()->numerify('#######'),
         'check_in' => now()->toDateString(), 'check_out' => now()->addDay()->toDateString(), 'deposit' => null,
     ], $receptionist->id);
-    (new BookingService())->checkIn($booking, $receptionist->id);
+    (new BookingService)->checkIn($booking, $receptionist->id);
 
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $beer = Product::create(['name' => 'Ticket Beer', 'price' => 900, 'category_id' => $category->id, 'is_active' => true]);
@@ -40,8 +40,7 @@ it('dispatches a print-room-ticket event with room, order and item details after
 
     $component = Livewire::actingAs($receptionist)->test(RoomOrder::class);
     $component->call('selectRoom', $room->id);
-    $component->call('addProductToCart', $beer->id, $beer->name, (float) $beer->price);
-    $component->call('submitOrder');
+    $component->call('submitOrder', [(string) $beer->id => ['name' => $beer->name, 'price' => (float) $beer->price, 'quantity' => 1]]);
 
     $component->assertDispatched('print-room-ticket', function (string $name, array $params) use ($room) {
         $data = $params[0];
@@ -58,11 +57,11 @@ it('dispatches one ticket per destination for a mixed-cart room order', function
     $room = Room::create(['number' => '1002', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
     $receptionist = User::factory()->create();
     $receptionist->assignRole(Role::firstOrCreate(['name' => 'receptionist']));
-    $booking = (new ReservationService())->createReservation([
-        'room_id' => $room->id, 'guest_name' => 'Mixed Ticket Guest', 'guest_phone' => '0816' . fake()->numerify('#######'),
+    $booking = (new ReservationService)->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Mixed Ticket Guest', 'guest_phone' => '0816'.fake()->numerify('#######'),
         'check_in' => now()->toDateString(), 'check_out' => now()->addDay()->toDateString(), 'deposit' => null,
     ], $receptionist->id);
-    (new BookingService())->checkIn($booking, $receptionist->id);
+    (new BookingService)->checkIn($booking, $receptionist->id);
 
     $drinkCategory = Category::create(['name' => 'Drinks', 'type' => 'drink']);
     $foodCategory = Category::create(['name' => 'Food', 'type' => 'food']);
@@ -80,9 +79,10 @@ it('dispatches one ticket per destination for a mixed-cart room order', function
 
     $component = Livewire::actingAs($receptionist)->test(RoomOrder::class);
     $component->call('selectRoom', $room->id);
-    $component->call('addProductToCart', $beer->id, $beer->name, (float) $beer->price);
-    $component->call('addProductToCart', $snack->id, $snack->name, (float) $snack->price);
-    $component->call('submitOrder');
+    $component->call('submitOrder', [
+        (string) $beer->id => ['name' => $beer->name, 'price' => (float) $beer->price, 'quantity' => 1],
+        (string) $snack->id => ['name' => $snack->name, 'price' => (float) $snack->price, 'quantity' => 1],
+    ]);
 
     // assertDispatched()'s callable form only ever inspects the FIRST
     // dispatch matching the event name, so with two same-named dispatches
