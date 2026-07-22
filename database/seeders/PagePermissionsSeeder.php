@@ -582,8 +582,15 @@ class PagePermissionsSeeder extends Seeder
             ],
 
             // Payroll Runs / Payroll Run Detail - compiling, deductions,
-            // sealing, void-and-reissue. Managers + Super Admin only, per
-            // the module's locked "who carries payroll" decision.
+            // sealing, void-and-reissue. Managers + Super Admin, per the
+            // module's locked "who carries payroll" decision — plus
+            // 'supervisor', a separate custom Spatie role that exists on
+            // at least one production deployment distinct from 'manager'
+            // (not part of this codebase's documented role list, but a
+            // real live role staff are assigned). Harmless to seed even on
+            // installs where 'supervisor' doesn't exist as a role — this
+            // table has no FK to roles, so the row simply never matches
+            // any user there.
             [
                 'page_class' => 'App\Filament\Pages\PayrollRuns',
                 'page_name' => 'Payroll Runs',
@@ -595,6 +602,11 @@ class PagePermissionsSeeder extends Seeder
                 'role_name' => 'manager',
             ],
             [
+                'page_class' => 'App\Filament\Pages\PayrollRuns',
+                'page_name' => 'Payroll Runs',
+                'role_name' => 'supervisor',
+            ],
+            [
                 'page_class' => 'App\Filament\Pages\PayrollRunDetail',
                 'page_name' => 'Payroll Run Detail',
                 'role_name' => 'super_admin',
@@ -603,6 +615,11 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\PayrollRunDetail',
                 'page_name' => 'Payroll Run Detail',
                 'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PayrollRunDetail',
+                'page_name' => 'Payroll Run Detail',
+                'role_name' => 'supervisor',
             ],
 
             // My Payslips - every role a payroll line is generated for.
@@ -620,6 +637,11 @@ class PagePermissionsSeeder extends Seeder
                 'page_class' => 'App\Filament\Pages\MyPayslips',
                 'page_name' => 'My Payslips',
                 'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'supervisor',
             ],
             [
                 'page_class' => 'App\Filament\Pages\MyPayslips',

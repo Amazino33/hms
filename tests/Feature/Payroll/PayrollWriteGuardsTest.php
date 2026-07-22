@@ -98,5 +98,5 @@ it('grants the ceo role no PagePermission entries at all for the admin payroll p
             ->sort()
             ->values()
             ->all()
-    )->toBe(['manager', 'super_admin']);
+    )->toBe(['manager', 'super_admin', 'supervisor']);
 });

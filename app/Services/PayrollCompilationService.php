@@ -29,18 +29,37 @@ class PayrollCompilationService
     /**
      * Roles a payroll line is generated for. Deliberately excludes
      * super_admin/ceo (they carry/oversee payroll, they don't receive a
-     * line from it) per the locked module decision.
+     * line from it) per the locked module decision. 'supervisor' is a
+     * separate Spatie role from 'manager' on this deployment (a custom
+     * role added directly in production, distinct from the codebase's
+     * documented role list) — supervisors are paid staff too, so they get
+     * a line the same as every other operational role.
      */
     private const PAYROLL_ROLES = [
-        'admin', 'chef', 'manager', 'waiter', 'bartender',
+        'admin', 'chef', 'manager', 'supervisor', 'waiter', 'bartender',
         'storekeeper', 'receptionist', 'porter', 'cashier',
     ];
 
+    /**
+     * Spatie's role() scope calls findByName() for every role given and
+     * throws RoleDoesNotExist if even one doesn't exist — regardless of
+     * whether any user holds it. Not every install has every role in
+     * PAYROLL_ROLES (e.g. 'supervisor' is a custom role added directly on
+     * one production deployment, not part of the standard seeded set), so
+     * this only ever queries against roles that actually exist here,
+     * rather than the full constant list.
+     */
     public function eligibleStaff(): Collection
     {
+        $existingRoles = \Spatie\Permission\Models\Role::whereIn('name', self::PAYROLL_ROLES)->pluck('name')->all();
+
+        if (empty($existingRoles)) {
+            return new Collection();
+        }
+
         return User::query()
             ->whereNull('left_at')
-            ->role(self::PAYROLL_ROLES)
+            ->role($existingRoles)
             ->orderBy('name')
             ->get();
     }
