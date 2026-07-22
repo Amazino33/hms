@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Company;
 use App\Services\PermissionService;
+use App\Services\SettingsService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -56,6 +57,10 @@ class ManageCompanySettings extends Page implements HasForms
             'maintenance_message'   => $this->company->maintenance_message,
             'maintenance_duration_minutes' => $this->company->maintenance_duration_minutes ?? 15,
             'maintenance_secret'    => $this->company->maintenance_secret,
+            'payroll_frequency'          => SettingsService::get('payroll_frequency', 'monthly'),
+            'payroll_period_start_day'   => SettingsService::get('payroll_period_start_day', '1'),
+            'payroll_payday_day'         => SettingsService::get('payroll_payday_day'),
+            'payroll_minimum_net'        => SettingsService::get('payroll_minimum_net', '20000'),
         ]);
     }
 
@@ -145,6 +150,45 @@ class ManageCompanySettings extends Page implements HasForms
                             ->helperText('Visiting yourdomain.com/<this> once lets that browser see the real site while everyone else sees the maintenance page. Changing this only takes effect the next time maintenance mode is turned on.')
                             ->maxLength(64),
                     ]),
+
+                Section::make('Payroll')
+                    ->description('Governs how the Payroll module compiles pay periods and enforces deduction limits. Changes here only affect runs drafted after saving — an already-drafted or sealed run keeps the settings it was drafted under.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Select::make('payroll_frequency')
+                            ->label('Pay frequency')
+                            ->options([
+                                'monthly' => 'Monthly',
+                            ])
+                            ->default('monthly')
+                            ->required()
+                            ->native(false)
+                            ->helperText('Only monthly all-staff runs are supported today.'),
+
+                        TextInput::make('payroll_period_start_day')
+                            ->label('Period start day of month')
+                            ->helperText('Day the pay period opens on, e.g. 1 for the 1st of the month.')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(28)
+                            ->default(1)
+                            ->required(),
+
+                        TextInput::make('payroll_payday_day')
+                            ->label('Informational payday (day of month)')
+                            ->helperText('Optional — shown on payslips as the expected payday, does not trigger anything automatically.')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(28),
+
+                        TextInput::make('payroll_minimum_net')
+                            ->label('Minimum net pay floor (₦)')
+                            ->helperText('A deduction can never push a staff member\'s net pay below this amount.')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(20000)
+                            ->required(),
+                    ]),
             ]);
     }
 
@@ -152,10 +196,28 @@ class ManageCompanySettings extends Page implements HasForms
     {
         $data = $this->form->getState();
 
+        $payrollKeys = [
+            'payroll_frequency',
+            'payroll_period_start_day',
+            'payroll_payday_day',
+            'payroll_minimum_net',
+        ];
+
+        $payrollData = array_intersect_key($data, array_flip($payrollKeys));
+        $companyData = array_diff_key($data, array_flip($payrollKeys));
+
         Company::updateOrCreate(
             ['id' => 1],
-            $data
+            $companyData
         );
+
+        foreach ($payrollData as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            SettingsService::set($key, (string) $value, 'string', auth()->id());
+        }
 
         Notification::make()
             ->title('Company settings saved successfully.')

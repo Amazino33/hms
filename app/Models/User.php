@@ -312,6 +312,22 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(\App\Models\StaffDebt::class);
     }
 
+    /**
+     * Effective-dated base salary history for this user.
+     */
+    public function salaries(): HasMany
+    {
+        return $this->hasMany(\App\Models\StaffSalary::class);
+    }
+
+    /**
+     * Payroll lines (per-run payslips) for this user.
+     */
+    public function payrollLines(): HasMany
+    {
+        return $this->hasMany(\App\Models\PayrollLine::class);
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
         // Allow super admins unconditionally, on every panel.

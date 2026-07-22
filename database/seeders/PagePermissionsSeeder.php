@@ -580,6 +580,82 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'Cash Drops',
                 'role_name' => 'cashier',
             ],
+
+            // Payroll Runs / Payroll Run Detail - compiling, deductions,
+            // sealing, void-and-reissue. Managers + Super Admin only, per
+            // the module's locked "who carries payroll" decision.
+            [
+                'page_class' => 'App\Filament\Pages\PayrollRuns',
+                'page_name' => 'Payroll Runs',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PayrollRuns',
+                'page_name' => 'Payroll Runs',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PayrollRunDetail',
+                'page_name' => 'Payroll Run Detail',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\PayrollRunDetail',
+                'page_name' => 'Payroll Run Detail',
+                'role_name' => 'manager',
+            ],
+
+            // My Payslips - every role a payroll line is generated for.
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'chef',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'waiter',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'bartender',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'storekeeper',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'receptionist',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'porter',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\MyPayslips',
+                'page_name' => 'My Payslips',
+                'role_name' => 'cashier',
+            ],
         ];
 
         foreach ($permissions as $permission) {

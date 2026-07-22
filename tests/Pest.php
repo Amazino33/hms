@@ -47,6 +47,21 @@ function something()
 }
 
 /**
+ * Spatie's role() query scope calls findByName() for every role in the
+ * list and throws RoleDoesNotExist if even one is missing — regardless of
+ * whether any user actually holds it. PayrollCompilationService::
+ * eligibleStaff() filters on all payroll-eligible roles at once, so every
+ * payroll test needs every one of them to exist, not just the roles the
+ * test's own users hold.
+ */
+function seedPayrollRoles(): void
+{
+    foreach (['admin', 'chef', 'manager', 'waiter', 'bartender', 'storekeeper', 'receptionist', 'porter', 'cashier'] as $role) {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => $role]);
+    }
+}
+
+/**
  * Seals a full bar handover end to end (open -> count -> declare -> bind ->
  * review -> seal) and returns every actor/model a discrepancy/snapshot test
  * needs. Shared across the handover-discrepancy test files rather than
