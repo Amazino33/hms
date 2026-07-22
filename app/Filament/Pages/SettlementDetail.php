@@ -3,8 +3,11 @@
 namespace App\Filament\Pages;
 
 use App\Models\Shift;
+use App\Models\ShiftChannelConfirmation;
+use App\Models\StaffDebt;
 use App\Services\CashierSettlementService;
 use App\Services\PermissionService;
+use App\Services\ShiftAccountingService;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -22,6 +25,11 @@ use Illuminate\Http\Request;
  * AFTER cash_confirmed_at is already set on the shift. There is no
  * "reveal" step to forget — the data simply isn't loaded before that
  * point.
+ *
+ * A waiter shift that served both bar and kitchen confirms cash/POS
+ * separately per destination (CashierSettlementService::usesChannelSplit())
+ * — everyone else (receptionist always, or a waiter who only served one
+ * destination) still sees the original single combined Cash/POS panel.
  */
 class SettlementDetail extends Page
 {
@@ -44,6 +52,20 @@ class SettlementDetail extends Page
 
     public ?float $posMachineAmount = null;
 
+    public ?float $barCashAmount = null;
+
+    public ?float $barPosAmount = null;
+
+    public ?float $kitchenCashAmount = null;
+
+    public ?float $kitchenPosAmount = null;
+
+    public bool $showDebtForm = false;
+
+    public ?float $debtAmount = null;
+
+    public string $debtNotes = '';
+
     public function mount(Request $request)
     {
         $shiftId = $request->query('shift');
@@ -57,7 +79,32 @@ class SettlementDetail extends Page
 
     public function shift(): ?Shift
     {
-        return $this->shiftId ? Shift::with(['user', 'cashConfirmedBy', 'posConfirmedBy'])->find($this->shiftId) : null;
+        return $this->shiftId ? Shift::with(['user', 'cashConfirmedBy', 'posConfirmedBy', 'channelConfirmations.confirmedBy'])->find($this->shiftId) : null;
+    }
+
+    public function usesChannelSplit(): bool
+    {
+        return (new CashierSettlementService)->usesChannelSplit($this->shift());
+    }
+
+    public function activeDestinations(): array
+    {
+        return (new CashierSettlementService)->activeDestinations($this->shift());
+    }
+
+    public function channelConfirmation(string $destination, string $channel): ?ShiftChannelConfirmation
+    {
+        return $this->shift()->channelConfirmations
+            ->first(fn (ShiftChannelConfirmation $c) => $c->destination === $destination && $c->channel === $channel);
+    }
+
+    public function expectedForDestination(string $destination, string $channel): float
+    {
+        $accounting = new ShiftAccountingService;
+
+        return $channel === 'cash'
+            ? $accounting->expectedCashForDestination($this->shift(), $destination)
+            : $accounting->expectedPosForDestination($this->shift(), $destination);
     }
 
     /**
@@ -71,6 +118,56 @@ class SettlementDetail extends Page
         return $this->shiftId
             ? \App\Models\OwnerTakeNote::where('shift_id', $this->shiftId)->latest()->get()
             : collect();
+    }
+
+    public function staffDebts()
+    {
+        $shift = $this->shift();
+
+        return $shift ? StaffDebt::where('user_id', $shift->user_id)->where('status', '!=', 'settled')->latest()->get() : collect();
+    }
+
+    public function openDebtForm(): void
+    {
+        $this->showDebtForm = true;
+        $this->debtAmount = null;
+        $this->debtNotes = '';
+    }
+
+    public function cancelDebtForm(): void
+    {
+        $this->showDebtForm = false;
+    }
+
+    public function recordDebt(): void
+    {
+        $shift = $this->shift();
+
+        if (! $shift) {
+            return;
+        }
+
+        if (! $this->debtAmount || $this->debtAmount <= 0) {
+            Notification::make()->title('Enter an amount greater than zero')->danger()->persistent()->send();
+
+            return;
+        }
+
+        StaffDebt::create([
+            'user_id' => $shift->user_id,
+            'shift_id' => $shift->id,
+            'amount' => $this->debtAmount,
+            'reason' => 'manual',
+            'status' => 'open',
+            'created_by' => auth()->id(),
+            'notes' => $this->debtNotes ?: null,
+        ]);
+
+        $this->showDebtForm = false;
+        $this->debtAmount = null;
+        $this->debtNotes = '';
+
+        Notification::make()->title('Debt recorded')->success()->send();
     }
 
     public function expectedCash(): float
@@ -121,6 +218,20 @@ class SettlementDetail extends Page
             Notification::make()->title('POS total confirmed')->success()->send();
         } catch (\Exception $e) {
             Notification::make()->title('Could not confirm POS')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
+    public function confirmChannel(string $destination, string $channel): void
+    {
+        $property = $destination.ucfirst($channel).'Amount'; // e.g. barCashAmount
+
+        try {
+            (new CashierSettlementService)->confirmChannelForDestination($this->shift(), $destination, $channel, (float) $this->{$property}, auth()->id());
+
+            $this->{$property} = null;
+            Notification::make()->title(ucfirst($destination).' '.($channel === 'cash' ? 'cash' : 'POS').' confirmed')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not confirm')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

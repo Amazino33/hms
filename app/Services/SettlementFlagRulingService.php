@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\OrderPayment;
 use App\Models\Shift;
+use App\Models\ShiftChannelConfirmation;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -47,12 +48,12 @@ class SettlementFlagRulingService
                 ->performedOn($payment)
                 ->causedBy(User::find($supervisorId))
                 ->withProperties(['ruling' => $ruling, 'note' => $note])
-                ->log('Transfer flag ruled: ' . $ruling);
+                ->log('Transfer flag ruled: '.$ruling);
 
             if ($payment->shift_id) {
                 $shift = Shift::find($payment->shift_id);
                 if ($shift && $shift->status === 'awaiting_cashier') {
-                    (new CashierSettlementService())->finalizeIfComplete($shift, $supervisorId);
+                    (new CashierSettlementService)->finalizeIfComplete($shift, $supervisorId);
                 }
             }
 
@@ -87,9 +88,53 @@ class SettlementFlagRulingService
                 ->performedOn($shift)
                 ->causedBy(User::find($supervisorId))
                 ->withProperties(['ruling' => $ruling, 'note' => $note])
-                ->log('POS-machine dispute ruled: ' . $ruling);
+                ->log('POS-machine dispute ruled: '.$ruling);
 
-            return (new CashierSettlementService())->finalizeIfComplete($shift->fresh(), $supervisorId);
+            return (new CashierSettlementService)->finalizeIfComplete($shift->fresh(), $supervisorId);
+        });
+    }
+
+    /**
+     * The per-destination equivalent of rulePosMachine() above, for a
+     * waiter shift using the bar/kitchen split settlement — a flagged
+     * bar-POS or kitchen-POS mismatch, ruled independently of the other
+     * destination's own channel confirmations.
+     */
+    public function ruleChannelConfirmation(ShiftChannelConfirmation $confirmation, string $ruling, string $note, int $supervisorId): ShiftChannelConfirmation
+    {
+        $this->assertValidRuling($ruling);
+
+        return DB::transaction(function () use ($confirmation, $ruling, $note, $supervisorId) {
+            $confirmation = ShiftChannelConfirmation::where('id', $confirmation->id)->lockForUpdate()->firstOrFail();
+
+            if (! $confirmation->flagged) {
+                throw new \Exception('This channel confirmation has no open dispute.');
+            }
+
+            if ($confirmation->ruling !== null) {
+                throw new \Exception('This dispute has already been ruled on.');
+            }
+
+            $confirmation->update([
+                'ruling' => $ruling,
+                'ruling_note' => $note,
+                'ruled_by' => $supervisorId,
+                'ruled_at' => now(),
+                'flagged' => false,
+            ]);
+
+            activity('shift_channel_confirmation')
+                ->performedOn($confirmation)
+                ->causedBy(User::find($supervisorId))
+                ->withProperties(['ruling' => $ruling, 'note' => $note])
+                ->log('Channel confirmation dispute ruled: '.$ruling);
+
+            $shift = Shift::find($confirmation->shift_id);
+            if ($shift && $shift->status === 'awaiting_cashier') {
+                (new CashierSettlementService)->finalizeIfComplete($shift, $supervisorId);
+            }
+
+            return $confirmation->fresh();
         });
     }
 

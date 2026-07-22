@@ -40,6 +40,21 @@
                 </div>
             @empty
             @endforelse
+
+            @forelse($flaggedChannels as $confirmation)
+                <div class="flex justify-between items-center border-t border-gray-100 dark:border-gray-700 py-2">
+                    <div>
+                        <div class="text-sm font-bold text-gray-900 dark:text-white">
+                            {{ ucfirst($confirmation->destination) }} POS mismatch — {{ $confirmation->shift?->user?->name }}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Counted: ₦{{ number_format($confirmation->confirmed_amount, 2) }} · Expected: ₦{{ number_format($confirmation->expected_amount, 2) }}
+                        </div>
+                    </div>
+                    <button type="button" wire:click="openChannelRuling({{ $confirmation->id }})" class="px-3 py-1 rounded-lg bg-primary-600 text-white font-bold text-xs">Rule</button>
+                </div>
+            @empty
+            @endforelse
         </div>
 
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
@@ -55,7 +70,7 @@
         </div>
     </div>
 
-    @if($rulingTransferId || $rulingShiftId)
+    @if($rulingTransferId || $rulingShiftId || $rulingChannelConfirmationId)
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" wire:click.self="closeRuling">
             <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md space-y-4">
                 <h3 class="font-bold text-lg text-gray-900 dark:text-white">Rule on this flag</h3>
@@ -66,10 +81,14 @@
                         <button type="button" wire:click="ruleTransfer('late_verify')" class="px-3 py-2 rounded-lg bg-emerald-600 text-white font-bold text-xs">Verified Late</button>
                         <button type="button" wire:click="ruleTransfer('charge')" class="px-3 py-2 rounded-lg bg-red-600 text-white font-bold text-xs">Charge to Staff</button>
                         <button type="button" wire:click="ruleTransfer('void')" class="px-3 py-2 rounded-lg bg-gray-500 text-white font-bold text-xs">Void</button>
-                    @else
+                    @elseif($rulingShiftId)
                         <button type="button" wire:click="rulePos('late_verify')" class="px-3 py-2 rounded-lg bg-emerald-600 text-white font-bold text-xs">Verified Late</button>
                         <button type="button" wire:click="rulePos('charge')" class="px-3 py-2 rounded-lg bg-red-600 text-white font-bold text-xs">Charge to Staff</button>
                         <button type="button" wire:click="rulePos('void')" class="px-3 py-2 rounded-lg bg-gray-500 text-white font-bold text-xs">Void</button>
+                    @else
+                        <button type="button" wire:click="ruleChannel('late_verify')" class="px-3 py-2 rounded-lg bg-emerald-600 text-white font-bold text-xs">Verified Late</button>
+                        <button type="button" wire:click="ruleChannel('charge')" class="px-3 py-2 rounded-lg bg-red-600 text-white font-bold text-xs">Charge to Staff</button>
+                        <button type="button" wire:click="ruleChannel('void')" class="px-3 py-2 rounded-lg bg-gray-500 text-white font-bold text-xs">Void</button>
                     @endif
                 </div>
                 <button type="button" wire:click="closeRuling" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-bold">

@@ -6,6 +6,7 @@ use App\Models\CashDrop;
 use App\Models\CashierSession;
 use App\Models\OrderPayment;
 use App\Models\Shift;
+use App\Models\ShiftChannelConfirmation;
 use App\Services\CashierSessionService;
 use App\Services\PermissionService;
 use App\Services\SettlementFlagRulingService;
@@ -43,6 +44,8 @@ class SupervisorDashboard extends Page
 
     public ?int $rulingShiftId = null;
 
+    public ?int $rulingChannelConfirmationId = null;
+
     public string $rulingNote = '';
 
     public function getViewData(): array
@@ -50,6 +53,7 @@ class SupervisorDashboard extends Page
         return [
             'flaggedTransfers' => OrderPayment::where('flagged', true)->whereNull('ruling')->with(['order', 'user', 'flaggedBy'])->get(),
             'flaggedPos' => Shift::where('pos_flagged', true)->whereNull('pos_ruling')->with('user')->get(),
+            'flaggedChannels' => ShiftChannelConfirmation::where('flagged', true)->whereNull('ruling')->with('shift.user')->get(),
             'pendingCashierSessions' => CashierSession::where('status', 'pending_supervisor')->with('user')->get(),
             'unverifiedTransferCount' => OrderPayment::where('method', 'transfer')->where('verified', false)->whereNull('ruling')->count(),
             'pendingDropCount' => CashDrop::where('status', 'pending')->count(),
@@ -61,6 +65,7 @@ class SupervisorDashboard extends Page
     {
         $this->rulingTransferId = $paymentId;
         $this->rulingShiftId = null;
+        $this->rulingChannelConfirmationId = null;
         $this->rulingNote = '';
     }
 
@@ -68,6 +73,15 @@ class SupervisorDashboard extends Page
     {
         $this->rulingShiftId = $shiftId;
         $this->rulingTransferId = null;
+        $this->rulingChannelConfirmationId = null;
+        $this->rulingNote = '';
+    }
+
+    public function openChannelRuling(int $confirmationId): void
+    {
+        $this->rulingChannelConfirmationId = $confirmationId;
+        $this->rulingTransferId = null;
+        $this->rulingShiftId = null;
         $this->rulingNote = '';
     }
 
@@ -75,18 +89,20 @@ class SupervisorDashboard extends Page
     {
         $this->rulingTransferId = null;
         $this->rulingShiftId = null;
+        $this->rulingChannelConfirmationId = null;
     }
 
     public function ruleTransfer(string $ruling): void
     {
         if (trim($this->rulingNote) === '') {
             Notification::make()->title('A note is required')->warning()->send();
+
             return;
         }
 
         try {
             $payment = OrderPayment::findOrFail($this->rulingTransferId);
-            (new SettlementFlagRulingService())->ruleTransfer($payment, $ruling, $this->rulingNote, auth()->id());
+            (new SettlementFlagRulingService)->ruleTransfer($payment, $ruling, $this->rulingNote, auth()->id());
 
             $this->closeRuling();
             Notification::make()->title('Ruling recorded')->success()->send();
@@ -99,12 +115,32 @@ class SupervisorDashboard extends Page
     {
         if (trim($this->rulingNote) === '') {
             Notification::make()->title('A note is required')->warning()->send();
+
             return;
         }
 
         try {
             $shift = Shift::findOrFail($this->rulingShiftId);
-            (new SettlementFlagRulingService())->rulePosMachine($shift, $ruling, $this->rulingNote, auth()->id());
+            (new SettlementFlagRulingService)->rulePosMachine($shift, $ruling, $this->rulingNote, auth()->id());
+
+            $this->closeRuling();
+            Notification::make()->title('Ruling recorded')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not rule')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
+    public function ruleChannel(string $ruling): void
+    {
+        if (trim($this->rulingNote) === '') {
+            Notification::make()->title('A note is required')->warning()->send();
+
+            return;
+        }
+
+        try {
+            $confirmation = ShiftChannelConfirmation::findOrFail($this->rulingChannelConfirmationId);
+            (new SettlementFlagRulingService)->ruleChannelConfirmation($confirmation, $ruling, $this->rulingNote, auth()->id());
 
             $this->closeRuling();
             Notification::make()->title('Ruling recorded')->success()->send();
@@ -127,7 +163,7 @@ class SupervisorDashboard extends Page
     {
         try {
             $session = CashierSession::findOrFail($this->closingSessionId);
-            (new CashierSessionService())->confirmCloseBySupervisor($session, (float) $this->supervisorCountedCash, auth()->id());
+            (new CashierSessionService)->confirmCloseBySupervisor($session, (float) $this->supervisorCountedCash, auth()->id());
 
             $this->closingSessionId = null;
             $this->supervisorCountedCash = null;

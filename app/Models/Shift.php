@@ -122,6 +122,11 @@ class Shift extends Model
         return $this->hasMany(OwnerTakeNote::class);
     }
 
+    public function channelConfirmations(): HasMany
+    {
+        return $this->hasMany(ShiftChannelConfirmation::class);
+    }
+
     public function debts(): HasMany
     {
         return $this->hasMany(StaffDebt::class);
@@ -158,6 +163,17 @@ class Shift extends Model
     }
 
     /**
+     * A waiter shift's per-destination equivalent of pos_flagged — a bar
+     * or kitchen POS mismatch awaiting supervisor ruling. Receptionist
+     * shifts never have channelConfirmations rows at all, so this is
+     * trivially false for them.
+     */
+    public function hasOpenChannelFlag(): bool
+    {
+        return $this->channelConfirmations()->where('flagged', true)->whereNull('ruling')->exists();
+    }
+
+    /**
      * The "parallel blocking condition" from the settlement spec — a
      * flagged POS-machine dispute or any unresolved flagged transfer for
      * this shift, either of which blocks confirmation and the owning
@@ -165,7 +181,7 @@ class Shift extends Model
      */
     public function hasOpenFlag(): bool
     {
-        return $this->pos_flagged || $this->hasOpenTransferFlag();
+        return $this->pos_flagged || $this->hasOpenTransferFlag() || $this->hasOpenChannelFlag();
     }
 
     /**

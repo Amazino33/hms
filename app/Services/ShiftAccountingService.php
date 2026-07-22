@@ -112,6 +112,83 @@ class ShiftAccountingService
     }
 
     /**
+     * Which of bar/kitchen this waiter actually served orders for during
+     * this shift — the settlement page only shows (and finalizeIfComplete
+     * only requires confirmation for) a destination that appears here.
+     */
+    public function destinationsWithActivity(Shift $shift): array
+    {
+        return Order::where('shift_id', $shift->id)
+            ->where('status', '!=', 'cancelled')
+            ->whereIn('destination', ['bar', 'kitchen'])
+            ->distinct()
+            ->pluck('destination')
+            ->all();
+    }
+
+    /**
+     * Cash raw-collected per destination, with the shift-wide confirmed
+     * cash-drop total allocated proportionally across destinations by
+     * their share of raw cash — drops aren't recorded per destination
+     * (physical cash is fungible, there's no "this note came from a
+     * kitchen sale"), so proportional split is the only allocation that
+     * isn't arbitrary, and it exactly preserves the invariant that
+     * bar + kitchen expected cash sums back to the shift-wide total.
+     */
+    public function expectedCashForDestination(Shift $shift, string $destination): float
+    {
+        $rawByDestination = $this->rawAmountByDestination($shift, 'cash');
+        $totalRaw = array_sum($rawByDestination);
+        $destinationRaw = $rawByDestination[$destination] ?? 0.0;
+
+        if ($totalRaw <= 0.0) {
+            return 0.0;
+        }
+
+        $dropsShare = $this->confirmedDropsTotal($shift) * ($destinationRaw / $totalRaw);
+
+        return max(0, $destinationRaw - $dropsShare);
+    }
+
+    /**
+     * The physical POS terminal's expected batch total for just this
+     * destination — same scope as expectedPosMachineTotal() (excludes
+     * transfers), just filtered to one destination's orders.
+     */
+    public function expectedPosForDestination(Shift $shift, string $destination): float
+    {
+        return $this->rawAmountByDestination($shift, 'pos')[$destination] ?? 0.0;
+    }
+
+    /**
+     * @return array<string, float> keyed by 'bar'/'kitchen'
+     */
+    private function rawAmountByDestination(Shift $shift, string $channel): array
+    {
+        $totals = ['bar' => 0.0, 'kitchen' => 0.0];
+
+        foreach ($this->shiftPayments($shift) as $payment) {
+            $destination = $payment->order->destination ?? null;
+
+            if (! isset($totals[$destination])) {
+                continue;
+            }
+
+            $amount = match (true) {
+                $channel === 'cash' && $payment->method === 'cash' => (float) $payment->amount,
+                $channel === 'cash' && $payment->method === 'split' => (float) ($payment->order->paid_cash ?? 0),
+                $channel === 'pos' && $payment->method === 'pos' => (float) $payment->amount,
+                $channel === 'pos' && $payment->method === 'split' => (float) ($payment->order->paid_pos ?? 0),
+                default => 0.0,
+            };
+
+            $totals[$destination] += $amount;
+        }
+
+        return $totals;
+    }
+
+    /**
      * Orders created during this shift that still carry an outstanding
      * balance — i.e. money a guest owes that hasn't been collected yet.
      * Cancelled/returned orders are excluded; a fully-paid order can never
