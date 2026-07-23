@@ -4,10 +4,13 @@ namespace App\Filament\Ceo\Resources\Procurements;
 
 use App\Filament\Ceo\Concerns\CeoReadOnlyResource;
 use App\Filament\Ceo\Resources\Procurements\Pages\ListProcurements;
+use App\Filament\Ceo\Resources\Procurements\Pages\ViewProcurement;
+use App\Filament\Ceo\Resources\Procurements\Schemas\ProcurementInfolist;
 use App\Models\Procurement;
 use BackedEnum;
 use UnitEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -36,8 +39,16 @@ class ProcurementResource extends Resource
             ->paginated([25, 50, 100]);
     }
 
+    public static function infolist(Schema $schema): Schema
+    {
+        return ProcurementInfolist::configure($schema);
+    }
+
     public static function getPages(): array
     {
-        return ['index' => ListProcurements::route('/')];
+        return [
+            'index' => ListProcurements::route('/'),
+            'view' => ViewProcurement::route('/{record}'),
+        ];
     }
 }
