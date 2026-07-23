@@ -362,6 +362,27 @@ class PagePermissionsSeeder extends Seeder
                 'role_name' => 'manager',
             ],
 
+            // Product History - the forensic per-product movement ledger
+            // (transactions, count/stocktake history, stock adjustments).
+            // Managers, Admins, Super Admin only — deliberately excludes
+            // storekeeper, since this is the audit trail that watches
+            // storekeeper activity, not a tool for them to check themselves.
+            [
+                'page_class' => 'App\Filament\Pages\ProductHistory',
+                'page_name' => 'Product History',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ProductHistory',
+                'page_name' => 'Product History',
+                'role_name' => 'admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\ProductHistory',
+                'page_name' => 'Product History',
+                'role_name' => 'manager',
+            ],
+
             // Manage Units - Managers, Admins, Super Admin
             [
                 'page_class' => 'App\Filament\Pages\ManageUnits',

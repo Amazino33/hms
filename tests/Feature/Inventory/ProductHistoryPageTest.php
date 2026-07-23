@@ -65,3 +65,19 @@ it('shows an empty-state message instead of erroring when the product has no his
         ->assertSee('Brand New Item')
         ->assertSee('No inventory rows for this product at any warehouse.');
 });
+
+it('lets a manager reach Product History once the seeder grants it, and blocks a storekeeper', function () {
+    $this->seed(\Database\Seeders\PagePermissionsSeeder::class);
+
+    $manager = User::factory()->create();
+    $manager->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'manager']));
+
+    $storekeeper = User::factory()->create();
+    $storekeeper->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'storekeeper']));
+
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $product = Product::create(['name' => 'Big Legend', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+
+    $this->actingAs($manager)->get("/admin/product-history?product_id={$product->id}")->assertSuccessful();
+    $this->actingAs($storekeeper)->get("/admin/product-history?product_id={$product->id}")->assertForbidden();
+});
