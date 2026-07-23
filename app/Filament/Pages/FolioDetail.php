@@ -34,6 +34,10 @@ class FolioDetail extends Page
 
     public ?float $incidentalAmount = null;
 
+    public ?float $discountAmount = null;
+
+    public string $discountReason = '';
+
     public ?float $paymentAmount = null;
 
     public string $paymentMethod = 'cash';
@@ -83,7 +87,7 @@ class FolioDetail extends Page
         try {
             $folio = $this->booking->folio ?? $this->booking->folio()->create();
 
-            (new FolioService())->postIncidental(
+            (new FolioService)->postIncidental(
                 $folio,
                 $this->incidentalDescription,
                 (float) $this->incidentalAmount,
@@ -101,12 +105,34 @@ class FolioDetail extends Page
         }
     }
 
+    public function applyDiscount(): void
+    {
+        try {
+            $folio = $this->booking->folio ?? $this->booking->folio()->create();
+
+            (new FolioService)->applyDiscount(
+                $folio,
+                (float) $this->discountAmount,
+                $this->discountReason,
+                auth()->id(),
+            );
+
+            $this->discountAmount = null;
+            $this->discountReason = '';
+            $this->loadBooking($this->booking->id);
+
+            Notification::make()->title('Discount applied')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not apply discount')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
     public function recordPayment(): void
     {
         try {
             $folio = $this->booking->folio ?? $this->booking->folio()->create();
 
-            (new FolioService())->recordPayment(
+            (new FolioService)->recordPayment(
                 $folio,
                 (float) $this->paymentAmount,
                 $this->paymentMethod,
@@ -127,7 +153,7 @@ class FolioDetail extends Page
     public function checkIn(): void
     {
         try {
-            (new BookingService())->checkIn($this->booking, auth()->id());
+            (new BookingService)->checkIn($this->booking, auth()->id());
 
             $this->loadBooking($this->booking->id);
 
@@ -140,7 +166,7 @@ class FolioDetail extends Page
     public function checkOut(): void
     {
         try {
-            (new BookingService())->checkOut($this->booking, auth()->id());
+            (new BookingService)->checkOut($this->booking, auth()->id());
 
             $this->loadBooking($this->booking->id);
 

@@ -34,6 +34,43 @@ class FolioService
         ]);
     }
 
+    /**
+     * Capped against the room charge specifically, not the whole balance —
+     * an incidental (room-order food/drinks etc.) is never discounted this
+     * way. Capped against what's LEFT of the room charge (gross room-charge
+     * total minus every discount already applied), not just the gross
+     * figure, so two discounts can never together exceed the room charge
+     * they're both eating into.
+     */
+    public function applyDiscount(Folio $folio, float $amount, string $reason, int $userId): FolioLine
+    {
+        $this->assertNotSealed($folio);
+
+        if ($amount <= 0) {
+            throw new \Exception('Discount amount must be greater than zero.');
+        }
+
+        if (trim($reason) === '') {
+            throw new \Exception('A reason is required to apply a discount.');
+        }
+
+        $roomChargeTotal = (float) $folio->lines()->where('type', 'room_charge')->sum('amount');
+        $alreadyDiscounted = abs((float) $folio->lines()->where('type', 'discount')->sum('amount'));
+        $remainingDiscountable = $roomChargeTotal - $alreadyDiscounted;
+
+        if ($amount > $remainingDiscountable + 0.01) {
+            throw new \Exception('This discount would exceed the room charge — only ₦'.number_format(max(0, $remainingDiscountable), 2).' is left to discount.');
+        }
+
+        return FolioLine::create([
+            'folio_id' => $folio->id,
+            'type' => 'discount',
+            'amount' => -$amount,
+            'description' => 'Discount: '.$reason,
+            'created_by' => $userId,
+        ]);
+    }
+
     public function recordPayment(Folio $folio, float $amount, string $method, ?string $reference, int $userId): FolioLine
     {
         $this->assertNotSealed($folio);
@@ -50,7 +87,7 @@ class FolioService
             'folio_id' => $folio->id,
             'type' => 'payment',
             'amount' => -$amount,
-            'description' => 'Payment received (' . str_replace('_', ' ', $method) . ')',
+            'description' => 'Payment received ('.str_replace('_', ' ', $method).')',
             'created_by' => $userId,
             // Attributed to whoever is on shift right now (any type — a
             // manager covering the desk still needs this counted toward
@@ -97,7 +134,7 @@ class FolioService
                 'folio_id' => $line->folio_id,
                 'type' => 'adjustment',
                 'amount' => abs((float) $line->amount),
-                'description' => 'Transfer payment not received — reversing: ' . $reason,
+                'description' => 'Transfer payment not received — reversing: '.$reason,
                 'created_by' => $managerId,
             ]);
 
@@ -110,7 +147,7 @@ class FolioService
                 'verified' => true,
                 'verified_by' => $managerId,
                 'verified_at' => now(),
-                'reference' => 'Rejected: ' . $reason,
+                'reference' => 'Rejected: '.$reason,
             ]);
 
             activity('folio_line')

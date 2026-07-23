@@ -165,6 +165,21 @@
                         Record payment
                     </button>
                 </div>
+
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                    <h3 class="font-bold text-gray-900 dark:text-white">Apply discount</h3>
+                    <p class="text-xs text-gray-500">Only reduces the room charge — never an incidental (room-order food/drinks etc.).</p>
+
+                    <input type="text" wire:model="discountReason" placeholder="Reason (required)"
+                        class="w-full px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                    <div x-data="{ discountAmount: @entangle('discountAmount') }">
+                        <x-mobile.numeric-pad model="discountAmount" :currency="true" label="Amount" />
+                    </div>
+
+                    <button type="button" wire:click="applyDiscount" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold touch-manipulation">
+                        Apply discount
+                    </button>
+                </div>
             </div>
             @endif
         </div>
