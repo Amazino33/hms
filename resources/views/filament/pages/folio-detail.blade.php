@@ -5,7 +5,7 @@
                 <div>
                     <div class="font-bold text-lg text-gray-900 dark:text-white">Room {{ $booking->room->number }} — {{ $booking->guest->name }}</div>
                     <div class="text-sm text-gray-500 dark:text-gray-400">
-                        {{ $booking->check_in->format('M j, Y') }} &rarr; {{ $booking->check_out->format('M j, Y') }}
+                        {{ $booking->check_in->format('M j, Y') }} &rarr; {{ $booking->check_out->format('M j, Y') }} <span class="text-gray-400 dark:text-gray-500">(12:00 PM)</span>
                         · Status: <span class="font-semibold">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
                     </div>
                 </div>
@@ -152,7 +152,7 @@
                     </div>
 
                     <div x-data="{ paymentMethod: @entangle('paymentMethod') }">
-                        <x-mobile.chip-select model="paymentMethod" :options="['cash' => 'Cash', 'pos_terminal' => 'POS Terminal', 'transfer' => 'Bank Transfer']" />
+                        <x-mobile.chip-select model="paymentMethod" :options="['pos_terminal' => 'POS Terminal', 'cash' => 'Cash', 'transfer' => 'Bank Transfer']" />
                     </div>
 
                     @if($paymentMethod === 'transfer')

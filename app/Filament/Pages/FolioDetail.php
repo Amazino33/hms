@@ -40,7 +40,10 @@ class FolioDetail extends Page
 
     public ?float $paymentAmount = null;
 
-    public string $paymentMethod = 'cash';
+    // Most room-charge payments come through POS terminal, not cash — this
+    // default (and the chip-select's left-to-right order in the blade view)
+    // avoids receptionists leaving the pre-selected chip on the wrong method.
+    public string $paymentMethod = 'pos_terminal';
 
     public string $paymentReference = '';
 

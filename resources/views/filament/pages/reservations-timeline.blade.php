@@ -168,7 +168,7 @@
                     </h3>
 
                     <div class="text-sm space-y-1 text-gray-700 dark:text-gray-300">
-                        <div>{{ $booking->check_in->format('M j, Y') }} &rarr; {{ $booking->check_out->format('M j, Y') }}</div>
+                        <div>{{ $booking->check_in->format('M j, Y') }} &rarr; {{ $booking->check_out->format('M j, Y') }} <span class="text-gray-400 dark:text-gray-500">(12:00 PM)</span></div>
                         <div>Status: <span class="font-bold">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span></div>
                         <div>Folio balance: <span class="font-bold">₦{{ number_format($booking->folio?->balance() ?? 0, 2) }}</span></div>
                     </div>
