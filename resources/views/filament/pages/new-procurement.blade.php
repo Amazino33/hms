@@ -411,8 +411,8 @@
                 @if ($recentProcurements->count() > 0)
                     <div class="space-y-3">
                         @foreach ($recentProcurements as $procurement)
-                            <div class="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700">
-                                <div class="flex items-center justify-between">
+                            <div x-data="{ open: false }" class="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                <button type="button" @click="open = !open" class="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
                                     <div>
                                         <p class="font-semibold text-gray-900 dark:text-white">{{ $procurement->reference }}</p>
                                         <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -422,7 +422,54 @@
                                             · by {{ $procurement->recordedBy->name ?? 'Unknown' }}
                                         </p>
                                     </div>
-                                    <p class="font-semibold text-gray-900 dark:text-gray-100">₦{{ number_format((float) $procurement->total_cost, 2) }}</p>
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <p class="font-semibold text-gray-900 dark:text-gray-100">₦{{ number_format((float) $procurement->total_cost, 2) }}</p>
+                                        <svg :class="{ 'rotate-180': open }" class="w-4 h-4 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </button>
+
+                                <div x-show="open" x-collapse class="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-3 space-y-2">
+                                    @forelse ($procurement->items as $line)
+                                        <div class="flex items-center justify-between text-sm">
+                                            <div class="text-gray-700 dark:text-gray-300">
+                                                {{ $line->product->name ?? 'Deleted product' }}
+                                                <span class="text-gray-400 dark:text-gray-500">
+                                                    — {{ rtrim(rtrim(number_format((float) $line->entered_qty, 2), '0'), '.') }}
+                                                    {{ $line->entered_unit === 'purchase_unit' ? ($line->product->purchase_unit_name ?? 'unit') . '(s)' : ($line->product->base_unit ?? 'unit') . '(s)' }}
+                                                    @if ($line->entered_unit === 'purchase_unit')
+                                                        ({{ rtrim(rtrim(number_format((float) $line->base_qty, 2), '0'), '.') }} {{ $line->product->base_unit ?? 'unit' }}{{ (float) $line->base_qty == 1 ? '' : 's' }})
+                                                    @endif
+                                                </span>
+                                            </div>
+                                            <div class="text-right text-gray-600 dark:text-gray-400">
+                                                ₦{{ number_format((float) $line->unit_cost, 2) }}/{{ $line->product->base_unit ?? 'unit' }}
+                                                <span class="font-medium text-gray-900 dark:text-gray-100">· ₦{{ number_format((float) $line->line_total_cost, 2) }}</span>
+                                            </div>
+                                        </div>
+                                    @empty
+                                    @endforelse
+
+                                    @forelse ($procurement->ingredientItems as $line)
+                                        <div class="flex items-center justify-between text-sm">
+                                            <div class="text-gray-700 dark:text-gray-300">
+                                                {{ $line->ingredient->name ?? 'Deleted ingredient' }}
+                                                <span class="text-gray-400 dark:text-gray-500">
+                                                    — {{ rtrim(rtrim(number_format((float) $line->entered_qty, 2), '0'), '.') }}
+                                                    {{ $line->entered_unit === 'purchase_unit' ? ($line->ingredient->purchase_unit_name ?? 'unit') . '(s)' : ($line->ingredient->unit_name ?? 'unit') }}
+                                                    @if ($line->entered_unit === 'purchase_unit')
+                                                        ({{ rtrim(rtrim(number_format((float) $line->base_qty, 2), '0'), '.') }} {{ $line->ingredient->unit_name ?? 'unit' }})
+                                                    @endif
+                                                </span>
+                                            </div>
+                                            <div class="text-right text-gray-600 dark:text-gray-400">
+                                                ₦{{ number_format((float) $line->unit_cost, 2) }}/{{ $line->ingredient->unit_name ?? 'unit' }}
+                                                <span class="font-medium text-gray-900 dark:text-gray-100">· ₦{{ number_format((float) $line->line_total_cost, 2) }}</span>
+                                            </div>
+                                        </div>
+                                    @empty
+                                    @endforelse
                                 </div>
                             </div>
                         @endforeach
