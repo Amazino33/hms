@@ -5,19 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Offline</title>
     <style>
-        body { font-family: system-ui; text-align: center; padding: 50px; }
-        h1 { color: #666; }
-    </style>
-</head>
-<body>
-    <h1>You're Offline</h1>
-    <p>Please check your internet connection.</p>
-</body>
-</html>
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            text-align: center;
+            padding: 50px 20px;
+            background: #f4f6f5;
+            color: #1b2430;
+        }
+        .offline-container {
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        .offline-icon {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #666;
+            line-height: 1.5;
+        }
+        .retry-btn {
+            margin-top: 20px;
+            padding: 12px 28px;
+            border: none;
+            border-radius: 8px;
+            background: #2f6f62;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
         .retry-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
         }
         .features {
             margin-top: 30px;
@@ -25,26 +50,29 @@
         }
         .features h3 {
             margin-bottom: 15px;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
+            color: #333;
         }
         .features ul {
             list-style: none;
             padding: 0;
+            margin: 0;
         }
         .features li {
             margin-bottom: 8px;
-            opacity: 0.8;
+            color: #666;
         }
         .features li:before {
-            content: "✓";
+            content: "\2713";
             margin-right: 10px;
-            color: #4CAF50;
+            color: #2f6f62;
+            font-weight: 700;
         }
     </style>
 </head>
 <body>
     <div class="offline-container">
-        <div class="offline-icon">📱</div>
+        <div class="offline-icon">&#128241;</div>
         <h1>You're Offline</h1>
         <p>Don't worry! Your HMS app is still available. Some features may be limited until you're back online.</p>
 
@@ -62,22 +90,13 @@
     </div>
 
     <script>
-        // Check network status and auto-retry when back online
-        window.addEventListener('online', function() {
-            setTimeout(() => {
+        // Auto-reload once the connection actually comes back, so nobody
+        // has to remember to tap "Try Again" themselves.
+        window.addEventListener('online', function () {
+            setTimeout(function () {
                 window.location.reload();
             }, 1000);
         });
-
-        // Show online status
-        function updateOnlineStatus() {
-            const status = navigator.onLine ? 'Online' : 'Offline';
-            console.log('Network status:', status);
-        }
-
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-        updateOnlineStatus();
     </script>
 </body>
 </html>

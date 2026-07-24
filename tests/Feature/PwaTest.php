@@ -32,6 +32,23 @@ it('can access offline page', function () {
              ->assertHeader('Content-Type', 'text/html; charset=UTF-8');
 });
 
+it('offline page is a single well-formed document, not two pages concatenated together', function () {
+    $content = file_get_contents(public_path('offline.html'));
+
+    // A prior edit once left two full HTML documents pasted back to back —
+    // the browser rendered the first, then dumped the second one's raw CSS
+    // and markup as plain text underneath it. Exactly one of each
+    // structural tag guarantees that can't happen again.
+    expect(substr_count(strtolower($content), '<!doctype'))->toBe(1);
+    expect(substr_count(strtolower($content), '<html'))->toBe(1);
+    expect(substr_count(strtolower($content), '</html>'))->toBe(1);
+    expect(substr_count(strtolower($content), '<body'))->toBe(1);
+    expect(substr_count(strtolower($content), '</body>'))->toBe(1);
+    expect(substr_count(strtolower($content), '<style'))->toBe(1);
+    expect(substr_count(strtolower($content), '</style>'))->toBe(1);
+    expect(substr_count($content, "You're Offline"))->toBe(1);
+});
+
 it('manifest contains valid JSON', function () {
     $response = $this->get('/site.webmanifest');
 

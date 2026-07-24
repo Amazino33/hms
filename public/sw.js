@@ -4,8 +4,8 @@
 // version bump) leaves old cached assets served forever via cache-first,
 // even after a fresh deploy. This was the real cause of a "notifications.js
 // throws e is not a function" mismatch after the kiosk/staff layout fix.
-const CACHE_NAME = 'hms-v2.6';
-const STATIC_CACHE = 'hms-static-v2.6';
+const CACHE_NAME = 'hms-v2.7';
+const STATIC_CACHE = 'hms-static-v2.7';
 
 const STATIC_ASSETS = [
     '/offline.html',
