@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @php $chartRows = $mode === 'all_waiters' ? $this->allWaiterRows()->sortByDesc('sales_handled')->values() : collect(); @endphp
     <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 flex flex-wrap items-end gap-4">
         <div>
             <label class="block text-xs font-semibold text-gray-500 mb-1">Mode</label>
@@ -159,6 +160,26 @@
             </div>
         @endif
     @else
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 mt-4">
+            <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Best Performing Waiters (by Sales Handled)</div>
+            @if ($chartRows->isEmpty())
+                <div class="text-sm text-gray-400 text-center py-8">No sales in this range.</div>
+            @else
+                @include('filament-ceo.pages.report-explorer-tabs._chart', [
+                    'type' => 'bar',
+                    'chartData' => [
+                        'labels' => $chartRows->pluck('waiter_name')->all(),
+                        'datasets' => [[
+                            'label' => 'Sales Handled',
+                            'data' => $chartRows->pluck('sales_handled')->all(),
+                            'backgroundColor' => '#3b82f6',
+                        ]],
+                    ],
+                    'options' => ['plugins' => ['legend' => ['display' => false]]],
+                ])
+            @endif
+        </div>
+
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mt-4 overflow-x-auto">
             <table class="w-full text-sm">
                 <thead>
