@@ -19,7 +19,12 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->timestamps();
 
-            $table->index(['room_supply_id', 'warehouse_id', 'created_at']);
+            // Explicit short name — the auto-generated one
+            // ("room_supply_transactions_room_supply_id_warehouse_id_created_at_index")
+            // exceeds MySQL's 64-character identifier limit. SQLite (the
+            // test suite's driver) doesn't enforce that limit, so this only
+            // surfaces against real MySQL.
+            $table->index(['room_supply_id', 'warehouse_id', 'created_at'], 'room_supply_transactions_supply_wh_created_idx');
         });
     }
 
