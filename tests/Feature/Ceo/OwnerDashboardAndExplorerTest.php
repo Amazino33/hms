@@ -116,6 +116,29 @@ it('marks a sales-tab row cost as estimated when unit_cost_at_sale is missing, a
     expect($row['cost_estimated'])->toBeTrue();
 });
 
+it('widens the sales-tab revenue trend chart to at least 30 days even when the filter preset is a single day', function () {
+    CarbonImmutable::setTestNow('2026-07-16 12:00:00');
+
+    $component = Livewire::actingAs($this->user)->test(ReportExplorer::class, ['tab' => 'sales', 'preset' => 'today']);
+    $data = $component->instance()->tabData();
+
+    expect($data['daily']->count())->toBe(30);
+    expect($data['daily_range']->days())->toBe(30);
+    expect($data['daily_range']->end->toDateString())->toBe('2026-07-16');
+});
+
+it('does not widen the sales-tab revenue trend chart when the selected filter already spans 30+ days', function () {
+    CarbonImmutable::setTestNow('2026-07-16 12:00:00');
+
+    $component = Livewire::actingAs($this->user)->test(ReportExplorer::class, [
+        'tab' => 'sales', 'preset' => 'custom', 'customFrom' => '2026-06-01', 'customTo' => '2026-07-16',
+    ]);
+    $data = $component->instance()->tabData();
+
+    $selectedDays = $component->instance()->range()->days();
+    expect($data['daily_range']->days())->toBe($selectedDays);
+});
+
 it('excludes voided expenses from the total but still lists them', function () {
     // Pinned to a WAT daytime hour: an unpinned "now" run before the 9am
     // WAT close (see BusinessDay) would resolve "today" 's business day to

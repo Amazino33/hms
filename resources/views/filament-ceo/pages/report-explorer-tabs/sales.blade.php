@@ -5,6 +5,12 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 lg:col-span-2">
         <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Revenue Over Time</div>
+        <div class="text-[11px] text-gray-400 -mt-1 mb-2">
+            {{ $data['daily_range']->start->format('M j') }} &ndash; {{ $data['daily_range']->end->format('M j, Y') }}
+            @if ($data['daily_range']->days() > $this->range()->days())
+                (trend view — wider than the filter above, so there's always a history to explore)
+            @endif
+        </div>
         @include('filament-ceo.pages.report-explorer-tabs._chart', [
             'type' => 'line',
             'chartData' => ['labels' => $data['daily']->map(fn ($d) => $d['date']->format('M j'))->all(), 'datasets' => [['label' => 'Revenue', 'data' => $data['daily']->pluck('revenue')->all(), 'borderColor' => '#3b82f6', 'backgroundColor' => 'rgba(59,130,246,0.1)', 'fill' => true, 'tension' => 0.3]]],

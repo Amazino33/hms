@@ -98,13 +98,35 @@ class ReportExplorer extends Page
     {
         $service = new RevenueReportService();
         $lineItems = $service->lineItems($range);
+        $chartRange = $this->trailingChartRange($range);
 
         return [
             'mix' => $service->revenueMix($range),
             'payment_mix' => $service->paymentMixSeries($range),
-            'daily' => $service->dailyRevenueSeries($range),
+            'daily' => $service->dailyRevenueSeries($chartRange),
+            'daily_range' => $chartRange,
             'rows' => $lineItems->sortByDesc('date')->values(),
         ];
+    }
+
+    /**
+     * A narrow filter (the "Today"/"Yesterday" presets are a single day)
+     * would otherwise hand the "Revenue Over Time" chart exactly one data
+     * point — a dot with nothing to show a trend against, and no way to
+     * "look behind" it. The trend chart always spans at least
+     * self::MIN_CHART_DAYS ending on the selected range's end date,
+     * independent of the table/mix cards below it, which stay scoped to
+     * whatever the user actually picked.
+     */
+    private const MIN_CHART_DAYS = 30;
+
+    private function trailingChartRange(DateRange $range): DateRange
+    {
+        if ($range->days() >= self::MIN_CHART_DAYS) {
+            return $range;
+        }
+
+        return new DateRange($range->end->subDays(self::MIN_CHART_DAYS - 1), $range->end);
     }
 
     // ── Products ───────────────────────────────────────────────────
