@@ -115,6 +115,34 @@
                 </div>
             </div>
 
+            @php $profit = $this->roomProfit(); @endphp
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <h3 class="font-bold text-gray-900 dark:text-white mb-3">Room Profit ({{ $profit['nights'] }} night{{ $profit['nights'] === 1 ? '' : 's' }})</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+                    <div>
+                        <div class="text-gray-500 dark:text-gray-400">Revenue</div>
+                        <div class="font-semibold text-gray-900 dark:text-white">₦{{ number_format($profit['revenue'], 2) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500 dark:text-gray-400">Power Cost</div>
+                        <div class="font-semibold text-gray-900 dark:text-white">₦{{ number_format($profit['power_cost'], 2) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500 dark:text-gray-400">Supplies Cost</div>
+                        <div class="font-semibold text-gray-900 dark:text-white">₦{{ number_format($profit['supplies_cost'], 2) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500 dark:text-gray-400">Total Cost</div>
+                        <div class="font-semibold text-gray-900 dark:text-white">₦{{ number_format($profit['total_cost'], 2) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500 dark:text-gray-400">Profit</div>
+                        <div class="font-bold {{ $profit['profit'] < 0 ? 'text-red-600' : 'text-emerald-600' }}">₦{{ number_format($profit['profit'], 2) }}</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Power cost is a flat per-night estimate set in Company Settings, not a metered reading.</p>
+            </div>
+
             @if($booking->isCheckedOut())
                 <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700 text-sm text-gray-500">
                     This folio is sealed — the guest checked out {{ $booking->checked_out_at->format('M j, Y g:ia') }}. No further charges or payments can be added.
@@ -179,6 +207,36 @@
                     <button type="button" wire:click="applyDiscount" class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold touch-manipulation">
                         Apply discount
                     </button>
+                </div>
+
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                    <h3 class="font-bold text-gray-900 dark:text-white">Record room supplies used</h3>
+                    <p class="text-xs text-gray-500">Tissue, soap, etc. — deducts stock and costs it against this stay.</p>
+
+                    <div class="flex flex-wrap gap-2 items-end">
+                        <select wire:model="selectedRoomSupplyId" class="flex-1 min-w-[160px] px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+                            <option value="">Select a supply…</option>
+                            @foreach($this->roomSupplies() as $supply)
+                                <option value="{{ $supply->id }}">{{ $supply->name }} ({{ $supply->unit }})</option>
+                            @endforeach
+                        </select>
+                        <input type="number" step="0.01" min="0" wire:model="roomSupplyQuantity" placeholder="Qty"
+                            class="w-24 px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                        <button type="button" wire:click="recordRoomSupplyUsage" class="px-4 py-3 min-h-[48px] rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold touch-manipulation">
+                            Record
+                        </button>
+                    </div>
+
+                    @if($this->roomSupplyUsages()->isNotEmpty())
+                        <div class="pt-2 space-y-1">
+                            @foreach($this->roomSupplyUsages() as $usage)
+                                <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                    <span>{{ $usage->roomSupply?->name ?? 'Deleted supply' }} — {{ rtrim(rtrim(number_format((float) $usage->quantity, 2), '0'), '.') }} {{ $usage->roomSupply?->unit }}</span>
+                                    <span class="font-semibold text-gray-700 dark:text-gray-300">₦{{ number_format($usage->totalCost(), 2) }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
             </div>
             @endif

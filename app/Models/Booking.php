@@ -101,4 +101,19 @@ class Booking extends Model
     {
         return $this->deposit !== null && (float) $this->deposit > 0;
     }
+
+    /**
+     * Nights stayed — check_out is exclusive of occupancy (matches
+     * OccupancyReportService's convention: occupied while check_in <= day
+     * < check_out), so a plain day diff is already the night count.
+     */
+    public function nights(): int
+    {
+        return max(0, $this->check_in->diffInDays($this->check_out));
+    }
+
+    public function roomSupplyUsages()
+    {
+        return $this->hasMany(BookingRoomSupplyUsage::class);
+    }
 }

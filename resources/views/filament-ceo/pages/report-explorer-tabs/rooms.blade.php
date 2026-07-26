@@ -35,6 +35,33 @@
     </div>
 </div>
 
+<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mt-4">
+    <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Room Profit</div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div>
+            <div class="text-[10px] text-gray-500 uppercase">Revenue</div>
+            <div class="font-bold">₦{{ number_format($data['profit']['revenue'], 2) }}</div>
+        </div>
+        <div>
+            <div class="text-[10px] text-gray-500 uppercase">Power Cost</div>
+            <div class="font-bold">₦{{ number_format($data['profit']['power_cost'], 2) }}</div>
+        </div>
+        <div>
+            <div class="text-[10px] text-gray-500 uppercase">Supplies Cost</div>
+            <div class="font-bold">₦{{ number_format($data['profit']['supplies_cost'], 2) }}</div>
+        </div>
+        <div>
+            <div class="text-[10px] text-gray-500 uppercase">Total Cost</div>
+            <div class="font-bold">₦{{ number_format($data['profit']['total_cost'], 2) }}</div>
+        </div>
+        <div>
+            <div class="text-[10px] text-gray-500 uppercase">Profit</div>
+            <div class="font-bold {{ $data['profit']['profit'] < 0 ? 'text-red-600' : 'text-emerald-600' }}">₦{{ number_format($data['profit']['profit'], 2) }}</div>
+        </div>
+    </div>
+    <p class="text-[10px] text-gray-400 mt-2">Power cost is a flat per-night estimate (Company Settings), not a metered reading.</p>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
         <div class="text-xs font-semibold text-gray-500 uppercase p-3">Room-Nights by Room</div>

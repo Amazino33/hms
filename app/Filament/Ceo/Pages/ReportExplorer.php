@@ -15,6 +15,7 @@ use App\Services\Ceo\DateRangeResolver;
 use App\Services\Ceo\LeakageReportService;
 use App\Services\Ceo\OccupancyReportService;
 use App\Services\Ceo\RevenueReportService;
+use App\Services\Ceo\RoomProfitService;
 use BackedEnum;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
@@ -326,6 +327,7 @@ class ReportExplorer extends Page
             'nightly' => $breakdown,
             'by_room' => $byRoom->sortByDesc('nights_sold')->values(),
             'open_folios' => $this->openFolios(),
+            'profit' => (new RoomProfitService())->summary($range),
         ];
     }
 

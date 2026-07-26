@@ -4,8 +4,12 @@ namespace App\Filament\Pages;
 
 use App\Models\Booking;
 use App\Models\IncidentalPriceListItem;
+use App\Models\RoomSupply;
+use App\Models\WareHouse;
 use App\Services\BookingService;
+use App\Services\Ceo\RoomProfitService;
 use App\Services\FolioService;
+use App\Services\RoomSupplyService;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -46,6 +50,10 @@ class FolioDetail extends Page
     public string $paymentMethod = 'pos_terminal';
 
     public string $paymentReference = '';
+
+    public ?int $selectedRoomSupplyId = null;
+
+    public ?float $roomSupplyQuantity = null;
 
     public function mount(Request $request)
     {
@@ -150,6 +158,50 @@ class FolioDetail extends Page
             Notification::make()->title('Payment recorded')->success()->send();
         } catch (\Exception $e) {
             Notification::make()->title('Could not record payment')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
+    public function roomSupplies()
+    {
+        return RoomSupply::where('is_active', true)->orderBy('name')->get();
+    }
+
+    public function roomSupplyUsages()
+    {
+        return $this->booking->roomSupplyUsages()->with('roomSupply')->latest()->get();
+    }
+
+    public function roomProfit(): array
+    {
+        return (new RoomProfitService())->forBooking($this->booking);
+    }
+
+    public function recordRoomSupplyUsage(): void
+    {
+        $roomSupply = RoomSupply::find($this->selectedRoomSupplyId);
+        $warehouse = WareHouse::where('type', 'storage')->first();
+
+        if (! $roomSupply || ! $warehouse) {
+            Notification::make()->title('Pick a room supply first')->warning()->send();
+
+            return;
+        }
+
+        try {
+            app(RoomSupplyService::class)->recordUsage(
+                $this->booking,
+                $roomSupply,
+                $warehouse,
+                (float) $this->roomSupplyQuantity,
+                auth()->id(),
+            );
+
+            $this->selectedRoomSupplyId = null;
+            $this->roomSupplyQuantity = null;
+
+            Notification::make()->title('Usage recorded')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not record usage')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

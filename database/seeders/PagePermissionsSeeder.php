@@ -699,6 +699,29 @@ class PagePermissionsSeeder extends Seeder
                 'page_name' => 'My Payslips',
                 'role_name' => 'cashier',
             ],
+
+            // Room Supplies - housekeeping consumables stock (tissue, soap,
+            // etc.) - Receptionists, Storekeepers, Managers, Super Admin.
+            [
+                'page_class' => 'App\Filament\Pages\RoomSupplies',
+                'page_name' => 'Room Supplies',
+                'role_name' => 'super_admin',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\RoomSupplies',
+                'page_name' => 'Room Supplies',
+                'role_name' => 'manager',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\RoomSupplies',
+                'page_name' => 'Room Supplies',
+                'role_name' => 'receptionist',
+            ],
+            [
+                'page_class' => 'App\Filament\Pages\RoomSupplies',
+                'page_name' => 'Room Supplies',
+                'role_name' => 'storekeeper',
+            ],
         ];
 
         foreach ($permissions as $permission) {

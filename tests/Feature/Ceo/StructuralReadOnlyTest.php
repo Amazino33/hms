@@ -2,12 +2,18 @@
 
 use App\Filament\Ceo\Resources\Folios\FolioResource;
 use App\Filament\Ceo\Resources\HandoverCounts\HandoverCountResource;
+use App\Filament\Ceo\Resources\IngredientTransactions\IngredientTransactionResource;
+use App\Filament\Ceo\Resources\Ingredients\IngredientResource;
 use App\Filament\Ceo\Resources\InventoryTransactions\InventoryTransactionResource;
+use App\Filament\Ceo\Resources\MenuItems\MenuItemResource;
 use App\Filament\Ceo\Resources\Orders\OrderResource;
 use App\Filament\Ceo\Resources\OwnerTakeNotes\OwnerTakeNoteResource;
 use App\Filament\Ceo\Resources\Procurements\ProcurementResource;
+use App\Filament\Ceo\Resources\Products\ProductResource;
 use App\Filament\Ceo\Resources\ReceptionistShiftSettlements\ReceptionistShiftSettlementResource;
 use App\Filament\Ceo\Resources\Reservations\ReservationResource;
+use App\Filament\Ceo\Resources\RoomSupplies\RoomSupplyResource;
+use App\Filament\Ceo\Resources\RoomSupplyTransactions\RoomSupplyTransactionResource;
 use App\Filament\Ceo\Resources\StaffDebts\StaffDebtResource;
 use App\Filament\Ceo\Resources\WaiterShiftSettlements\WaiterShiftSettlementResource;
 use App\Models\User;
@@ -18,7 +24,9 @@ $resources = [
     OrderResource::class, WaiterShiftSettlementResource::class, ReceptionistShiftSettlementResource::class,
     FolioResource::class, ReservationResource::class, HandoverCountResource::class,
     StaffDebtResource::class, InventoryTransactionResource::class, ProcurementResource::class,
-    OwnerTakeNoteResource::class,
+    OwnerTakeNoteResource::class, ProductResource::class, IngredientResource::class,
+    MenuItemResource::class, IngredientTransactionResource::class,
+    RoomSupplyResource::class, RoomSupplyTransactionResource::class,
 ];
 
 it('registers no create/edit/delete routes anywhere in the CEO panel', function () {

@@ -61,6 +61,8 @@ class ManageCompanySettings extends Page implements HasForms
             'payroll_period_start_day'   => SettingsService::get('payroll_period_start_day', '1'),
             'payroll_payday_day'         => SettingsService::get('payroll_payday_day'),
             'payroll_minimum_net'        => SettingsService::get('payroll_minimum_net', '20000'),
+            'room_generator_cost_per_night'   => SettingsService::get('room_generator_cost_per_night', '0'),
+            'room_electricity_cost_per_night' => SettingsService::get('room_electricity_cost_per_night', '0'),
         ]);
     }
 
@@ -189,6 +191,25 @@ class ManageCompanySettings extends Page implements HasForms
                             ->default(20000)
                             ->required(),
                     ]),
+
+                Section::make('Room Costs')
+                    ->description('Flat per-night estimates used to compute each room stay\'s profit (revenue minus these costs minus any itemized room supplies used). These are estimates, not metered readings — set them to whatever best represents your actual average cost.')
+                    ->columnSpanFull()
+                    ->schema([
+                        TextInput::make('room_generator_cost_per_night')
+                            ->label('Generator fuel cost per night (₦)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->required(),
+
+                        TextInput::make('room_electricity_cost_per_night')
+                            ->label('Electricity (PHCN) cost per night (₦)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->required(),
+                    ]),
             ]);
     }
 
@@ -196,22 +217,24 @@ class ManageCompanySettings extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        $payrollKeys = [
+        $settingsServiceKeys = [
             'payroll_frequency',
             'payroll_period_start_day',
             'payroll_payday_day',
             'payroll_minimum_net',
+            'room_generator_cost_per_night',
+            'room_electricity_cost_per_night',
         ];
 
-        $payrollData = array_intersect_key($data, array_flip($payrollKeys));
-        $companyData = array_diff_key($data, array_flip($payrollKeys));
+        $settingsServiceData = array_intersect_key($data, array_flip($settingsServiceKeys));
+        $companyData = array_diff_key($data, array_flip($settingsServiceKeys));
 
         Company::updateOrCreate(
             ['id' => 1],
             $companyData
         );
 
-        foreach ($payrollData as $key => $value) {
+        foreach ($settingsServiceData as $key => $value) {
             if ($value === null || $value === '') {
                 continue;
             }
