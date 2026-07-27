@@ -99,6 +99,17 @@ class AdminPanelProvider extends PanelProvider
             fn () => view('partials.livewire-failure-handler')->render()
         );
 
+        // ─── Sidebar: Navigation search ──────────────────────────────────────────
+        // Filters the sidebar's own page links as you type — distinct from
+        // Filament's Global Search (disabled in this panel via
+        // ->globalSearch(false)), which searches records, not nav links.
+        // Registered first so it renders above the mobile close button and
+        // the nav groups themselves.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::SIDEBAR_NAV_START,
+            fn () => view('filament.partials.sidebar-nav-search')->render()
+        );
+
         // ─── Sidebar: Mobile close button ────────────────────────────────────────
         FilamentView::registerRenderHook(
             PanelsRenderHook::SIDEBAR_NAV_START,
