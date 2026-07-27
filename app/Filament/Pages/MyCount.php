@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\CountSessionService;
 use App\Services\InventoryService;
 use App\Services\PermissionService;
+use App\Services\StockTransferService;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -98,6 +99,22 @@ class MyCount extends Page
             'chef' => InventoryService::getKitchenWarehouseId(),
             default => null,
         };
+    }
+
+    /**
+     * How many unreceived transfers are sitting at my warehouse right now —
+     * surfaced as a banner before they even try to start a count, not just
+     * as a rejection after clicking "Start Count".
+     */
+    public function pendingTransferCount(): int
+    {
+        $warehouseId = $this->myWarehouseId();
+
+        if (!$warehouseId) {
+            return 0;
+        }
+
+        return (new StockTransferService())->pendingTransferCountFor($warehouseId);
     }
 
     /**
@@ -199,6 +216,22 @@ class MyCount extends Page
 
         $isHandover = $this->hasActiveShift();
         $absentCustodian = $isHandover ? null : $this->otherActiveCustodian;
+
+        // Ending shift (handover or closing) with stock still "in transit"
+        // on paper throws off the very count they're about to do — the
+        // physical stock is sitting there but the system doesn't have it
+        // yet, so it reads as a shortfall that was never actually theirs.
+        if ($isHandover && ($pending = (new StockTransferService())->pendingTransferCountFor($warehouseId)) > 0) {
+            Notification::make()
+                ->title('Receive your pending transfers before ending shift')
+                ->body(($pending === 1 ? 'There is 1 unreceived transfer' : "There are {$pending} unreceived transfers")
+                    .' waiting at your warehouse. Go to Receive Transfers and close it out first — ending shift with stock still in transit causes a false shortfall on your count.')
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return;
+        }
 
         if ($isHandover && !$this->incomingUserId) {
             Notification::make()->title($this->isClosing

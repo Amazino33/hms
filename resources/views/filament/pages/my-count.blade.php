@@ -16,6 +16,21 @@
     @else
         <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 max-w-xl">
             @if($this->hasActiveShift())
+                @if($this->pendingTransferCount() > 0)
+                    <div class="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 p-3 mb-4">
+                        <p class="text-sm font-bold text-red-700 dark:text-red-300">
+                            {{ $this->pendingTransferCount() === 1 ? '1 unreceived transfer is' : $this->pendingTransferCount() . ' unreceived transfers are' }}
+                            waiting at your warehouse.
+                        </p>
+                        <p class="text-xs text-red-600 dark:text-red-400 mt-1">
+                            Go to Receive Transfers and close {{ $this->pendingTransferCount() === 1 ? 'it' : 'them' }} out before ending shift — stock still in transit reads as a false shortfall on your count.
+                        </p>
+                        <a href="/admin/receive-transfers" class="inline-block mt-2 text-xs font-bold text-red-700 dark:text-red-300 underline">
+                            Go to Receive Transfers →
+                        </a>
+                    </div>
+                @endif
+
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Start Your Count</h3>
 
                 <div class="grid grid-cols-2 gap-3 mb-4">

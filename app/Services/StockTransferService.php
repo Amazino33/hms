@@ -20,6 +20,19 @@ use Illuminate\Support\Str;
 class StockTransferService
 {
     /**
+     * How many transfers are still sitting unresolved (never opened, or
+     * only partly received) at a given destination warehouse — used to
+     * block a bartender/chef from ending their shift with stock still "in
+     * transit" on paper, which throws off the very next count.
+     */
+    public function pendingTransferCountFor(int $warehouseId): int
+    {
+        return StockTransfer::where('to_warehouse_id', $warehouseId)
+            ->whereIn('status', ['pending', 'sent', 'partially_received'])
+            ->count();
+    }
+
+    /**
      * Create a new stock transfer (storekeeper initiates). Each line may be
      * expressed either as a plain base-unit 'quantity' (legacy shape, still
      * supported) or as 'entered_qty' + 'entered_unit' (purchase_unit/
