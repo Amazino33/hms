@@ -1,7 +1,7 @@
 <x-filament-panels::page>
     @if($booking)
-        <div class="space-y-6">
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        <div class="space-y-4">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 flex justify-between items-center">
                 <div>
                     <div class="font-bold text-lg text-gray-900 dark:text-white">Room {{ $booking->room->number }} — {{ $booking->guest->name }}</div>
                     <div class="text-sm text-gray-500 dark:text-gray-400">
@@ -34,8 +34,8 @@
                 </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <h3 class="font-bold text-gray-900 dark:text-white mb-3">Ledger</h3>
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                <h3 class="font-bold text-gray-900 dark:text-white mb-2">Ledger</h3>
 
                 {{-- Mobile: one card per line, nothing dropped that the
                      desktop table shows — date/type/description/by all
@@ -116,8 +116,8 @@
             </div>
 
             @php $profit = $this->roomProfit(); @endphp
-            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <h3 class="font-bold text-gray-900 dark:text-white mb-3">Room Profit ({{ $profit['nights'] }} night{{ $profit['nights'] === 1 ? '' : 's' }})</h3>
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                <h3 class="font-bold text-gray-900 dark:text-white mb-2">Room Profit ({{ $profit['nights'] }} night{{ $profit['nights'] === 1 ? '' : 's' }})</h3>
                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
                     <div>
                         <div class="text-gray-500 dark:text-gray-400">Revenue</div>
@@ -144,12 +144,12 @@
             </div>
 
             @if($booking->isCheckedOut())
-                <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700 text-sm text-gray-500">
+                <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700 text-sm text-gray-500">
                     This folio is sealed — the guest checked out {{ $booking->checked_out_at->format('M j, Y g:ia') }}. No further charges or payments can be added.
                 </div>
             @else
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 space-y-2">
                     <h3 class="font-bold text-gray-900 dark:text-white">Add incidental charge</h3>
 
                     <div class="flex flex-wrap gap-2">
@@ -172,7 +172,7 @@
                     </button>
                 </div>
 
-                <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3">
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 space-y-2">
                     <h3 class="font-bold text-gray-900 dark:text-white">Record payment</h3>
 
                     <div x-data="{ paymentAmount: @entangle('paymentAmount') }">
@@ -194,7 +194,7 @@
                     </button>
                 </div>
 
-                <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 space-y-2">
                     <h3 class="font-bold text-gray-900 dark:text-white">Apply discount</h3>
                     <p class="text-xs text-gray-500">Only reduces the room charge — never an incidental (room-order food/drinks etc.).</p>
 
@@ -210,7 +210,7 @@
                 </div>
 
                 @if($booking->isCheckedIn())
-                    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 space-y-2">
                         <h3 class="font-bold text-gray-900 dark:text-white">Renew stay</h3>
                         <p class="text-xs text-gray-500">Guest is paying to stay longer — pushes check-out out and posts a new room charge for the extra nights.</p>
 
@@ -227,24 +227,22 @@
                         </p>
                     </div>
 
-                    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 space-y-2">
                         <h3 class="font-bold text-gray-900 dark:text-white">Change room</h3>
                         <p class="text-xs text-gray-500">Same stay, same folio — just moves to a different room. Remaining nights bill at the new room's rate.</p>
 
-                        <div class="flex flex-wrap gap-2 items-end">
-                            <select wire:model="newRoomId" class="flex-1 min-w-[140px] px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-                                <option value="">New room…</option>
-                                @foreach($this->candidateRoomsForChange() as $room)
-                                    <option value="{{ $room->id }}">Room {{ $room->number }} (₦{{ number_format((float) $room->price_per_night, 2) }}/night)</option>
-                                @endforeach
-                            </select>
-                            <select wire:model="roomChangeReason" class="flex-1 min-w-[140px] px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-                                <option value="">Reason…</option>
-                                @foreach($this->roomChangeReasons() as $value => $label)
-                                    <option value="{{ $value }}">{{ $label }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        <select wire:model="newRoomId" class="w-full px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+                            <option value="">New room…</option>
+                            @foreach($this->candidateRoomsForChange() as $room)
+                                <option value="{{ $room->id }}">Room {{ $room->number }} (₦{{ number_format((float) $room->price_per_night, 2) }}/night)</option>
+                            @endforeach
+                        </select>
+                        <select wire:model="roomChangeReason" class="w-full px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+                            <option value="">Reason…</option>
+                            @foreach($this->roomChangeReasons() as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
                         <input type="text" wire:model="roomChangeNote" placeholder="Note (optional)"
                             class="w-full px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
                         <button type="button" wire:click="changeRoom" wire:confirm="Move this guest to the selected room? Remaining nights will be rebilled at the new room's rate." class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold touch-manipulation">
@@ -253,20 +251,20 @@
                     </div>
                 @endif
 
-                <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 space-y-2">
                     <h3 class="font-bold text-gray-900 dark:text-white">Record room supplies used</h3>
                     <p class="text-xs text-gray-500">Tissue, soap, etc. — deducts stock and costs it against this stay.</p>
 
-                    <div class="flex flex-wrap gap-2 items-end">
-                        <select wire:model="selectedRoomSupplyId" class="flex-1 min-w-[160px] px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-                            <option value="">Select a supply…</option>
-                            @foreach($this->roomSupplies() as $supply)
-                                <option value="{{ $supply->id }}">{{ $supply->name }} ({{ $supply->unit }})</option>
-                            @endforeach
-                        </select>
+                    <select wire:model="selectedRoomSupplyId" class="w-full px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+                        <option value="">Select a supply…</option>
+                        @foreach($this->roomSupplies() as $supply)
+                            <option value="{{ $supply->id }}">{{ $supply->name }} ({{ $supply->unit }})</option>
+                        @endforeach
+                    </select>
+                    <div class="flex gap-2 items-end">
                         <input type="number" step="0.01" min="0" wire:model="roomSupplyQuantity" placeholder="Qty"
                             class="w-24 px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-                        <button type="button" wire:click="recordRoomSupplyUsage" class="px-4 py-3 min-h-[48px] rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold touch-manipulation">
+                        <button type="button" wire:click="recordRoomSupplyUsage" class="flex-1 px-4 py-3 min-h-[48px] rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold touch-manipulation">
                             Record
                         </button>
                     </div>
