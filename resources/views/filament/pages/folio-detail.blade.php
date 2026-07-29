@@ -209,6 +209,50 @@
                     </button>
                 </div>
 
+                @if($booking->isCheckedIn())
+                    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                        <h3 class="font-bold text-gray-900 dark:text-white">Renew stay</h3>
+                        <p class="text-xs text-gray-500">Guest is paying to stay longer — pushes check-out out and posts a new room charge for the extra nights.</p>
+
+                        <div class="flex flex-wrap gap-2 items-end">
+                            <input type="number" min="1" wire:model="extendNights" placeholder="Additional nights"
+                                class="flex-1 min-w-[160px] px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                            <button type="button" wire:click="extendStay" class="px-4 py-3 min-h-[48px] rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold touch-manipulation">
+                                Renew stay
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-400">
+                            New check-out would be {{ $booking->check_out->copy()->addDays(max(1, (int) ($extendNights ?: 1)))->format('M j, Y') }}
+                            · adds ₦{{ number_format((float) $booking->nightly_rate * max(1, (int) ($extendNights ?: 1)), 2) }}
+                        </p>
+                    </div>
+
+                    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
+                        <h3 class="font-bold text-gray-900 dark:text-white">Change room</h3>
+                        <p class="text-xs text-gray-500">Same stay, same folio — just moves to a different room. Remaining nights bill at the new room's rate.</p>
+
+                        <div class="flex flex-wrap gap-2 items-end">
+                            <select wire:model="newRoomId" class="flex-1 min-w-[140px] px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+                                <option value="">New room…</option>
+                                @foreach($this->candidateRoomsForChange() as $room)
+                                    <option value="{{ $room->id }}">Room {{ $room->number }} (₦{{ number_format((float) $room->price_per_night, 2) }}/night)</option>
+                                @endforeach
+                            </select>
+                            <select wire:model="roomChangeReason" class="flex-1 min-w-[140px] px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+                                <option value="">Reason…</option>
+                                @foreach($this->roomChangeReasons() as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <input type="text" wire:model="roomChangeNote" placeholder="Note (optional)"
+                            class="w-full px-4 py-3 min-h-[48px] border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                        <button type="button" wire:click="changeRoom" wire:confirm="Move this guest to the selected room? Remaining nights will be rebilled at the new room's rate." class="w-full min-h-[48px] px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold touch-manipulation">
+                            Change room
+                        </button>
+                    </div>
+                @endif
+
                 <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3 md:col-span-2">
                     <h3 class="font-bold text-gray-900 dark:text-white">Record room supplies used</h3>
                     <p class="text-xs text-gray-500">Tissue, soap, etc. — deducts stock and costs it against this stay.</p>

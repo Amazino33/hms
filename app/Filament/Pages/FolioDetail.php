@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Booking;
 use App\Models\IncidentalPriceListItem;
+use App\Models\Room;
 use App\Models\RoomSupply;
 use App\Models\WareHouse;
 use App\Services\BookingService;
@@ -54,6 +55,14 @@ class FolioDetail extends Page
     public ?int $selectedRoomSupplyId = null;
 
     public ?float $roomSupplyQuantity = null;
+
+    public ?int $extendNights = null;
+
+    public ?int $newRoomId = null;
+
+    public ?string $roomChangeReason = null;
+
+    public string $roomChangeNote = '';
 
     public function mount(Request $request)
     {
@@ -215,6 +224,62 @@ class FolioDetail extends Page
             Notification::make()->title('Guest checked in')->success()->send();
         } catch (\Exception $e) {
             Notification::make()->title('Could not check in')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
+    public function extendStay(): void
+    {
+        try {
+            (new BookingService)->extendStay($this->booking, (int) $this->extendNights, auth()->id());
+
+            $this->extendNights = null;
+            $this->loadBooking($this->booking->id);
+
+            Notification::make()->title('Stay renewed')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not renew stay')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
+    public function candidateRoomsForChange()
+    {
+        return Room::where('status', '!=', 'maintenance')
+            ->where('id', '!=', $this->booking->room_id)
+            ->orderBy('number')
+            ->get()
+            ->reject(fn (Room $room) => $room->isOccupiedToday());
+    }
+
+    public function roomChangeReasons(): array
+    {
+        return BookingService::ROOM_CHANGE_REASONS;
+    }
+
+    public function changeRoom(): void
+    {
+        if (! $this->newRoomId || ! $this->roomChangeReason) {
+            Notification::make()->title('Pick a room and a reason first')->warning()->send();
+
+            return;
+        }
+
+        try {
+            (new BookingService)->changeRoom(
+                $this->booking,
+                (int) $this->newRoomId,
+                (string) $this->roomChangeReason,
+                $this->roomChangeNote ?: null,
+                auth()->id(),
+            );
+
+            $this->newRoomId = null;
+            $this->roomChangeReason = null;
+            $this->roomChangeNote = '';
+            $this->loadBooking($this->booking->id);
+
+            Notification::make()->title('Room changed')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not change room')->body($e->getMessage())->danger()->persistent()->send();
         }
     }
 

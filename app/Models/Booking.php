@@ -116,4 +116,9 @@ class Booking extends Model
     {
         return $this->hasMany(BookingRoomSupplyUsage::class);
     }
+
+    public function roomChanges()
+    {
+        return $this->hasMany(RoomChange::class);
+    }
 }
