@@ -53,6 +53,15 @@ class ReservationsTimeline extends Page
 
     public string $checkOut = '';
 
+    /**
+     * Kept in sync with checkIn/checkOut in both directions — typing a
+     * nights count is faster than picking a check-out date by hand for the
+     * overwhelmingly common case (a guest booking N nights from today),
+     * while still allowing a direct check-out date pick for the rare
+     * exact-date case.
+     */
+    public int $nights = 1;
+
     public ?float $deposit = null;
 
     public bool $showDetails = false;
@@ -129,6 +138,7 @@ class ReservationsTimeline extends Page
         $this->selectedRoomId = $roomId;
         $this->selectedRoomNumber = $room?->number;
         $this->checkIn = $date;
+        $this->nights = 1;
         $this->checkOut = Carbon::parse($date)->addDay()->toDateString();
         $this->guestName = '';
         $this->guestPhone = '';
@@ -139,6 +149,28 @@ class ReservationsTimeline extends Page
     public function closeForm(): void
     {
         $this->showForm = false;
+    }
+
+    public function updatedNights(): void
+    {
+        if ($this->nights < 1) {
+            $this->nights = 1;
+        }
+
+        $this->checkOut = Carbon::parse($this->checkIn ?: now())->addDays($this->nights)->toDateString();
+    }
+
+    public function updatedCheckIn(): void
+    {
+        $this->checkOut = Carbon::parse($this->checkIn)->addDays($this->nights)->toDateString();
+    }
+
+    public function updatedCheckOut(): void
+    {
+        $checkIn = Carbon::parse($this->checkIn ?: now());
+        $checkOut = Carbon::parse($this->checkOut);
+
+        $this->nights = max(1, $checkIn->diffInDays($checkOut));
     }
 
     public function submit(): void

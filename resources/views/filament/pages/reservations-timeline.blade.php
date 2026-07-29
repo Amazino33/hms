@@ -134,12 +134,17 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Check-in</label>
-                        <input type="date" wire:model="checkIn" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                        <input type="date" wire:model.live="checkIn" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Check-out</label>
-                        <input type="date" wire:model="checkOut" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nights</label>
+                        <input type="number" min="1" wire:model.live="nights" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
                     </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Check-out</label>
+                    <input type="date" wire:model.live="checkOut" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
                 </div>
 
                 <div x-data="{ deposit: @entangle('deposit') }">
