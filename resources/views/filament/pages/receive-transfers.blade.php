@@ -152,6 +152,8 @@
                                             <div class="flex items-center gap-2 mt-1">
                                                 <span class="text-sm text-gray-500 dark:text-gray-400">From:</span>
                                                 <span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300">{{ $t->fromWarehouse->name ?? $t->from_warehouse_id }}</span>
+                                                <span class="text-sm text-gray-500 dark:text-gray-400">To:</span>
+                                                <span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-md text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -178,9 +180,11 @@
                                         </div>
                                         <div class="flex-1">
                                             <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ $t->transfer_number }}</h3>
-                                            <div class="flex items-center gap-2 mt-1">
+                                            <div class="flex items-center gap-2 mt-1 flex-wrap">
                                                 <span class="text-sm text-gray-500 dark:text-gray-400">From:</span>
                                                 <span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300">{{ $t->fromWarehouse->name ?? $t->from_warehouse_id }}</span>
+                                                <span class="text-sm text-gray-500 dark:text-gray-400">To:</span>
+                                                <span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-md text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</span>
                                             </div>
                                         </div>
                                         <div class="text-right">
@@ -310,7 +314,7 @@
                                 <div class="p-4 bg-gradient-to-r from-slate-50 to-gray-100 dark:from-slate-800 dark:to-slate-900 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                                     <div>
                                         <h4 class="font-bold text-gray-900 dark:text-white">{{ $t->transfer_number }}</h4>
-                                        <p class="text-sm text-gray-500 dark:text-gray-400">From: {{ $t->fromWarehouse->name ?? $t->from_warehouse_id }}</p>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400">From: {{ $t->fromWarehouse->name ?? $t->from_warehouse_id }} · To: {{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</p>
                                     </div>
                                     <span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Received</span>
                                 </div>

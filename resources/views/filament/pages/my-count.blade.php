@@ -20,7 +20,7 @@
                     <div class="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 p-3 mb-4">
                         <p class="text-sm font-bold text-red-700 dark:text-red-300">
                             {{ $this->pendingTransferCount() === 1 ? '1 unreceived transfer is' : $this->pendingTransferCount() . ' unreceived transfers are' }}
-                            waiting at your warehouse.
+                            waiting at {{ $this->myWarehouseName() ?? 'your warehouse' }}.
                         </p>
                         <p class="text-xs text-red-600 dark:text-red-400 mt-1">
                             Go to Receive Transfers and close {{ $this->pendingTransferCount() === 1 ? 'it' : 'them' }} out before ending shift — stock still in transit reads as a false shortfall on your count.

@@ -102,6 +102,19 @@ class MyCount extends Page
     }
 
     /**
+     * Named explicitly (rather than "your warehouse") so a bartender can
+     * never mistake a Kitchen-bound transfer notice for their own — the
+     * pending-transfer check below is already scoped strictly to their own
+     * warehouse, but the wording used to leave that scoping invisible.
+     */
+    public function myWarehouseName(): ?string
+    {
+        $id = $this->myWarehouseId();
+
+        return $id ? \App\Models\WareHouse::find($id)?->name : null;
+    }
+
+    /**
      * How many unreceived transfers are sitting at my warehouse right now —
      * surfaced as a banner before they even try to start a count, not just
      * as a rejection after clicking "Start Count".
@@ -222,10 +235,12 @@ class MyCount extends Page
         // physical stock is sitting there but the system doesn't have it
         // yet, so it reads as a shortfall that was never actually theirs.
         if ($isHandover && ($pending = (new StockTransferService())->pendingTransferCountFor($warehouseId)) > 0) {
+            $warehouseName = $this->myWarehouseName() ?? 'your warehouse';
+
             Notification::make()
                 ->title('Receive your pending transfers before ending shift')
                 ->body(($pending === 1 ? 'There is 1 unreceived transfer' : "There are {$pending} unreceived transfers")
-                    .' waiting at your warehouse. Go to Receive Transfers and close it out first — ending shift with stock still in transit causes a false shortfall on your count.')
+                    ." waiting at {$warehouseName}. Go to Receive Transfers and close it out first — ending shift with stock still in transit causes a false shortfall on your count.")
                 ->danger()
                 ->persistent()
                 ->send();
