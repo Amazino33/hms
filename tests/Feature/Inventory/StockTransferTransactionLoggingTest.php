@@ -24,7 +24,7 @@ it('logs a transfer transaction on both legs when a product transfer is received
     $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
     InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $main->id, 'quantity' => 50]);
 
-    $service = new StockTransferService();
+    $service = new StockTransferService;
     $transfer = $service->createTransfer($main->id, $bar->id, $storekeeper->id, [
         ['product_id' => $product->id, 'quantity' => 10],
     ]);
@@ -57,7 +57,7 @@ it('supports transferring ingredients through the same shared stock_transfers he
     $ingredient = Ingredient::create(['name' => 'Flour', 'sku' => 'ING-FLOUR', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 10, 'category' => 'Dry Goods']);
     IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $main->id, 'quantity' => 30]);
 
-    $service = new StockTransferService();
+    $service = new StockTransferService;
     $transfer = $service->createTransfer($main->id, $kitchen->id, $storekeeper->id, [], [
         ['ingredient_id' => $ingredient->id, 'quantity' => 12],
     ]);
@@ -81,9 +81,27 @@ it('throws when creating a transfer with insufficient source ingredient stock', 
     $ingredient = Ingredient::create(['name' => 'Sugar', 'sku' => 'ING-SUGAR', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 5, 'category' => 'Dry Goods']);
     IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $main->id, 'quantity' => 5]);
 
-    $service = new StockTransferService();
+    $service = new StockTransferService;
 
     expect(fn () => $service->createTransfer($main->id, $kitchen->id, $storekeeper->id, [], [
         ['ingredient_id' => $ingredient->id, 'quantity' => 20],
     ]))->toThrow(Exception::class);
+});
+
+it('refuses to create an ingredient transfer routed to the Bar warehouse', function () {
+    Role::firstOrCreate(['name' => 'storekeeper']);
+    $storekeeper = User::factory()->create();
+
+    $main = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    WareHouse::create(['name' => 'Kitchen', 'type' => 'consumer']);
+
+    $ingredient = Ingredient::create(['name' => 'Carrot', 'sku' => 'ING-CARROT', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 5, 'category' => 'Vegetables']);
+    IngredientInventoryItem::create(['ingredient_id' => $ingredient->id, 'warehouse_id' => $main->id, 'quantity' => 20]);
+
+    $service = new StockTransferService;
+
+    expect(fn () => $service->createTransfer($main->id, $bar->id, $storekeeper->id, [], [
+        ['ingredient_id' => $ingredient->id, 'quantity' => 9],
+    ]))->toThrow(Exception::class, 'Ingredients cannot be transferred to the Bar — only to the Kitchen or Main Store.');
 });

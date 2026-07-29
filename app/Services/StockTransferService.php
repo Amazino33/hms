@@ -44,9 +44,22 @@ class StockTransferService
      */
     public function createTransfer(int $fromWarehouseId, int $toWarehouseId, int $userId, array $items, array $ingredientItems = []): StockTransfer
     {
+        // Ingredients are the kitchen's stock track — the bar never consumes
+        // them. Nothing previously stopped a storekeeper from routing an
+        // ingredient transfer to the Bar warehouse by mistake, which left a
+        // bartender blocked from ending shift by a transfer that was never
+        // theirs to receive. Matched by name (like the transfer form's own
+        // client-side filtering) rather than getBarWarehouseId()'s
+        // position-based resolution, which only distinguishes "bar" from
+        // "kitchen" when both consumer warehouses actually exist.
+        $toWarehouse = \App\Models\WareHouse::find($toWarehouseId);
+        if (! empty($ingredientItems) && $toWarehouse && $toWarehouse->type === 'consumer' && str_contains(strtolower($toWarehouse->name), 'bar')) {
+            throw new \Exception('Ingredients cannot be transferred to the Bar — only to the Kitchen or Main Store.');
+        }
+
         return DB::transaction(function () use ($fromWarehouseId, $toWarehouseId, $userId, $items, $ingredientItems) {
             $transfer = StockTransfer::create([
-                'transfer_number' => 'TR-' . time() . '-' . Str::upper(Str::random(4)),
+                'transfer_number' => 'TR-'.time().'-'.Str::upper(Str::random(4)),
                 'from_warehouse_id' => $fromWarehouseId,
                 'to_warehouse_id' => $toWarehouseId,
                 'user_id' => $userId,
@@ -145,7 +158,7 @@ class StockTransferService
             ->lockForUpdate()
             ->first();
 
-        if (!$from || $from->quantity < $item->quantity) {
+        if (! $from || $from->quantity < $item->quantity) {
             throw new \Exception("Insufficient stock in source warehouse for product {$item->product_id}");
         }
 
@@ -194,7 +207,7 @@ class StockTransferService
             ->lockForUpdate()
             ->first();
 
-        if (!$from || $from->quantity < $item->quantity) {
+        if (! $from || $from->quantity < $item->quantity) {
             throw new \Exception("Insufficient stock in source warehouse for ingredient {$item->ingredient_id}");
         }
 

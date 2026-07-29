@@ -276,8 +276,20 @@
             return allProducts;
         }
 
+        function getFilteredIngredients(toWarehouseId) {
+            if (!toWarehouseId) return allIngredients;
+
+            const warehouse = warehouses.find(w => w.id == toWarehouseId);
+            if (!warehouse || warehouse.type !== 'consumer') return allIngredients;
+
+            // Ingredients are the kitchen's stock track — never the bar's.
+            // A consumer warehouse whose name isn't "kitchen" (i.e. the Bar)
+            // gets an empty ingredient list, same idea as getFilteredProducts.
+            return warehouse.name.toLowerCase().includes('kitchen') ? allIngredients : [];
+        }
+
         function itemsFor(type, toWarehouseId) {
-            return type === 'ingredient' ? allIngredients : getFilteredProducts(toWarehouseId);
+            return type === 'ingredient' ? getFilteredIngredients(toWarehouseId) : getFilteredProducts(toWarehouseId);
         }
 
         function findItem(type, id) {
