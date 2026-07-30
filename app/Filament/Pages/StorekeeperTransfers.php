@@ -4,11 +4,13 @@ namespace App\Filament\Pages;
 
 use App\Models\Ingredient;
 use App\Models\Product;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use App\Services\PermissionService;
+use App\Services\StockTransferService;
 use App\Models\StockTransfer;
 use App\Models\WareHouse;
 
@@ -21,9 +23,46 @@ class StorekeeperTransfers extends Page
     // Defer loading of paginated recent transfers (which can be expensive)
     public bool $ready = false;
 
+    public ?int $cancellingTransferId = null;
+
+    public string $cancelReason = '';
+
     public function load(): void
     {
         $this->ready = true;
+    }
+
+    public function startCancelTransfer(int $transferId): void
+    {
+        $this->cancellingTransferId = $transferId;
+        $this->cancelReason = '';
+    }
+
+    public function abandonCancelTransfer(): void
+    {
+        $this->cancellingTransferId = null;
+        $this->cancelReason = '';
+    }
+
+    public function confirmCancelTransfer(): void
+    {
+        $transfer = StockTransfer::find($this->cancellingTransferId);
+
+        if (! $transfer) {
+            return;
+        }
+
+        try {
+            app(StockTransferService::class)->cancelTransfer($transfer, $this->cancelReason, Auth::id());
+
+            $this->cancellingTransferId = null;
+            $this->cancelReason = '';
+            Cache::forget("receive_transfers:wh:{$transfer->to_warehouse_id}");
+
+            Notification::make()->title('Transfer cancelled')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not cancel transfer')->body($e->getMessage())->danger()->persistent()->send();
+        }
     }
 
     public function getViewData(): array

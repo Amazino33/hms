@@ -27,3 +27,23 @@ it('shows a clear session-expired message instead of a generic error on a real 4
     expect($view)->toContain('response.status === 419');
     expect($view)->toContain('SESSION_EXPIRED');
 });
+
+/**
+ * Production incident: a storekeeper's single transfer got created 4
+ * times with identical line items, all at the same timestamp — nothing
+ * stopped a repeated/rapid click on "Create Transfer" from firing this
+ * whole handler (including another full POST to /stock-transfers) again
+ * before the first request's response came back. The submit button is
+ * now the guard: disabled the instant a valid submission starts sending,
+ * re-enabled only on an error path (never on success, since the page
+ * reloads shortly after anyway) — plus an explicit early-return in case
+ * some path ever re-enables it while a request is still in flight.
+ */
+it('disables the submit button while a transfer request is in flight, and only re-enables it on an error path', function () {
+    $view = file_get_contents(resource_path('views/filament/pages/storekeeper-transfers.blade.php'));
+
+    expect($view)->toContain('id="transfer-submit-btn"');
+    expect($view)->toContain("if (submitBtn && submitBtn.disabled) return;");
+    expect($view)->toContain('submitBtn.disabled = true;');
+    expect($view)->toContain('function reenableSubmitBtn()');
+});

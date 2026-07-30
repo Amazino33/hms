@@ -74,8 +74,8 @@
 
                     <!-- Submit Button -->
                     <div class="flex items-center md:justify-end justify-center gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <button type="submit" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200">
-                            Create Transfer
+                        <button type="submit" id="transfer-submit-btn" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+                            <span id="transfer-submit-btn-text">Create Transfer</span>
                         </button>
                     </div>
                 </form>
@@ -227,11 +227,35 @@
                                             @elseif($transfer->status === 'sent') bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300
                                             @elseif($transfer->status === 'partially_received') bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300
                                             @elseif($transfer->status === 'received') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                            @elseif($transfer->status === 'cancelled') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
                                             @else bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300
                                             @endif">
                                             {{ str_replace('_', ' ', ucfirst($transfer->status ?? 'unknown')) }}
                                         </span>
                                         <p class="text-xs text-gray-500 dark:text-gray-400">{{ $transfer->created_at->diffForHumans() }}</p>
+
+                                        @if(in_array($transfer->status, ['pending', 'sent'], true))
+                                            @if($cancellingTransferId === $transfer->id)
+                                                <div class="w-full md:w-56 mt-1 space-y-1.5">
+                                                    <input type="text" wire:model="cancelReason" placeholder="Reason (required)"
+                                                        class="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                                                    <div class="flex gap-1.5">
+                                                        <button type="button" wire:click="confirmCancelTransfer" class="flex-1 px-2 py-1.5 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white">
+                                                            Confirm cancel
+                                                        </button>
+                                                        <button type="button" wire:click="abandonCancelTransfer" class="px-2 py-1.5 text-xs font-bold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+                                                            Never mind
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            @else
+                                                <button type="button" wire:click="startCancelTransfer({{ $transfer->id }})" class="text-xs font-bold text-red-600 hover:text-red-700 underline">
+                                                    Cancel transfer
+                                                </button>
+                                            @endif
+                                        @elseif($transfer->status === 'cancelled' && $transfer->cancelled_reason)
+                                            <p class="text-xs text-gray-400 md:text-right max-w-[200px]">Cancelled: {{ $transfer->cancelled_reason }}</p>
+                                        @endif
                                     </div>
                                 </div>
                             </div>
@@ -609,6 +633,17 @@
 
             e.preventDefault();
 
+            // Guards against the exact bug that produced duplicate transfers
+            // in production: nothing previously stopped a second (or third,
+            // or fourth) click on "Create Transfer" from firing this whole
+            // handler again — including another full POST — before the
+            // first request's response came back. The button being disabled
+            // IS the guard; a click while disabled never reaches here in a
+            // real browser, but this is a defensive belt-and-braces check
+            // in case some path re-enables it unexpectedly.
+            const submitBtn = document.getElementById('transfer-submit-btn');
+            if (submitBtn && submitBtn.disabled) return;
+
             const rows = document.querySelectorAll('#items-list > .item-row');
             const items = [];
             const ingredientItems = [];
@@ -653,6 +688,10 @@
                 ingredient_items: ingredientItems,
             };
 
+            const submitBtnText = document.getElementById('transfer-submit-btn-text');
+            if (submitBtn) submitBtn.disabled = true;
+            if (submitBtnText) submitBtnText.textContent = 'Creating…';
+
             fetch('/stock-transfers', {
                 method: 'POST',
                 body: JSON.stringify(payload),
@@ -676,6 +715,7 @@
             .then(data => {
                 if (data.message && data.message === 'Forbidden') {
                     showToast('Permission denied', 'error');
+                    reenableSubmitBtn();
                 } else if (data.transfer_number) {
                     showToast('Transfer created successfully!');
                     document.getElementById('items-list').innerHTML = '';
@@ -683,19 +723,31 @@
                     addItemRow();
                     Object.keys(availabilityCache).forEach(key => delete availabilityCache[key]);
                     refreshPreview();
+                    // Left disabled deliberately — the page reload just
+                    // below makes re-enabling it pointless, and it keeps
+                    // the button inert for the couple of seconds someone
+                    // could otherwise double back and click it again.
                     setTimeout(() => location.reload(), 2000);
                 } else {
                     showToast(data.message || 'Error creating transfer', 'error');
+                    reenableSubmitBtn();
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
                 if (error && error.message === 'SESSION_EXPIRED') {
                     showToast('Your session expired — reload the page and try again', 'error');
+                    reenableSubmitBtn();
                     return;
                 }
                 showToast('Error creating transfer', 'error');
+                reenableSubmitBtn();
             });
+
+            function reenableSubmitBtn() {
+                if (submitBtn) submitBtn.disabled = false;
+                if (submitBtnText) submitBtnText.textContent = 'Create Transfer';
+            }
         });
 
         function showToast(msg, type = 'success') {

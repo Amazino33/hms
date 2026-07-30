@@ -102,6 +102,45 @@ class StockTransferService
         });
     }
 
+    /**
+     * A transfer that's still pending/sent has never moved any real stock
+     * (createTransfer() only validates sufficiency — the source warehouse
+     * isn't debited until receipt), so cancelling one is a plain status
+     * flip with no reversal needed. Once anything has actually been
+     * received (even partially), it's too late — that's real stock that
+     * already moved, and undoing it is TransferDiscrepancies' job, not a
+     * cancellation.
+     */
+    public function cancelTransfer(StockTransfer $transfer, string $reason, int $userId): StockTransfer
+    {
+        return DB::transaction(function () use ($transfer, $reason, $userId) {
+            $transfer = StockTransfer::where('id', $transfer->id)->lockForUpdate()->firstOrFail();
+
+            if (! in_array($transfer->status, ['pending', 'sent'], true)) {
+                throw new \Exception('Only a transfer that has not been received yet (even partially) can be cancelled.');
+            }
+
+            if (trim($reason) === '') {
+                throw new \Exception('A reason is required to cancel a transfer.');
+            }
+
+            $transfer->update([
+                'status' => 'cancelled',
+                'cancelled_reason' => $reason,
+                'cancelled_by' => $userId,
+                'cancelled_at' => now(),
+            ]);
+
+            activity('stock_transfer')
+                ->performedOn($transfer)
+                ->causedBy(User::find($userId))
+                ->withProperties(['reason' => $reason])
+                ->log('Transfer cancelled');
+
+            return $transfer->fresh();
+        });
+    }
+
     private function resolveLineQuantities(array $it, ?int $unitsPerPurchaseUnit): array
     {
         $enteredUnit = $it['entered_unit'] ?? 'base_unit';

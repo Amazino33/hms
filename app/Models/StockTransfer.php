@@ -12,6 +12,10 @@ class StockTransfer extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'cancelled_at' => 'datetime',
+    ];
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -44,6 +48,11 @@ class StockTransfer extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function cancelledBy()
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     /**
