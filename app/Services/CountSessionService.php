@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Company;
 use App\Models\CountSession;
 use App\Models\CountSessionItem;
 use App\Models\CountSessionItemReview;
@@ -12,7 +13,6 @@ use App\Models\Ingredient;
 use App\Models\IngredientInventoryItem;
 use App\Models\IngredientTransaction;
 use App\Models\InventoryItem;
-use App\Models\Company;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\Shift;
@@ -62,11 +62,11 @@ class CountSessionService
         // setting so it can be switched back on later with no new build.
         $skipZero = $isHandover && $this->handoverCountScope() === 'in_stock_only';
 
-        if ($isClosing && !$isHandover) {
+        if ($isClosing && ! $isHandover) {
             throw new \Exception('Only a bar/kitchen count can be a closing count.');
         }
 
-        if ($witnessUserId && !$isHandover) {
+        if ($witnessUserId && ! $isHandover) {
             throw new \Exception('Only a bar/kitchen count can have a witness.');
         }
 
@@ -74,17 +74,17 @@ class CountSessionService
             throw new \Exception('A closing count and an unwitnessed handover are two different things — pick one.');
         }
 
-        if ($witnessUserId && !$outgoingUserId) {
+        if ($witnessUserId && ! $outgoingUserId) {
             throw new \Exception('An unwitnessed handover still needs to name who the absent outgoing custodian is.');
         }
 
-        if ($isHandover && !$incomingUserId) {
+        if ($isHandover && ! $incomingUserId) {
             throw new \Exception($isClosing
                 ? 'A closing count requires a second person to confirm it.'
                 : 'A handover count requires an incoming user.');
         }
 
-        if ($isHandover && !$outgoingUserId && !$witnessUserId) {
+        if ($isHandover && ! $outgoingUserId && ! $witnessUserId) {
             // No outgoing custodian named — only legitimate if this is truly
             // the first shift of the day (no active shift of that role yet).
             $role = self::ROLE_FOR_HANDOVER[$type];
@@ -215,8 +215,17 @@ class CountSessionService
             }
 
             if ($countsProducts) {
+                // product() is withTrashed() (ProductHistory and other views
+                // deliberately want to see a deleted product's past
+                // inventory) — so this must explicitly exclude both
+                // deactivated and soft-deleted products itself, or a
+                // discontinued product's stale InventoryItem row keeps
+                // reappearing in every new count with nothing left to count
+                // it against, turning into a phantom shortfall no one can
+                // ever resolve.
                 $rows = InventoryItem::where('warehouse_id', $warehouseId)
                     ->when($skipZero, fn ($q) => $q->where('quantity', '>', 0))
+                    ->whereHas('product', fn ($q) => $q->where('is_active', true)->whereNull('deleted_at'))
                     ->get();
                 foreach ($rows as $row) {
                     $item = CountSessionItem::create([
@@ -272,7 +281,7 @@ class CountSessionService
      */
     public function addCatchItem(CountSession $session, string $itemType, int $itemId, int $callerUserId): CountSessionItem
     {
-        if (!$session->isDraft()) {
+        if (! $session->isDraft()) {
             throw new \Exception('Items can only be added while the session is still open.');
         }
 
@@ -286,7 +295,7 @@ class CountSessionService
             }
         }
 
-        if (!in_array($itemType, ['product', 'ingredient'], true)) {
+        if (! in_array($itemType, ['product', 'ingredient'], true)) {
             throw new \Exception('Invalid item type.');
         }
 
@@ -328,13 +337,13 @@ class CountSessionService
      * care about peer-to-peer authorization keeps working unchanged — the
      * real UI (CountSessionDetail) always passes auth()->id().
      *
-     * @param array<string, float|string|null> $quantitiesBySubLocation
+     * @param  array<string, float|string|null>  $quantitiesBySubLocation
      */
     public function recordCount(CountSessionItem $item, array $quantitiesBySubLocation, ?int $callerUserId = null): CountSessionItem
     {
         $session = $item->session;
 
-        if (!$session->isDraft()) {
+        if (! $session->isDraft()) {
             throw new \Exception('Counts can only be recorded while the session is still open.');
         }
 
@@ -355,7 +364,7 @@ class CountSessionService
         // nobody else to defer to: whoever opened it is the counter, full
         // stop. Without this, anyone who could reach the page at all could
         // write over someone else's in-progress solo count.
-        if ($callerUserId !== null && !$session->isHandover()) {
+        if ($callerUserId !== null && ! $session->isHandover()) {
             $expectedCounterId = $session->accountableUserId();
 
             if ($expectedCounterId !== null && $callerUserId !== $expectedCounterId) {
@@ -368,7 +377,7 @@ class CountSessionService
         $this->assertIntegerCounts($session, $quantitiesBySubLocation);
 
         foreach ($quantitiesBySubLocation as $subLocation => $quantity) {
-            if (!in_array($subLocation, $validLocations, true)) {
+            if (! in_array($subLocation, $validLocations, true)) {
                 throw new \Exception("'{$subLocation}' is not a valid sub-location for this item.");
             }
 
@@ -398,7 +407,7 @@ class CountSessionService
      * applied to every CountSession blanket — the underlying columns stay
      * decimal(10,2) for both.
      *
-     * @param array<string, float|string|null> $quantitiesBySubLocation
+     * @param  array<string, float|string|null>  $quantitiesBySubLocation
      */
     private function assertIntegerCounts(CountSession $session, array $quantitiesBySubLocation): void
     {
@@ -411,7 +420,7 @@ class CountSessionService
                 continue;
             }
 
-            if (!is_numeric($quantity) || fmod((float) $quantity, 1.0) !== 0.0) {
+            if (! is_numeric($quantity) || fmod((float) $quantity, 1.0) !== 0.0) {
                 throw new \Exception("'{$subLocation}' must be a whole number — bar counts don't take fractions.");
             }
         }
@@ -451,7 +460,7 @@ class CountSessionService
      */
     public function cancelSession(CountSession $session, int $cancelledByUserId, ?string $reason = null): CountSession
     {
-        if (!$session->isCancellable()) {
+        if (! $session->isCancellable()) {
             throw new \Exception('This session has already moved past the point where it can be cancelled.');
         }
 
@@ -479,17 +488,17 @@ class CountSessionService
      */
     public function declare(CountSession $session, string $outgoingPin, string $throttleKey): CountSession
     {
-        if (!$session->isHandoverWithSuccessor()) {
+        if (! $session->isHandoverWithSuccessor()) {
             throw new \Exception('Only a handover count with a successor goes through declaration.');
         }
 
-        if (!$session->isDraft()) {
+        if (! $session->isDraft()) {
             throw new \Exception('This count has already been declared.');
         }
 
-        $outgoingUser = (new PinAuthService())->attempt($outgoingPin, $throttleKey);
+        $outgoingUser = (new PinAuthService)->attempt($outgoingPin, $throttleKey);
 
-        if (!$outgoingUser || $outgoingUser->id !== $session->outgoing_user_id) {
+        if (! $outgoingUser || $outgoingUser->id !== $session->outgoing_user_id) {
             throw new \Exception('That PIN does not match the outgoing custodian.');
         }
 
@@ -499,7 +508,7 @@ class CountSessionService
                 'status' => 'declared',
             ]);
 
-            (new BartenderChefShiftService())->beginHandoverFreeze($session->fresh());
+            (new BartenderChefShiftService)->beginHandoverFreeze($session->fresh());
 
             return $session->fresh();
         });
@@ -516,11 +525,11 @@ class CountSessionService
      */
     public function bindIncomingCustodian(CountSession $session, string $incomingPin, string $throttleKey): CountSession
     {
-        if (!$session->isHandoverWithSuccessor() || $session->isUnwitnessed()) {
+        if (! $session->isHandoverWithSuccessor() || $session->isUnwitnessed()) {
             throw new \Exception('This session has no peer review phase to bind an incoming custodian to.');
         }
 
-        if (!$session->isDeclared()) {
+        if (! $session->isDeclared()) {
             throw new \Exception('This count has not been declared yet.');
         }
 
@@ -529,13 +538,13 @@ class CountSessionService
         }
 
         $role = self::ROLE_FOR_HANDOVER[$session->type];
-        $user = (new PinAuthService())->attempt($incomingPin, $throttleKey);
+        $user = (new PinAuthService)->attempt($incomingPin, $throttleKey);
 
-        if (!$user) {
+        if (! $user) {
             throw new \Exception('That PIN does not match anyone.');
         }
 
-        if (!$user->hasRole($role)) {
+        if (! $user->hasRole($role)) {
             throw new \Exception("Only a {$role} can review this count.");
         }
 
@@ -559,17 +568,17 @@ class CountSessionService
      * again to change a prior accept/dispute before the agreement is
      * sealed.
      *
-     * @param array<string, float|string|null>|null $incomingQuantities
+     * @param  array<string, float|string|null>|null  $incomingQuantities
      */
     public function reviewProduct(CountSessionItem $item, int $incomingUserId, string $outcome, ?array $incomingQuantities = null): CountSessionItemReview
     {
-        if (!in_array($outcome, ['accepted', 'disputed'], true)) {
+        if (! in_array($outcome, ['accepted', 'disputed'], true)) {
             throw new \Exception('Invalid review outcome.');
         }
 
         $session = $item->session;
 
-        if (!$session->isHandoverWithSuccessor() || $session->isUnwitnessed()) {
+        if (! $session->isHandoverWithSuccessor() || $session->isUnwitnessed()) {
             throw new \Exception('This session has no peer review phase.');
         }
 
@@ -577,11 +586,11 @@ class CountSessionService
             throw new \Exception('Only the incoming custodian can review this count.');
         }
 
-        if (!$session->isDeclared()) {
+        if (! $session->isDeclared()) {
             throw new \Exception('This count has not been declared yet.');
         }
 
-        if ($outcome === 'disputed' && !$incomingQuantities) {
+        if ($outcome === 'disputed' && ! $incomingQuantities) {
             throw new \Exception('A disputed product needs your own counted figures.');
         }
 
@@ -607,32 +616,32 @@ class CountSessionService
      * own count_session_sub_counts rows again (LogsActivity on that model
      * captures the before/after) resolves the dispute back to 'accepted'.
      *
-     * @param array<string, float|string|null> $newQuantities
+     * @param  array<string, float|string|null>  $newQuantities
      */
     public function amendDeclaration(CountSessionItem $item, string $outgoingPin, array $newQuantities, string $throttleKey): CountSessionItem
     {
         $session = $item->session;
 
-        if (!$session->isHandoverWithSuccessor()) {
+        if (! $session->isHandoverWithSuccessor()) {
             throw new \Exception('Only a handover count with a successor can be amended this way.');
         }
 
         $review = $item->review;
 
-        if (!$review || !$review->isDisputed()) {
+        if (! $review || ! $review->isDisputed()) {
             throw new \Exception('This product is not currently disputed.');
         }
 
-        $outgoingUser = (new PinAuthService())->attempt($outgoingPin, $throttleKey);
+        $outgoingUser = (new PinAuthService)->attempt($outgoingPin, $throttleKey);
 
-        if (!$outgoingUser || $outgoingUser->id !== $session->outgoing_user_id) {
+        if (! $outgoingUser || $outgoingUser->id !== $session->outgoing_user_id) {
             throw new \Exception('That PIN does not match the outgoing custodian.');
         }
 
         $subCounts = $item->subCounts()->get()->keyBy('sub_location');
 
         foreach (array_keys($newQuantities) as $subLocation) {
-            if (!$subCounts->has($subLocation)) {
+            if (! $subCounts->has($subLocation)) {
                 throw new \Exception("'{$subLocation}' is not a valid sub-location for this item.");
             }
         }
@@ -674,7 +683,7 @@ class CountSessionService
 
         $review = $item->review;
 
-        if (!$review || !$review->isDisputed()) {
+        if (! $review || ! $review->isDisputed()) {
             throw new \Exception('This product is not currently disputed.');
         }
 
@@ -711,18 +720,18 @@ class CountSessionService
      */
     public function sealAgreement(CountSession $session, string $firstPin, string $secondPin, string $throttleKey): CountSession
     {
-        if (!$session->isHandoverWithSuccessor()) {
+        if (! $session->isHandoverWithSuccessor()) {
             throw new \Exception('Only a handover count with a successor is sealed this way.');
         }
 
         $isUnwitnessed = $session->isUnwitnessed();
 
         if ($isUnwitnessed) {
-            if (!$session->isDraft()) {
+            if (! $session->isDraft()) {
                 throw new \Exception('This unwitnessed count is not ready to be sealed.');
             }
         } else {
-            if (!$session->isDeclared()) {
+            if (! $session->isDeclared()) {
                 throw new \Exception('This count must be declared before it can be sealed.');
             }
 
@@ -735,7 +744,7 @@ class CountSessionService
             }
         }
 
-        $pinAuth = new PinAuthService();
+        $pinAuth = new PinAuthService;
 
         $firstUser = $pinAuth->attempt($firstPin, "{$throttleKey}:first");
 
@@ -746,7 +755,7 @@ class CountSessionService
             // whoever validly PIN-authenticates at this moment IS the
             // witness, resolved by lookup and bound here rather than
             // compared against session-open's unverified dropdown guess.
-            if (!$firstUser) {
+            if (! $firstUser) {
                 throw new \Exception('That PIN does not match anyone.');
             }
 
@@ -756,12 +765,12 @@ class CountSessionService
         } else {
             $outgoingName = $session->outgoingUser?->name ?? 'the outgoing custodian';
 
-            if (!$firstUser || $firstUser->id !== $session->outgoing_user_id) {
+            if (! $firstUser || $firstUser->id !== $session->outgoing_user_id) {
                 throw new \Exception("Outgoing signature: PIN does not match {$outgoingName}'s PIN.");
             }
         }
 
-        if (!$isUnwitnessed && !$session->isIncomingBound()) {
+        if (! $isUnwitnessed && ! $session->isIncomingBound()) {
             throw new \Exception('The incoming custodian must confirm their identity via PIN (at review start) before this can be sealed.');
         }
 
@@ -770,7 +779,7 @@ class CountSessionService
 
         $secondUser = $pinAuth->attempt($secondPin, "{$throttleKey}:second");
 
-        if (!$secondUser || $secondUser->id !== $secondExpectedUserId) {
+        if (! $secondUser || $secondUser->id !== $secondExpectedUserId) {
             throw new \Exception("Incoming signature: PIN does not match {$incomingName}'s PIN.");
         }
 
@@ -784,7 +793,7 @@ class CountSessionService
             // only the session-level total_overage_quantity.
             $session = $this->closeSessionAndReconcile($session, $secondUser->id, trackOverages: false);
 
-            (new BartenderChefShiftService())->completeHandoverBoundary($session->fresh());
+            (new BartenderChefShiftService)->completeHandoverBoundary($session->fresh());
 
             activity('count_session')
                 ->performedOn($session)
@@ -911,20 +920,20 @@ class CountSessionService
             throw new \Exception('A handover count is submitted through the dual-PIN seal, not this.');
         }
 
-        if (!$session->isDraft()) {
+        if (! $session->isDraft()) {
             throw new \Exception('This count has already been submitted.');
         }
 
         $expectedUserId = $session->accountableUserId();
 
-        if (!$expectedUserId) {
+        if (! $expectedUserId) {
             throw new \Exception('This session has nobody recorded as the counter to confirm against.');
         }
 
-        $pinAuth = new PinAuthService();
+        $pinAuth = new PinAuthService;
         $user = $pinAuth->attempt($pin, $throttleKey);
 
-        if (!$user || $user->id !== $expectedUserId) {
+        if (! $user || $user->id !== $expectedUserId) {
             throw new \Exception('That PIN does not match the person who counted.');
         }
 
@@ -950,11 +959,11 @@ class CountSessionService
      */
     public function acknowledgeOverage(HandoverDiscrepancy $discrepancy, int $userId): HandoverDiscrepancy
     {
-        if (!$discrepancy->isOverage()) {
+        if (! $discrepancy->isOverage()) {
             throw new \Exception('Only an overage line is acknowledged this way — a shortage needs a debit or write-off decision.');
         }
 
-        if (!$discrepancy->isOpen()) {
+        if (! $discrepancy->isOpen()) {
             throw new \Exception('This line has already been resolved.');
         }
 
@@ -976,15 +985,15 @@ class CountSessionService
      */
     public function submitForReview(CountSession $session): CountSession
     {
-        if (!$session->isDraft()) {
+        if (! $session->isDraft()) {
             throw new \Exception('Only a session that is still counting can be submitted for review.');
         }
 
-        if ($session->isHandover() && $session->outgoing_user_id && !$session->confirmed_by_outgoing_at) {
+        if ($session->isHandover() && $session->outgoing_user_id && ! $session->confirmed_by_outgoing_at) {
             throw new \Exception('Both the outgoing and incoming custodian must confirm the count before it can be submitted.');
         }
 
-        if ($session->isHandover() && !$session->confirmed_by_incoming_at) {
+        if ($session->isHandover() && ! $session->confirmed_by_incoming_at) {
             throw new \Exception('Both the outgoing and incoming custodian must confirm the count before it can be submitted.');
         }
 
@@ -1020,11 +1029,11 @@ class CountSessionService
      */
     public function reviewItem(CountSessionItem $item, int $reviewerId, string $decision, ?string $notes = null): CountSessionItem
     {
-        if (!in_array($decision, ['true_up', 'accountability', 'ignored'], true)) {
+        if (! in_array($decision, ['true_up', 'accountability', 'ignored'], true)) {
             throw new \Exception('Invalid decision.');
         }
 
-        if (!$item->session->isPendingReview()) {
+        if (! $item->session->isPendingReview()) {
             throw new \Exception('This session is not awaiting review.');
         }
 
@@ -1053,7 +1062,7 @@ class CountSessionService
      */
     public function finalizeReview(CountSession $session, int $reviewedByUserId): CountSession
     {
-        if (!$session->isPendingReview()) {
+        if (! $session->isPendingReview()) {
             throw new \Exception('Only a session pending review can be finalized.');
         }
 
@@ -1076,7 +1085,7 @@ class CountSessionService
             ]);
 
             if ($session->isHandover()) {
-                (new BartenderChefShiftService())->applyHandoverShiftBoundary($session->fresh());
+                (new BartenderChefShiftService)->applyHandoverShiftBoundary($session->fresh());
             }
 
             return $session->fresh();
@@ -1122,7 +1131,7 @@ class CountSessionService
     {
         $accountableUserId = $item->session->accountableUserId();
 
-        if (!$accountableUserId) {
+        if (! $accountableUserId) {
             throw new \Exception('There is no accountable user recorded on this session to charge.');
         }
 
@@ -1133,7 +1142,7 @@ class CountSessionService
             'amount' => round($shortfallQuantity * $unitValue, 2),
             'reason' => 'count_session_shortfall',
             'notes' => "Count session #{$item->count_session_id}, item #{$item->id} ({$item->itemName()}): "
-                . "{$shortfallQuantity} short at " . number_format($unitValue, 2) . ' per unit.',
+                ."{$shortfallQuantity} short at ".number_format($unitValue, 2).' per unit.',
             'created_by' => $reviewerId,
         ]);
     }
@@ -1182,7 +1191,7 @@ class CountSessionService
         int $orderedByUserId,
         string $throttleKey,
     ): HandoverDiscrepancy {
-        if (!$discrepancy->isOpen()) {
+        if (! $discrepancy->isOpen()) {
             throw new \Exception('This discrepancy has already been resolved.');
         }
 
@@ -1190,17 +1199,17 @@ class CountSessionService
         $session = $item->session;
         $role = self::ROLE_FOR_HANDOVER[$session->type] ?? null;
 
-        $pinAuth = new PinAuthService();
+        $pinAuth = new PinAuthService;
 
         $counter = $pinAuth->attempt($counterPin, "{$throttleKey}:counter");
 
-        if (!$counter || ($role && !$counter->hasRole($role))) {
+        if (! $counter || ($role && ! $counter->hasRole($role))) {
             throw new \Exception("That PIN does not match a {$role}.");
         }
 
         $witness = $pinAuth->attempt($witnessPin, "{$throttleKey}:witness");
 
-        if (!$witness) {
+        if (! $witness) {
             throw new \Exception('That PIN does not match anyone.');
         }
 
@@ -1283,7 +1292,7 @@ class CountSessionService
             throw new \Exception('An overage has no debtor — use acknowledge or pend investigation instead.');
         }
 
-        if (!$discrepancy->isOpen()) {
+        if (! $discrepancy->isOpen()) {
             throw new \Exception('This discrepancy has already been resolved.');
         }
 
@@ -1291,7 +1300,7 @@ class CountSessionService
             $item = $discrepancy->item;
             $accountableUserId = $item->session->accountableUserId();
 
-            if (!$accountableUserId) {
+            if (! $accountableUserId) {
                 throw new \Exception('There is no accountable user recorded on this session to charge.');
             }
 
@@ -1300,7 +1309,7 @@ class CountSessionService
                 'amount' => $discrepancy->naira_value,
                 'reason' => 'count_session_shortfall',
                 'notes' => "Count session #{$item->count_session_id}, item #{$item->id} ({$item->itemName()}): "
-                    . "{$discrepancy->shortfall_quantity} short at " . number_format((float) $discrepancy->unit_price, 2) . ' per unit.',
+                    ."{$discrepancy->shortfall_quantity} short at ".number_format((float) $discrepancy->unit_price, 2).' per unit.',
                 'created_by' => $managerId,
             ]);
 
@@ -1317,7 +1326,7 @@ class CountSessionService
 
     public function pendDiscrepancyInvestigation(HandoverDiscrepancy $discrepancy, string $note, int $managerId): HandoverDiscrepancy
     {
-        if (!$discrepancy->isOpen()) {
+        if (! $discrepancy->isOpen()) {
             throw new \Exception('This discrepancy has already been resolved.');
         }
 
@@ -1339,7 +1348,7 @@ class CountSessionService
             throw new \Exception('An overage has nothing to write off — use acknowledge or pend investigation instead.');
         }
 
-        if (!$discrepancy->isOpen()) {
+        if (! $discrepancy->isOpen()) {
             throw new \Exception('This discrepancy has already been resolved.');
         }
 
@@ -1363,7 +1372,7 @@ class CountSessionService
      * arbitrary manager-selected set in the discrepancy queue table.
      * Already-resolved lines in the set are skipped, not fatal.
      *
-     * @param \Illuminate\Support\Collection<int, HandoverDiscrepancy> $discrepancies
+     * @param  \Illuminate\Support\Collection<int, HandoverDiscrepancy>  $discrepancies
      * @return array{debited: int, failed: int}
      */
     public function bulkDebitRemaining($discrepancies, int $managerId): array
@@ -1384,7 +1393,7 @@ class CountSessionService
     }
 
     /**
-     * @param \Illuminate\Support\Collection<int, HandoverDiscrepancy> $discrepancies
+     * @param  \Illuminate\Support\Collection<int, HandoverDiscrepancy>  $discrepancies
      * @return array{written_off: int, failed: int}
      */
     public function bulkWriteOffRemaining($discrepancies, string $reason, int $managerId): array

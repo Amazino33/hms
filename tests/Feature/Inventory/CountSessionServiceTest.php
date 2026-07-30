@@ -21,7 +21,7 @@ it('snapshots expected quantity at open and does not require it to record a coun
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
 
     $item = $session->items()->first();
@@ -46,7 +46,7 @@ it('rejects a sub-location that is not one of the warehouse fixed 3 slots', func
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
 
@@ -62,7 +62,7 @@ it('treats a blank/omitted sub-location quantity as zero, not an error', functio
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
 
@@ -84,7 +84,7 @@ it('uses a warehouse own configured labels instead of the Fridge/Floor/Shelf def
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
 
@@ -105,7 +105,7 @@ it('blocks submission for review until both outgoing and incoming confirm a hand
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $service->recordCount($session->items()->first(), ['Fridge' => 19]);
 
@@ -126,7 +126,7 @@ it('rejects a confirmation from someone who is not the named custodian', functio
     $incoming = User::factory()->create();
     $stranger = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
 
     expect(fn () => $service->confirmOutgoing($session, $stranger->id))->toThrow(Exception::class);
@@ -142,7 +142,7 @@ it('computes variance against live stock, not the stale snapshot, when sales hap
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     // Expected at open was 24.
 
@@ -177,7 +177,7 @@ it('true-ups stock to the counted figure without charging anyone', function () {
     $incoming = User::factory()->create();
     $manager = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 20]);
@@ -202,7 +202,7 @@ it('charges the outgoing custodian at selling price for an accountability decisi
     $incoming = User::factory()->create();
     $manager = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 20]); // 4 short of 24
@@ -234,7 +234,7 @@ it('charges ingredient shortfalls at last purchase price, not selling price', fu
     $incoming = User::factory()->create();
     $manager = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('kitchen_handover', $kitchen->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->where('ingredient_id', $ingredient->id)->first();
     $service->recordCount($item, ['Shelf A' => 8]); // 2kg short of 10
@@ -259,7 +259,7 @@ it('leaves stock untouched when a variance is ignored', function () {
     $incoming = User::factory()->create();
     $manager = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 23]);
@@ -283,7 +283,7 @@ it('refuses to finalize a session while any variance is still undecided', functi
     $incoming = User::factory()->create();
     $manager = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 20]);
@@ -309,7 +309,7 @@ it('supports a single-person main store stocktake without dual confirmation', fu
     $storekeeper = User::factory()->create();
     $manager = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
 
     expect($session->outgoing_user_id)->toBeNull();
@@ -338,7 +338,7 @@ it('backfills a zero-quantity Main Store row for a product only ever stocked at 
 
     $storekeeper = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
 
     $items = $session->items()->with('product')->get();
@@ -361,11 +361,35 @@ it('does not backfill Main Store rows for an inactive product', function () {
 
     $storekeeper = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
 
     expect($session->items()->where('product_id', $discontinued->id)->exists())->toBeFalse();
     expect(InventoryItem::where('product_id', $discontinued->id)->where('warehouse_id', $mainStore->id)->exists())->toBeFalse();
+});
+
+it('excludes a product that already has an InventoryItem row at the warehouse being counted once it is deactivated or soft-deleted', function () {
+    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+
+    $deactivated = Product::create(['name' => 'Deactivated Drink', 'price' => 500, 'category_id' => $category->id, 'is_active' => false]);
+    InventoryItem::create(['product_id' => $deactivated->id, 'warehouse_id' => $mainStore->id, 'quantity' => 11]);
+
+    $deleted = Product::create(['name' => 'Deleted Drink', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $deleted->id, 'warehouse_id' => $mainStore->id, 'quantity' => 9]);
+    $deleted->delete();
+
+    $active = Product::create(['name' => 'Active Drink', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $active->id, 'warehouse_id' => $mainStore->id, 'quantity' => 20]);
+
+    $storekeeper = User::factory()->create();
+
+    $service = new CountSessionService;
+    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
+
+    expect($session->items()->where('product_id', $deactivated->id)->exists())->toBeFalse();
+    expect($session->items()->where('product_id', $deleted->id)->exists())->toBeFalse();
+    expect($session->items()->where('product_id', $active->id)->exists())->toBeTrue();
 });
 
 it('defaults to product scope, matching this session type\'s original behavior', function () {
@@ -378,7 +402,7 @@ it('defaults to product scope, matching this session type\'s original behavior',
 
     $storekeeper = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
 
     expect($session->item_scope)->toBe('product');
@@ -396,7 +420,7 @@ it('opens a products-only session when itemScope is product, never mixing in ing
 
     $storekeeper = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id, itemScope: 'product');
 
     $productItem = $session->items->firstWhere('product_id', $product->id);
@@ -415,7 +439,7 @@ it('lets a storekeeper count kitchen ingredients in a Main Store stocktake when 
 
     $storekeeper = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id, itemScope: 'ingredient');
 
     expect($session->item_scope)->toBe('ingredient');
@@ -441,7 +465,7 @@ it('backfills a zero-quantity Main Store row for an ingredient only ever stocked
 
     $storekeeper = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id, itemScope: 'ingredient');
 
     $ingredientItem = $session->items->firstWhere('ingredient_id', $ingredient->id);
@@ -461,7 +485,7 @@ it('does not add ingredients to a bar_handover session — the bar never stocks 
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
 
     expect($session->items()->where('item_type', 'ingredient')->exists())->toBeFalse();
@@ -478,7 +502,7 @@ it('refuses to open a second count session for a warehouse that already has one 
     $incoming = User::factory()->create();
     $rogue = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
 
     expect(fn () => $service->openSession('bar_handover', $bar->id, $rogue->id, $rogue->id, $incoming->id))
@@ -495,7 +519,7 @@ it('allows a new count session once the warehouse\'s previous one is reviewed', 
     $incoming = User::factory()->create();
     $manager = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24]);
@@ -522,7 +546,7 @@ it('does not block a count session for a different warehouse while one is in pro
     $chefOutgoing = User::factory()->create();
     $chefIncoming = User::factory()->create();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $service->openSession('bar_handover', $bar->id, $barOutgoing->id, $barOutgoing->id, $barIncoming->id);
 
     $kitchenSession = $service->openSession('kitchen_handover', $kitchen->id, $chefOutgoing->id, $chefOutgoing->id, $chefIncoming->id);
