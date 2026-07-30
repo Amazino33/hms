@@ -70,7 +70,7 @@ class StockTransferService
                 $product = Product::findOrFail($it['product_id']);
                 [$baseQty, $enteredQty, $enteredUnit, $snapshot] = $this->resolveLineQuantities($it, $product->units_per_purchase_unit);
 
-                $this->assertSufficientStock(InventoryItem::class, 'product_id', $product->id, $fromWarehouseId, $baseQty);
+                $this->assertSufficientStock(InventoryItem::class, StockTransferItem::class, 'product_id', $product->id, $product->name, $fromWarehouseId, $baseQty);
 
                 StockTransferItem::create([
                     'stock_transfer_id' => $transfer->id,
@@ -86,7 +86,7 @@ class StockTransferService
                 $ingredient = Ingredient::findOrFail($it['ingredient_id']);
                 [$baseQty, $enteredQty, $enteredUnit, $snapshot] = $this->resolveLineQuantities($it, $ingredient->units_per_purchase_unit);
 
-                $this->assertSufficientStock(IngredientInventoryItem::class, 'ingredient_id', $ingredient->id, $fromWarehouseId, $baseQty);
+                $this->assertSufficientStock(IngredientInventoryItem::class, IngredientTransferItem::class, 'ingredient_id', $ingredient->id, $ingredient->name, $fromWarehouseId, $baseQty);
 
                 IngredientTransferItem::create([
                     'stock_transfer_id' => $transfer->id,
@@ -150,15 +150,45 @@ class StockTransferService
         return [$baseQty, $enteredQty, $enteredUnit, $enteredUnit === 'purchase_unit' ? $unitsPerPurchaseUnit : null];
     }
 
-    private function assertSufficientStock(string $inventoryModel, string $keyColumn, int $keyId, int $warehouseId, float $baseQty): void
+    /**
+     * Creating a transfer never reserves stock — nothing is actually
+     * debited until receipt (see receiveTransferLine()/moveProductStock()).
+     * Without accounting for that, two transfers for the same product out
+     * of the same warehouse can each pass this check independently against
+     * the same raw quantity, since neither has decremented anything yet —
+     * whichever gets received first silently uses up the real stock,
+     * leaving the second stranded with a confusing failure at receipt
+     * instead of being blocked here, at creation, where the problem
+     * actually is. Subtracting what other still-unreceived transfers have
+     * already committed catches that conflict up front.
+     */
+    private function assertSufficientStock(string $inventoryModel, string $transferItemModel, string $keyColumn, int $keyId, string $itemName, int $warehouseId, float $baseQty): void
     {
         $available = (float) ($inventoryModel::query()
             ->where($keyColumn, $keyId)
             ->where('warehouse_id', $warehouseId)
             ->value('quantity') ?? 0);
 
-        if ($available < $baseQty) {
-            throw new \Exception("Insufficient stock in source warehouse for {$keyColumn} {$keyId}");
+        $alreadyCommitted = (float) $transferItemModel::query()
+            ->where($keyColumn, $keyId)
+            ->where('outcome', 'pending')
+            ->whereHas('transfer', function ($query) use ($warehouseId) {
+                $query->where('from_warehouse_id', $warehouseId)
+                    ->whereIn('status', ['pending', 'sent', 'partially_received']);
+            })
+            ->sum('quantity');
+
+        $trulyAvailable = $available - $alreadyCommitted;
+
+        if ($trulyAvailable < $baseQty) {
+            $trulyAvailableLabel = rtrim(rtrim(number_format(max(0, $trulyAvailable), 2), '0'), '.');
+            $committedLabel = rtrim(rtrim(number_format($alreadyCommitted, 2), '0'), '.');
+
+            $message = $alreadyCommitted > 0
+                ? "Not enough {$itemName} available — only {$trulyAvailableLabel} left after {$committedLabel} already committed to other pending transfers out of this warehouse."
+                : "Not enough {$itemName} in this warehouse to send that much.";
+
+            throw new \Exception($message);
         }
     }
 
