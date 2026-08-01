@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Category;
+use App\Models\Company;
 use App\Models\InventoryItem;
 use App\Models\Product;
 use App\Models\Shift;
@@ -24,7 +25,7 @@ it('refuses to create any order when the placing waiter has no active shift', fu
 
     DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
 
-    $service = new OrderSplitter();
+    $service = new OrderSplitter;
 
     expect(fn () => $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $user->id, []))
         ->toThrow(Exception::class);
@@ -43,7 +44,7 @@ it('refuses to create a bar order when there is no active bartender shift', func
 
     DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
 
-    $service = new OrderSplitter();
+    $service = new OrderSplitter;
 
     expect(fn () => $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $waiter->id, []))
         ->toThrow(Exception::class, 'No active bartender session');
@@ -62,12 +63,51 @@ it('refuses to create a kitchen order when there is no active chef shift', funct
 
     DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
 
-    $service = new OrderSplitter();
+    $service = new OrderSplitter;
 
     expect(fn () => $service->handle([$rice->id => ['name' => $rice->name, 'price' => $rice->price, 'quantity' => 1]], 1, $waiter->id, []))
         ->toThrow(Exception::class, 'No active chef session');
 
     expect(\App\Models\Order::count())->toBe(0);
+});
+
+it('allows a kitchen order with no chef shift at all once require_chef_shift_for_kitchen_orders is off', function () {
+    Company::create(['id' => 1, 'name' => 'Test Co', 'require_chef_shift_for_kitchen_orders' => false]);
+
+    seedShiftGuardWarehouses();
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    $category = Category::create(['name' => 'Food', 'type' => 'food']);
+    $rice = Product::create(['name' => 'Rice', 'price' => 1000, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $rice->id, 'warehouse_id' => 5, 'quantity' => 10]);
+
+    DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
+
+    $service = new OrderSplitter;
+    $orders = $service->handle([$rice->id => ['name' => $rice->name, 'price' => $rice->price, 'quantity' => 1]], 1, $waiter->id, []);
+
+    expect($orders)->toHaveCount(1);
+    expect(\App\Models\Order::count())->toBe(1);
+});
+
+it('still requires an active bartender shift for bar orders even when the chef shift requirement is off', function () {
+    Company::create(['id' => 1, 'name' => 'Test Co', 'require_chef_shift_for_kitchen_orders' => false]);
+
+    seedShiftGuardWarehouses();
+    $waiter = User::factory()->create();
+    Shift::create(['user_id' => $waiter->id, 'type' => 'waiter', 'started_at' => now(), 'status' => 'active']);
+
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $beer = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $beer->id, 'warehouse_id' => 4, 'quantity' => 10]);
+
+    DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
+
+    $service = new OrderSplitter;
+
+    expect(fn () => $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $waiter->id, []))
+        ->toThrow(Exception::class, 'No active bartender session');
 });
 
 it('allows a bar order once waiter and bartender shifts are both active', function () {
@@ -83,7 +123,7 @@ it('allows a bar order once waiter and bartender shifts are both active', functi
 
     DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
 
-    $service = new OrderSplitter();
+    $service = new OrderSplitter;
     $orders = $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $waiter->id, []);
 
     expect($orders)->toHaveCount(1);
@@ -106,7 +146,7 @@ it('treats a stale bartender shift as if none exists', function () {
 
     DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
 
-    $service = new OrderSplitter();
+    $service = new OrderSplitter;
 
     expect(fn () => $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $waiter->id, []))
         ->toThrow(Exception::class, 'No active bartender session');
@@ -131,7 +171,7 @@ it('still allows a bar order from a bartender shift running about 22 hours, past
 
     DB::table('tables')->insert(['id' => 1, 'name' => 'Table 1', 'capacity' => 4, 'status' => 'available', 'location' => 'Main', 'created_at' => now(), 'updated_at' => now()]);
 
-    $service = new OrderSplitter();
+    $service = new OrderSplitter;
     $orders = $service->handle([$beer->id => ['name' => $beer->name, 'price' => $beer->price, 'quantity' => 1]], 1, $waiter->id, []);
 
     expect($orders)->toHaveCount(1);

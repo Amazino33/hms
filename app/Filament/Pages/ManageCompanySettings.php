@@ -59,6 +59,7 @@ class ManageCompanySettings extends Page implements HasForms
             'logo_path' => $this->company->logo_path,
             'handover_count_scope' => $this->company->handover_count_scope,
             'enforce_kitchen_ingredient_stock' => $this->company->enforce_kitchen_ingredient_stock,
+            'require_chef_shift_for_kitchen_orders' => $this->company->require_chef_shift_for_kitchen_orders,
             'maintenance_message' => $this->company->maintenance_message,
             'maintenance_duration_minutes' => $this->company->maintenance_duration_minutes ?? 15,
             'maintenance_secret' => $this->company->maintenance_secret,
@@ -137,6 +138,12 @@ class ManageCompanySettings extends Page implements HasForms
                 Toggle::make('enforce_kitchen_ingredient_stock')
                     ->label('Block a food sale when kitchen ingredient stock is insufficient')
                     ->helperText('Off lets waiters keep ordering food (still recorded for accounting) while kitchen ingredient stock is still being set up — a shortfall just goes negative instead of blocking the sale. Turn this back on once ingredient stock is reliable.')
+                    ->default(true)
+                    ->columnSpanFull(),
+
+                Toggle::make('require_chef_shift_for_kitchen_orders')
+                    ->label('Require an active chef shift to place a kitchen order')
+                    ->helperText('Off lets waiters place food orders even with no chef clocked in — the sale is still recorded for accounting. Turn this back on once kitchen shift handovers are part of the normal routine.')
                     ->default(true)
                     ->columnSpanFull(),
 

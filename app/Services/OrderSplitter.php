@@ -2,16 +2,15 @@
 
 namespace App\Services;
 
+use App\Events\OrderCreated;
 use App\Models\Commission;
+use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
-use App\Models\MenuItem;
 use App\Models\Shift;
-use Illuminate\Support\Facades\DB;
-use App\Events\OrderCreated;
-use App\Services\InventoryService;
 use Filament\Actions\Action;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class OrderSplitter
@@ -19,13 +18,11 @@ class OrderSplitter
     /**
      * Create separate orders per destination based on cart.
      *
-     * @param array|\Illuminate\Support\Collection $cart  keyed by productId => [name,price,quantity] or menuItemId prefixed with 'menu_' => [name,price,quantity]
-     * @param int $tableId
-     * @param int $userId
-     * @param array $options optional keys: payment_method, amount_paid, guest_id
+     * @param  array|\Illuminate\Support\Collection  $cart  keyed by productId => [name,price,quantity] or menuItemId prefixed with 'menu_' => [name,price,quantity]
+     * @param  array  $options  optional keys: payment_method, amount_paid, guest_id
      * @return array created Order models
      */
-    public function handle($cart, ?int $tableId, int $userId, array $options = []) : array
+    public function handle($cart, ?int $tableId, int $userId, array $options = []): array
     {
         $created = [];
 
@@ -45,7 +42,7 @@ class OrderSplitter
                     $item['menu_item_id'] = (int) str_replace('menu_', '', $key);
 
                     $menuItem = MenuItem::find($item['menu_item_id']);
-                    if (!$menuItem) {
+                    if (! $menuItem) {
                         throw new \Exception("Menu item not found: {$item['name']}");
                     }
                     $item['price'] = (float) $menuItem->sale_price;
@@ -54,7 +51,7 @@ class OrderSplitter
                     $item['product_id'] = (int) $key;
 
                     $product = Product::find($item['product_id']);
-                    if (!$product) {
+                    if (! $product) {
                         throw new \Exception("Product not found: {$item['name']}");
                     }
                     $item['price'] = (float) $product->price;
@@ -71,11 +68,11 @@ class OrderSplitter
                     return 'kitchen';
                 } else {
                     $product = Product::with('category')->find($item['product_id']);
-                    
+
                     // Determine warehouse dynamically based on product category
                     $warehouseId = self::getWarehouseForProduct($product);
-                    
-                    return $warehouseId === self::getBarWarehouseId() ? 'bar' : 
+
+                    return $warehouseId === self::getBarWarehouseId() ? 'bar' :
                            ($warehouseId === self::getKitchenWarehouseId() ? 'kitchen' : 'main');
                 }
             });
@@ -83,7 +80,7 @@ class OrderSplitter
             // Calculate total cart amount for proportional payment distribution
             $totalCartAmount = 0;
             foreach ($groups as $destination => $items) {
-                $totalCartAmount += collect($items)->sum(fn($i) => $i['price'] * $i['quantity']);
+                $totalCartAmount += collect($items)->sum(fn ($i) => $i['price'] * $i['quantity']);
             }
 
             $paidAmount = $options['amount_paid'] ?? 0;
@@ -96,7 +93,7 @@ class OrderSplitter
                 // actually has to be on duty at the bar/kitchen to make it.
                 self::assertShiftsActive($destination, $userId, skipWaiterShiftCheck: (bool) ($options['booking_id'] ?? false));
 
-                $groupTotal = collect($items)->sum(fn($i) => $i['price'] * $i['quantity']);
+                $groupTotal = collect($items)->sum(fn ($i) => $i['price'] * $i['quantity']);
 
                 // Distribute payment proportionally for partial payments
                 if ($orderStatus === 'paid') {
@@ -116,7 +113,7 @@ class OrderSplitter
                 }
 
                 $order = Order::create([
-                    'order_number' => 'ORD-' . time() . '-' . strtoupper(substr($destination,0,1)),
+                    'order_number' => 'ORD-'.time().'-'.strtoupper(substr($destination, 0, 1)),
                     'total_amount' => $groupTotal,
                     'amount_paid' => $amountPaid,
                     'paid_cash' => $paidCash,
@@ -136,7 +133,7 @@ class OrderSplitter
                 foreach ($items as $item) {
                     if ($item['type'] === 'menu_item') {
                         $menuItem = MenuItem::find($item['menu_item_id']);
-                        if (!$menuItem) {
+                        if (! $menuItem) {
                             throw new \Exception("Menu item not found: {$item['name']}");
                         }
                         OrderItem::create([
@@ -151,7 +148,7 @@ class OrderSplitter
                         ]);
                     } else {
                         $product = Product::with('category')->find($item['product_id']);
-                        $warehouseId = match(true) {
+                        $warehouseId = match (true) {
                             $product && $product->category && $product->category->type === 'drink' => 4,
                             $product && $product->category && $product->category->type === 'food' => 5,
                             default => 3,
@@ -188,14 +185,14 @@ class OrderSplitter
                 event(new OrderCreated($order));
 
                 // Send database notification to all staff users
-                $staffUsers = \App\Models\User::whereHas('roles', function($q) {
+                $staffUsers = \App\Models\User::whereHas('roles', function ($q) {
                     $q->whereIn('name', ['super_admin', 'chef', 'waiter', 'porter']);
                 })->get();
 
                 foreach ($staffUsers as $staffUser) {
                     \Filament\Notifications\Notification::make()
                         ->title("New Order: {$order->order_number}")
-                        ->body("New {$order->destination} order" . ($order->table ? " for table {$order->table->name}" : ' (Take Away)'))
+                        ->body("New {$order->destination} order".($order->table ? " for table {$order->table->name}" : ' (Take Away)'))
                         ->info()
                         ->actions([
                             Action::make('view')
@@ -224,17 +221,30 @@ class OrderSplitter
      */
     private static function assertShiftsActive(string $destination, int $waiterUserId, bool $skipWaiterShiftCheck = false): void
     {
-        if (!$skipWaiterShiftCheck && !Shift::query()->where('user_id', $waiterUserId)->activeNonStale('waiter')->exists()) {
+        if (! $skipWaiterShiftCheck && ! Shift::query()->where('user_id', $waiterUserId)->activeNonStale('waiter')->exists()) {
             throw new \Exception('You must start a shift before creating orders.');
         }
 
-        if ($destination === 'bar' && !Shift::query()->activeNonStale('bartender')->exists()) {
+        if ($destination === 'bar' && ! Shift::query()->activeNonStale('bartender')->exists()) {
             throw new \Exception('No active bartender session — a bar sale cannot be recorded without one.');
         }
 
-        if ($destination === 'kitchen' && !Shift::query()->activeNonStale('chef')->exists()) {
+        if ($destination === 'kitchen' && self::requireChefShiftForKitchenOrders() && ! Shift::query()->activeNonStale('chef')->exists()) {
             throw new \Exception('No active chef session — a kitchen sale cannot be recorded without one.');
         }
+    }
+
+    /**
+     * Company-wide toggle (companies.require_chef_shift_for_kitchen_orders,
+     * edited via ManageCompanySettings): off lets a waiter place a kitchen
+     * order with no chef shift active at all — the food-sold record still
+     * gets created for accounting either way. Independent of
+     * InventoryService::enforceIngredientStock(); this is about the shift
+     * gate, not ingredient deduction.
+     */
+    private static function requireChefShiftForKitchenOrders(): bool
+    {
+        return (bool) (\App\Models\Company::find(1)?->require_chef_shift_for_kitchen_orders ?? true);
     }
 
     /**
@@ -242,7 +252,7 @@ class OrderSplitter
      */
     private static function getWarehouseForProduct($product): int
     {
-        return match(true) {
+        return match (true) {
             $product && $product->category && $product->category->type === 'drink' => self::getBarWarehouseId(),
             $product && $product->category && $product->category->type === 'food' => self::getKitchenWarehouseId(),
             default => 3, // Default storage warehouse
@@ -266,6 +276,7 @@ class OrderSplitter
         if ($consumerWarehouses->count() > 1) {
             return $consumerWarehouses[1]->id; // Second consumer warehouse
         }
+
         return $consumerWarehouses->first()?->id ?? 5;
     }
 
@@ -297,14 +308,14 @@ class OrderSplitter
 
             if ($total > 0) {
                 Commission::create([
-                    'user_id'  => $order->user_id,
+                    'user_id' => $order->user_id,
                     'order_id' => $order->id,
-                    'amount'   => $total,
+                    'amount' => $total,
                 ]);
             }
         } catch (\Throwable $e) {
             // Never let commission logic break the payment flow.
-            Log::error('Commission calculation failed for order #' . $order->id . ': ' . $e->getMessage());
+            Log::error('Commission calculation failed for order #'.$order->id.': '.$e->getMessage());
         }
     }
 }
