@@ -11,6 +11,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -28,8 +29,11 @@ class ManageCompanySettings extends Page implements HasForms
     use InteractsWithForms;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-office';
+
     protected static string|UnitEnum|null $navigationGroup = 'System Management';
+
     protected static ?string $title = 'Company Settings';
+
     protected static ?int $navigationSort = 90;
 
     protected string $view = 'filament.pages.manage-company-settings';
@@ -49,19 +53,20 @@ class ManageCompanySettings extends Page implements HasForms
         );
 
         $this->form->fill([
-            'name'                  => $this->company->name,
-            'address'               => $this->company->address,
-            'phone_number'          => $this->company->phone_number,
-            'logo_path'             => $this->company->logo_path,
-            'handover_count_scope'  => $this->company->handover_count_scope,
-            'maintenance_message'   => $this->company->maintenance_message,
+            'name' => $this->company->name,
+            'address' => $this->company->address,
+            'phone_number' => $this->company->phone_number,
+            'logo_path' => $this->company->logo_path,
+            'handover_count_scope' => $this->company->handover_count_scope,
+            'enforce_kitchen_ingredient_stock' => $this->company->enforce_kitchen_ingredient_stock,
+            'maintenance_message' => $this->company->maintenance_message,
             'maintenance_duration_minutes' => $this->company->maintenance_duration_minutes ?? 15,
-            'maintenance_secret'    => $this->company->maintenance_secret,
-            'payroll_frequency'          => SettingsService::get('payroll_frequency', 'monthly'),
-            'payroll_period_start_day'   => SettingsService::get('payroll_period_start_day', '1'),
-            'payroll_payday_day'         => SettingsService::get('payroll_payday_day'),
-            'payroll_minimum_net'        => SettingsService::get('payroll_minimum_net', '20000'),
-            'room_generator_cost_per_night'   => SettingsService::get('room_generator_cost_per_night', '0'),
+            'maintenance_secret' => $this->company->maintenance_secret,
+            'payroll_frequency' => SettingsService::get('payroll_frequency', 'monthly'),
+            'payroll_period_start_day' => SettingsService::get('payroll_period_start_day', '1'),
+            'payroll_payday_day' => SettingsService::get('payroll_payday_day'),
+            'payroll_minimum_net' => SettingsService::get('payroll_minimum_net', '20000'),
+            'room_generator_cost_per_night' => SettingsService::get('room_generator_cost_per_night', '0'),
             'room_electricity_cost_per_night' => SettingsService::get('room_electricity_cost_per_night', '0'),
         ]);
     }
@@ -87,7 +92,7 @@ class ManageCompanySettings extends Page implements HasForms
             return null;
         }
 
-        return rtrim(config('app.url'), '/') . '/' . $secret;
+        return rtrim(config('app.url'), '/').'/'.$secret;
     }
 
     public function form(Schema $schema): Schema
@@ -127,6 +132,12 @@ class ManageCompanySettings extends Page implements HasForms
                     ->default('all')
                     ->required()
                     ->native(false)
+                    ->columnSpanFull(),
+
+                Toggle::make('enforce_kitchen_ingredient_stock')
+                    ->label('Block a food sale when kitchen ingredient stock is insufficient')
+                    ->helperText('Off lets waiters keep ordering food (still recorded for accounting) while kitchen ingredient stock is still being set up — a shortfall just goes negative instead of blocking the sale. Turn this back on once ingredient stock is reliable.')
+                    ->default(true)
                     ->columnSpanFull(),
 
                 Section::make('Maintenance Mode')
@@ -285,7 +296,7 @@ class ManageCompanySettings extends Page implements HasForms
 
                     Notification::make()
                         ->title('Maintenance mode enabled')
-                        ->body('Bypass URL: ' . $this->bypassUrl())
+                        ->body('Bypass URL: '.$this->bypassUrl())
                         ->warning()
                         ->persistent()
                         ->send();

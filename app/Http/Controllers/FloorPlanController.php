@@ -13,7 +13,7 @@ class FloorPlanController extends Controller
     {
         $order = Order::with(['table', 'items.product'])->find($orderId);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json(['error' => 'Order not found'], 404);
         }
 
@@ -33,7 +33,7 @@ class FloorPlanController extends Controller
                     'unit_price' => $item->unit_price,
                     'quantity' => $item->quantity,
                 ];
-            })
+            }),
         ]);
     }
 
@@ -51,7 +51,7 @@ class FloorPlanController extends Controller
             ->get(['products.id', 'products.name', 'products.price']);
 
         return response()->json([
-            'items' => $popularItems
+            'items' => $popularItems,
         ]);
     }
 
@@ -62,7 +62,7 @@ class FloorPlanController extends Controller
             'order_id' => 'required|exists:orders,id',
             'item_type' => 'required|in:product,menu_item',
             'item_id' => 'required|integer|min:1',
-            'quantity' => 'required|integer|min:1'
+            'quantity' => 'required|integer|min:1',
         ]);
 
         $order = Order::find($request->order_id);
@@ -75,18 +75,21 @@ class FloorPlanController extends Controller
         if ($request->item_type === 'menu_item') {
             // Handle menu item
             $menuItem = \App\Models\MenuItem::find($request->item_id);
-            if (!$menuItem) {
+            if (! $menuItem) {
                 return response()->json(['error' => 'Menu item not found'], 404);
             }
 
-            // Check ingredient availability for menu item
+            // Check ingredient availability for menu item — only actually
+            // blocks the add when enforce_kitchen_ingredient_stock is on
+            // (see InventoryService::enforceIngredientStock()).
             $insufficientIngredients = \App\Services\InventoryService::checkMenuItemIngredientsAvailability($request->item_id, $request->quantity);
-            if (!empty($insufficientIngredients)) {
+            if (! empty($insufficientIngredients) && \App\Services\InventoryService::enforceIngredientStock()) {
                 $messages = [];
                 foreach ($insufficientIngredients as $insufficient) {
                     $messages[] = "{$insufficient['ingredient']}: {$insufficient['available']} {$insufficient['unit']} available, need {$insufficient['required']}";
                 }
-                return response()->json(['error' => 'Insufficient ingredients: ' . implode('; ', $messages)], 400);
+
+                return response()->json(['error' => 'Insufficient ingredients: '.implode('; ', $messages)], 400);
             }
 
             // Check if menu item already exists in order
@@ -95,7 +98,7 @@ class FloorPlanController extends Controller
             if ($existingItem) {
                 // Update quantity
                 $existingItem->update([
-                    'quantity' => $existingItem->quantity + $request->quantity
+                    'quantity' => $existingItem->quantity + $request->quantity,
                 ]);
             } else {
                 // Add new menu item
@@ -112,7 +115,7 @@ class FloorPlanController extends Controller
         } else {
             // Handle product
             $product = Product::find($request->item_id);
-            if (!$product) {
+            if (! $product) {
                 return response()->json(['error' => 'Product not found'], 404);
             }
 
@@ -122,7 +125,7 @@ class FloorPlanController extends Controller
             if ($existingItem) {
                 // Update quantity
                 $existingItem->update([
-                    'quantity' => $existingItem->quantity + $request->quantity
+                    'quantity' => $existingItem->quantity + $request->quantity,
                 ]);
             } else {
                 // Add new product
@@ -146,7 +149,7 @@ class FloorPlanController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Item added successfully'
+            'message' => 'Item added successfully',
         ]);
     }
 }

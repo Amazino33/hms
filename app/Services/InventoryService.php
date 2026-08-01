@@ -2,13 +2,13 @@
 
 namespace App\Services;
 
-use App\Models\Order;
-use App\Models\Product;
 use App\Models\Ingredient;
-use App\Models\InventoryItem;
-use App\Models\InventoryTransaction;
 use App\Models\IngredientInventoryItem;
 use App\Models\IngredientTransaction;
+use App\Models\InventoryItem;
+use App\Models\InventoryTransaction;
+use App\Models\Order;
+use App\Models\Product;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -16,9 +16,6 @@ class InventoryService
 {
     /**
      * Return inventory items back to stock when an order is cancelled or returned.
-     *
-     * @param Order $order
-     * @return void
      */
     public static function returnInventoryForCancelledOrder(Order $order): void
     {
@@ -38,13 +35,13 @@ class InventoryService
     {
         $product = Product::with('category')->find($orderItem->product_id);
 
-        if (!$product) {
+        if (! $product) {
             return; // Skip if product doesn't exist
         }
 
         $warehouseId = self::getWarehouseForProduct($product);
 
-        DB::transaction(function () use ($orderItem, $product, $warehouseId, $order) {
+        DB::transaction(function () use ($orderItem, $warehouseId, $order) {
             $inventory = InventoryItem::query()
                 ->where('product_id', $orderItem->product_id)
                 ->where('warehouse_id', $warehouseId)
@@ -80,7 +77,7 @@ class InventoryService
     {
         $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($orderItem->menu_item_id);
 
-        if (!$menuItem) {
+        if (! $menuItem) {
             return;
         }
 
@@ -122,8 +119,6 @@ class InventoryService
      * Deduct inventory items when an order is created
      * (This is the reverse of returnInventoryForCancelledOrder)
      *
-     * @param Order $order
-     * @return void
      * @throws \Exception
      */
     public static function deductInventoryForOrderItems(Order $order): void
@@ -188,7 +183,7 @@ class InventoryService
     {
         $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($item->menu_item_id);
 
-        if (!$menuItem) {
+        if (! $menuItem) {
             throw new \Exception("Menu item not found: {$item->product_name}");
         }
 
@@ -197,7 +192,7 @@ class InventoryService
         foreach ($menuItem->recipes as $recipe) {
             $requiredQuantity = $recipe->quantity_needed * $item->quantity;
 
-            DB::transaction(function () use ($recipe, $requiredQuantity, $warehouseId, $order, $item) {
+            DB::transaction(function () use ($recipe, $requiredQuantity, $warehouseId, $order) {
                 $inventory = IngredientInventoryItem::query()
                     ->where('ingredient_id', $recipe->ingredient_id)
                     ->where('warehouse_id', $warehouseId)
@@ -206,9 +201,20 @@ class InventoryService
 
                 $currentStock = $inventory->quantity ?? 0;
 
-                if ($currentStock < $requiredQuantity) {
+                if ($currentStock < $requiredQuantity && self::enforceIngredientStock()) {
                     throw new \Exception("Insufficient ingredients: Only {$currentStock} {$recipe->ingredient->unit_name} of {$recipe->ingredient->name} available, need {$requiredQuantity}");
                 }
+
+                // Enforcement off (or stock genuinely sufficient): still
+                // deduct and log — a shortfall just goes negative instead
+                // of blocking the sale, so it's visible for reconciliation
+                // once kitchen ingredient stock is fully set up, rather than
+                // silently skipped.
+                $inventory ??= IngredientInventoryItem::create([
+                    'ingredient_id' => $recipe->ingredient_id,
+                    'warehouse_id' => $warehouseId,
+                    'quantity' => 0,
+                ]);
 
                 $inventory->decrement('quantity', $requiredQuantity);
 
@@ -231,11 +237,22 @@ class InventoryService
     }
 
     /**
+     * Company-wide toggle (companies.enforce_kitchen_ingredient_stock,
+     * edited via ManageCompanySettings): whether a menu-item sale actually
+     * gets blocked by insufficient kitchen ingredient stock. Off lets food
+     * keep selling (and the sale keep recording for accounting) while
+     * ingredient stock is still being set up — a shortfall just goes
+     * negative instead.
+     */
+    public static function enforceIngredientStock(): bool
+    {
+        return (bool) (\App\Models\Company::find(1)?->enforce_kitchen_ingredient_stock ?? true);
+    }
+
+    /**
      * Check if ingredients are available for a menu item (against kitchen
      * warehouse stock, since that is where consumption happens)
      *
-     * @param int $menuItemId
-     * @param int $quantity
      * @return array Array of insufficient ingredients or empty if all available
      */
     public static function checkMenuItemIngredientsAvailability(int $menuItemId, int $quantity): array
@@ -243,7 +260,7 @@ class InventoryService
         $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($menuItemId);
         $insufficient = [];
 
-        if (!$menuItem) {
+        if (! $menuItem) {
             return ['Menu item not found'];
         }
 
@@ -292,8 +309,7 @@ class InventoryService
      * Get low stock alerts for ingredients used in popular menu items
      * (evaluated against kitchen-warehouse stock)
      *
-     * @param int $threshold Threshold quantity for low stock alert
-     * @return array
+     * @param  int  $threshold  Threshold quantity for low stock alert
      */
     public static function getLowStockAlerts(int $threshold = 10): array
     {
@@ -305,12 +321,13 @@ class InventoryService
             ->pluck('ingredient_id');
 
         $lowStockIngredients = Ingredient::whereIn('id', $lowStockIngredientIds)
-            ->with(['recipes.menuItem' => function($query) {
+            ->with(['recipes.menuItem' => function ($query) {
                 $query->where('available_for_sale', true);
             }])
             ->get()
-            ->filter(function($ingredient) {
+            ->filter(function ($ingredient) {
                 $recipes = $ingredient->recipes ?? collect();
+
                 return $recipes->isNotEmpty();
             });
 
@@ -334,7 +351,7 @@ class InventoryService
      */
     public static function getWarehouseForProduct($product): int
     {
-        return match(true) {
+        return match (true) {
             $product && $product->category && $product->category->type === 'drink' => self::getBarWarehouseId(),
             $product && $product->category && $product->category->type === 'food' => self::getKitchenWarehouseId(),
             default => 3, // Default storage warehouse
@@ -365,6 +382,7 @@ class InventoryService
             if ($consumerWarehouses->count() > 1) {
                 return $consumerWarehouses[1]->id; // Second consumer warehouse
             }
+
             return $consumerWarehouses->first()?->id ?? 5;
         });
     }
