@@ -41,6 +41,10 @@ class CountSessionDetail extends Page
 
     public array $reviewNotes = [];
 
+    public string $bulkDecision = '';
+
+    public string $bulkNotes = '';
+
     /**
      * catchCandidates()'s search pool, computed once in mount() rather than
      * on every request. It's only ever consumed inside the wire:ignore'd
@@ -81,8 +85,9 @@ class CountSessionDetail extends Page
         $queryValue = request()->integer('session_id');
         $this->countSessionId = $session_id ?? ($queryValue > 0 ? $queryValue : null);
 
-        if (!$this->session) {
+        if (! $this->session) {
             redirect('/admin/count-sessions');
+
             return;
         }
 
@@ -98,7 +103,7 @@ class CountSessionDetail extends Page
      */
     protected function prefillSubLocationInputs(): void
     {
-        if (!$this->session || $this->session->status !== 'counting') {
+        if (! $this->session || $this->session->status !== 'counting') {
             return;
         }
 
@@ -124,7 +129,7 @@ class CountSessionDetail extends Page
      */
     public function safeCountItems(): array
     {
-        if (!$this->session || $this->session->status !== 'counting') {
+        if (! $this->session || $this->session->status !== 'counting') {
             return [];
         }
 
@@ -206,7 +211,7 @@ class CountSessionDetail extends Page
      */
     private function computeCatchCandidates(): array
     {
-        if (!$this->session || $this->session->status !== 'counting' || !$this->catchStepEnabled()) {
+        if (! $this->session || $this->session->status !== 'counting' || ! $this->catchStepEnabled()) {
             return [];
         }
 
@@ -244,14 +249,14 @@ class CountSessionDetail extends Page
      */
     public function addCatchItem(string $itemType, int $itemId): ?array
     {
-        if (!$this->catchStepEnabled()) {
+        if (! $this->catchStepEnabled()) {
             Notification::make()->title('Could not add item')->body('This session is not using the in-stock-only catch step.')->danger()->persistent()->send();
 
             return null;
         }
 
         try {
-            $item = (new CountSessionService())->addCatchItem($this->session, $itemType, $itemId, auth()->id());
+            $item = (new CountSessionService)->addCatchItem($this->session, $itemType, $itemId, auth()->id());
             $this->refreshSession();
             $this->prefillSubLocationInputs();
 
@@ -284,7 +289,7 @@ class CountSessionDetail extends Page
 
     public function getTitle(): string
     {
-        return 'Count Session #' . ($this->session?->id ?? '');
+        return 'Count Session #'.($this->session?->id ?? '');
     }
 
     protected function refreshSession(): void
@@ -311,20 +316,20 @@ class CountSessionDetail extends Page
      * the first place. subLocationInputs is still kept in sync below, since
      * it's what prefillSubLocationInputs() reads back on a page reload.
      *
-     * @param array<string, float|string|null> $quantities
+     * @param  array<string, float|string|null>  $quantities
      */
     public function recordCount(int $itemId, array $quantities): bool
     {
         $item = $this->session->items->firstWhere('id', $itemId);
 
-        if (!$item) {
+        if (! $item) {
             return false;
         }
 
         $this->subLocationInputs[$itemId] = $quantities;
 
         try {
-            (new CountSessionService())->recordCount($item, $quantities, auth()->id());
+            (new CountSessionService)->recordCount($item, $quantities, auth()->id());
             $this->refreshSession();
             $this->prefillSubLocationInputs();
 
@@ -343,7 +348,7 @@ class CountSessionDetail extends Page
      */
     protected function pinThrottleKey(string $step): string
     {
-        return "count_session:{$this->countSessionId}:{$step}:" . auth()->id();
+        return "count_session:{$this->countSessionId}:{$step}:".auth()->id();
     }
 
     /**
@@ -354,7 +359,7 @@ class CountSessionDetail extends Page
     public function declare(string $pin): void
     {
         try {
-            (new CountSessionService())->declare($this->session, $pin, $this->pinThrottleKey('declare'));
+            (new CountSessionService)->declare($this->session, $pin, $this->pinThrottleKey('declare'));
             $this->refreshSession();
             Notification::make()->title('Count declared')->success()->send();
         } catch (\Exception $e) {
@@ -372,7 +377,7 @@ class CountSessionDetail extends Page
      */
     public function safeReviewItems(): array
     {
-        if (!$this->session || $this->session->status !== 'declared') {
+        if (! $this->session || $this->session->status !== 'declared') {
             return [];
         }
 
@@ -397,7 +402,7 @@ class CountSessionDetail extends Page
     public function bindIncomingReview(string $pin): void
     {
         try {
-            (new CountSessionService())->bindIncomingCustodian($this->session, $pin, $this->pinThrottleKey('bind'));
+            (new CountSessionService)->bindIncomingCustodian($this->session, $pin, $this->pinThrottleKey('bind'));
             $this->refreshSession();
             Notification::make()->title('Identity confirmed — you can review now')->success()->send();
         } catch (\Exception $e) {
@@ -407,7 +412,7 @@ class CountSessionDetail extends Page
 
     public function reviewAccept(int $itemId): void
     {
-        if (!$this->iAmReviewer()) {
+        if (! $this->iAmReviewer()) {
             Notification::make()->title('Only the incoming custodian can review this count')->danger()->persistent()->send();
 
             return;
@@ -415,12 +420,12 @@ class CountSessionDetail extends Page
 
         $item = $this->session->items->firstWhere('id', $itemId);
 
-        if (!$item) {
+        if (! $item) {
             return;
         }
 
         try {
-            (new CountSessionService())->reviewProduct($item, $this->session->incoming_user_id, 'accepted');
+            (new CountSessionService)->reviewProduct($item, $this->session->incoming_user_id, 'accepted');
             $this->refreshSession();
         } catch (\Exception $e) {
             Notification::make()->title('Could not accept')->body($e->getMessage())->danger()->persistent()->send();
@@ -429,7 +434,7 @@ class CountSessionDetail extends Page
 
     public function reviewDispute(int $itemId, array $quantities): void
     {
-        if (!$this->iAmReviewer()) {
+        if (! $this->iAmReviewer()) {
             Notification::make()->title('Only the incoming custodian can review this count')->danger()->persistent()->send();
 
             return;
@@ -437,12 +442,12 @@ class CountSessionDetail extends Page
 
         $item = $this->session->items->firstWhere('id', $itemId);
 
-        if (!$item) {
+        if (! $item) {
             return;
         }
 
         try {
-            (new CountSessionService())->reviewProduct($item, $this->session->incoming_user_id, 'disputed', $quantities);
+            (new CountSessionService)->reviewProduct($item, $this->session->incoming_user_id, 'disputed', $quantities);
             $this->refreshSession();
         } catch (\Exception $e) {
             Notification::make()->title('Could not record dispute')->body($e->getMessage())->danger()->persistent()->send();
@@ -453,12 +458,12 @@ class CountSessionDetail extends Page
     {
         $item = $this->session->items->firstWhere('id', $itemId);
 
-        if (!$item) {
+        if (! $item) {
             return;
         }
 
         try {
-            (new CountSessionService())->amendDeclaration($item, $pin, $quantities, $this->pinThrottleKey('amend'));
+            (new CountSessionService)->amendDeclaration($item, $pin, $quantities, $this->pinThrottleKey('amend'));
             $this->refreshSession();
             Notification::make()->title('Declaration amended')->success()->send();
         } catch (\Exception $e) {
@@ -468,7 +473,7 @@ class CountSessionDetail extends Page
 
     public function markItemUnresolved(int $itemId): void
     {
-        if (!$this->iAmReviewer()) {
+        if (! $this->iAmReviewer()) {
             Notification::make()->title('Only the incoming custodian can mark this unresolved')->danger()->persistent()->send();
 
             return;
@@ -476,12 +481,12 @@ class CountSessionDetail extends Page
 
         $item = $this->session->items->firstWhere('id', $itemId);
 
-        if (!$item) {
+        if (! $item) {
             return;
         }
 
         try {
-            (new CountSessionService())->markUnresolved($item, $this->session->incoming_user_id);
+            (new CountSessionService)->markUnresolved($item, $this->session->incoming_user_id);
             $this->refreshSession();
             Notification::make()->title('Marked unresolved — a supervisor has been notified')->warning()->send();
         } catch (\Exception $e) {
@@ -512,7 +517,7 @@ class CountSessionDetail extends Page
     {
         $session = $this->session;
 
-        if (!$session) {
+        if (! $session) {
             return false;
         }
 
@@ -520,7 +525,7 @@ class CountSessionDetail extends Page
         // has nobody to fall back to but whoever opened it; the
         // outgoing/incoming branch below would otherwise compare against
         // incoming_user_id, which is never set for this type at all.
-        if (!$session->isHandover()) {
+        if (! $session->isHandover()) {
             return $session->accountableUserId() === auth()->id();
         }
 
@@ -537,7 +542,7 @@ class CountSessionDetail extends Page
      */
     public function isSoloCount(): bool
     {
-        return $this->session ? !$this->session->isHandover() : false;
+        return $this->session ? ! $this->session->isHandover() : false;
     }
 
     /**
@@ -548,7 +553,7 @@ class CountSessionDetail extends Page
     public function submitSoloCount(string $pin): bool
     {
         try {
-            (new CountSessionService())->submitSoloCount($this->session, $pin, $this->pinThrottleKey('solo-submit'));
+            (new CountSessionService)->submitSoloCount($this->session, $pin, $this->pinThrottleKey('solo-submit'));
             $this->refreshSession();
             Notification::make()->title('Count submitted')->success()->send();
 
@@ -574,7 +579,7 @@ class CountSessionDetail extends Page
      */
     public function iAmReviewer(): bool
     {
-        return (bool) $this->session?->isIncomingBound() && !$this->iAmOutgoing();
+        return (bool) $this->session?->isIncomingBound() && ! $this->iAmOutgoing();
     }
 
     /**
@@ -588,8 +593,8 @@ class CountSessionDetail extends Page
         return $session
             && $session->isDeclared()
             && $session->isHandoverWithSuccessor()
-            && !$session->isUnwitnessed()
-            && !$session->isIncomingBound();
+            && ! $session->isUnwitnessed()
+            && ! $session->isIncomingBound();
     }
 
     public function iAmOutgoing(): bool
@@ -602,7 +607,7 @@ class CountSessionDetail extends Page
      */
     public function disputedItems(): \Illuminate\Support\Collection
     {
-        if (!$this->session) {
+        if (! $this->session) {
             return collect();
         }
 
@@ -618,7 +623,7 @@ class CountSessionDetail extends Page
     {
         $session = $this->session;
 
-        if (!$session || !$session->isHandoverWithSuccessor()) {
+        if (! $session || ! $session->isHandoverWithSuccessor()) {
             return false;
         }
 
@@ -628,8 +633,8 @@ class CountSessionDetail extends Page
 
         return $session->isDeclared()
             && $session->isIncomingBound()
-            && !$session->items()->whereDoesntHave('review')->exists()
-            && !$session->items()->whereHas('review', fn ($q) => $q->where('outcome', 'disputed'))->exists();
+            && ! $session->items()->whereDoesntHave('review')->exists()
+            && ! $session->items()->whereHas('review', fn ($q) => $q->where('outcome', 'disputed'))->exists();
     }
 
     /**
@@ -644,7 +649,7 @@ class CountSessionDetail extends Page
     public function sealAgreement(string $firstPin, string $secondPin): bool
     {
         try {
-            (new CountSessionService())->sealAgreement($this->session, $firstPin, $secondPin, $this->pinThrottleKey('seal'));
+            (new CountSessionService)->sealAgreement($this->session, $firstPin, $secondPin, $this->pinThrottleKey('seal'));
             $this->refreshSession();
             Notification::make()->title('Handover sealed')->success()->send();
 
@@ -659,7 +664,7 @@ class CountSessionDetail extends Page
     public function confirmOutgoing(): void
     {
         try {
-            (new CountSessionService())->confirmOutgoing($this->session, auth()->id());
+            (new CountSessionService)->confirmOutgoing($this->session, auth()->id());
             $this->refreshSession();
             Notification::make()->title('Outgoing confirmation recorded')->success()->send();
         } catch (\Exception $e) {
@@ -670,7 +675,7 @@ class CountSessionDetail extends Page
     public function confirmIncoming(): void
     {
         try {
-            (new CountSessionService())->confirmIncoming($this->session, auth()->id());
+            (new CountSessionService)->confirmIncoming($this->session, auth()->id());
             $this->refreshSession();
             Notification::make()->title('Incoming confirmation recorded')->success()->send();
         } catch (\Exception $e) {
@@ -689,7 +694,7 @@ class CountSessionDetail extends Page
     {
         $session = $this->session;
 
-        if (!$session || !$session->isCancellable()) {
+        if (! $session || ! $session->isCancellable()) {
             return false;
         }
 
@@ -704,13 +709,14 @@ class CountSessionDetail extends Page
 
     public function cancelSession(?string $reason = null): void
     {
-        if (!$this->canCancelSession()) {
+        if (! $this->canCancelSession()) {
             Notification::make()->title('You are not able to cancel this session')->danger()->persistent()->send();
+
             return;
         }
 
         try {
-            (new CountSessionService())->cancelSession($this->session, auth()->id(), $reason);
+            (new CountSessionService)->cancelSession($this->session, auth()->id(), $reason);
             Notification::make()->title('Session cancelled')->success()->send();
             $this->redirect('/admin/my-count');
         } catch (\Exception $e) {
@@ -721,7 +727,7 @@ class CountSessionDetail extends Page
     public function submitForReview(): void
     {
         try {
-            (new CountSessionService())->submitForReview($this->session);
+            (new CountSessionService)->submitForReview($this->session);
             $this->refreshSession();
             Notification::make()->title('Submitted for supervisor review')->success()->send();
         } catch (\Exception $e) {
@@ -734,15 +740,16 @@ class CountSessionDetail extends Page
         $decision = $this->reviewDecisions[$itemId] ?? null;
         $notes = $this->reviewNotes[$itemId] ?? null;
 
-        if (!$decision) {
+        if (! $decision) {
             Notification::make()->title('Choose a decision first')->warning()->send();
+
             return;
         }
 
         $item = $this->session->items->firstWhere('id', $itemId);
 
         try {
-            (new CountSessionService())->reviewItem($item, auth()->id(), $decision, $notes);
+            (new CountSessionService)->reviewItem($item, auth()->id(), $decision, $notes);
             $this->refreshSession();
             Notification::make()->title('Decision recorded')->success()->send();
         } catch (\Exception $e) {
@@ -750,10 +757,29 @@ class CountSessionDetail extends Page
         }
     }
 
+    public function applyBulkDecision(): void
+    {
+        if (! $this->bulkDecision) {
+            Notification::make()->title('Choose a decision first')->warning()->send();
+
+            return;
+        }
+
+        try {
+            $result = (new CountSessionService)->bulkReviewItems($this->session, $this->bulkDecision, auth()->id(), $this->bulkNotes ?: null);
+            $this->bulkDecision = '';
+            $this->bulkNotes = '';
+            $this->refreshSession();
+            Notification::make()->title("Applied to {$result['decided']} items")->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not apply bulk decision')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
     public function finalizeReview(): void
     {
         try {
-            (new CountSessionService())->finalizeReview($this->session, auth()->id());
+            (new CountSessionService)->finalizeReview($this->session, auth()->id());
             $this->refreshSession();
             Notification::make()->title('Session finalized')->success()->send();
         } catch (\Exception $e) {
@@ -775,13 +801,13 @@ class CountSessionDetail extends Page
     {
         $session = $this->session;
 
-        if (!$session->isReviewed() || $session->outgoing_user_id !== null) {
+        if (! $session->isReviewed() || $session->outgoing_user_id !== null) {
             return false;
         }
 
         $role = self::ROLE_FOR_SESSION_TYPE[$session->type] ?? null;
 
-        if (!$role) {
+        if (! $role) {
             return false;
         }
 
@@ -791,7 +817,7 @@ class CountSessionDetail extends Page
             return false;
         }
 
-        return !Shift::where('opening_count_session_id', $session->id)->exists();
+        return ! Shift::where('opening_count_session_id', $session->id)->exists();
     }
 
     public function startMyShift(): void
@@ -799,12 +825,12 @@ class CountSessionDetail extends Page
         $session = $this->session;
         $role = self::ROLE_FOR_SESSION_TYPE[$session->type] ?? null;
 
-        if (!$role) {
+        if (! $role) {
             return;
         }
 
         try {
-            (new BartenderChefShiftService())->startOpeningShift(auth()->user(), $role, $session);
+            (new BartenderChefShiftService)->startOpeningShift(auth()->user(), $role, $session);
             $this->refreshSession();
             Notification::make()->title('Shift started')->success()->send();
         } catch (\Exception $e) {

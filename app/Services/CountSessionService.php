@@ -1055,6 +1055,37 @@ class CountSessionService
     }
 
     /**
+     * Apply one decision to every still-undecided, non-zero-variance item
+     * on a session in one go — a manager working through a long stocktake
+     * (a fresh warehouse's very first count is often mostly variance while
+     * baseline stock is still being entered) doesn't have to click through
+     * dozens of identical "Choose… → Save" rows one at a time.
+     */
+    public function bulkReviewItems(CountSession $session, string $decision, int $reviewerId, ?string $notes = null): array
+    {
+        $decided = 0;
+        $failed = 0;
+
+        $items = $session->items()
+            ->whereNull('decision')
+            ->where(function ($q) {
+                $q->where('variance', '>', 0.0001)->orWhere('variance', '<', -0.0001);
+            })
+            ->get();
+
+        foreach ($items as $item) {
+            try {
+                $this->reviewItem($item, $reviewerId, $decision, $notes);
+                $decided++;
+            } catch (\Exception $e) {
+                $failed++;
+            }
+        }
+
+        return ['decided' => $decided, 'failed' => $failed];
+    }
+
+    /**
      * Finalize the session once every non-zero-variance item has a
      * decision. For a handover, this is literally the shift boundary — the
      * outgoing custodian's shift ends and the incoming custodian's shift

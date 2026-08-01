@@ -19,7 +19,7 @@ it('lists open count sessions on the Count Sessions page', function () {
     $outgoing = User::factory()->create();
     $incoming = User::factory()->create();
 
-    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $manager->id, $outgoing->id, $incoming->id);
+    $session = (new CountSessionService)->openSession('bar_handover', $bar->id, $manager->id, $outgoing->id, $incoming->id);
 
     Livewire::actingAs($manager)
         ->test(CountSessions::class)
@@ -40,7 +40,7 @@ it('never ships the expected quantity to the browser while a session is still in
     $incoming = User::factory()->create();
     $incoming->assignRole($superAdmin);
 
-    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $session = (new CountSessionService)->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     expect((float) $item->expected_quantity_at_open)->toEqual(24.0);
 
@@ -70,7 +70,7 @@ it('renders the one-product-at-a-time counting flow with the product name and nu
     $incoming = User::factory()->create();
     $incoming->assignRole($superAdmin);
 
-    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $session = (new CountSessionService)->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
 
     $component = Livewire::actingAs($outgoing)
         ->test(CountSessionDetail::class, ['session_id' => $session->id])
@@ -102,8 +102,8 @@ it('returns no safe count items once a session has left the counting phase', fun
     $incoming = User::factory()->create();
     $incoming->assignRole($superAdmin);
 
-    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
-    $countService = new CountSessionService();
+    $session = (new CountSessionService)->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $countService = new CountSessionService;
     $countService->confirmOutgoing($session, $outgoing->id);
     $countService->confirmIncoming($session, $incoming->id);
     $countService->submitForReview($session->fresh());
@@ -128,7 +128,7 @@ it('walks a full bar handover session end to end through the detail page', funct
     $manager = User::factory()->create();
     $manager->assignRole($superAdmin);
 
-    $session = (new CountSessionService())->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $session = (new CountSessionService)->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
 
     $component = Livewire::actingAs($outgoing)
@@ -160,6 +160,55 @@ it('walks a full bar handover session end to end through the detail page', funct
     expect((float) $debt->amount)->toEqual(2000.0);
 });
 
+it('applies one bulk decision to every undecided variance item on a session in one action', function () {
+    $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
+    $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);
+    $beer = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    $wine = Product::create(['name' => 'Wine', 'price' => 1000, 'category_id' => $category->id, 'is_active' => true]);
+    $rum = Product::create(['name' => 'Rum', 'price' => 1500, 'category_id' => $category->id, 'is_active' => true]);
+    InventoryItem::create(['product_id' => $beer->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
+    InventoryItem::create(['product_id' => $wine->id, 'warehouse_id' => $bar->id, 'quantity' => 10]);
+    InventoryItem::create(['product_id' => $rum->id, 'warehouse_id' => $bar->id, 'quantity' => 5]);
+
+    $superAdmin = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']);
+    $outgoing = User::factory()->create();
+    $outgoing->assignRole($superAdmin);
+    $incoming = User::factory()->create();
+    $incoming->assignRole($superAdmin);
+    $manager = User::factory()->create();
+    $manager->assignRole($superAdmin);
+
+    $session = (new CountSessionService)->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
+    $items = $session->items()->get();
+
+    $component = Livewire::actingAs($outgoing)
+        ->test(CountSessionDetail::class, ['session_id' => $session->id]);
+    foreach ($items as $item) {
+        $component->call('recordCount', $item->id, ['Fridge' => 1]);
+    }
+    $component->call('confirmOutgoing');
+
+    Livewire::actingAs($incoming)
+        ->test(CountSessionDetail::class, ['session_id' => $session->id])
+        ->call('confirmIncoming')
+        ->call('submitForReview');
+
+    Livewire::actingAs($manager)
+        ->test(CountSessionDetail::class, ['session_id' => $session->id])
+        ->set('bulkDecision', 'ignored')
+        ->set('bulkNotes', 'Bulk-resolved during testing')
+        ->call('applyBulkDecision')
+        ->call('finalizeReview');
+
+    expect($session->fresh()->status)->toBe('reviewed');
+    foreach ($items as $item) {
+        expect($item->fresh()->decision)->toBe('ignored');
+    }
+    // 'ignored' never true-ups stock — confirms the bulk path went through
+    // reviewItem()'s own decision branching, not a shortcut that skips it.
+    expect((int) InventoryItem::where('product_id', $beer->id)->value('quantity'))->toBe(24);
+});
+
 it('binds ?session_id= on a real HTTP GET request, not just a Livewire::test() mount argument', function () {
     // Regression test: Livewire::test(CountSessionDetail::class, ['session_id'
     // => $id]) injects the mount() parameter directly and always worked —
@@ -177,7 +226,7 @@ it('binds ?session_id= on a real HTTP GET request, not just a Livewire::test() m
     $manager = User::factory()->create();
     $manager->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']));
 
-    $session = (new CountSessionService())->openSession('main_store_stocktake', $bar->id, $manager->id);
+    $session = (new CountSessionService)->openSession('main_store_stocktake', $bar->id, $manager->id);
 
     $response = $this->actingAs($manager)->get("/admin/count-session-detail?session_id={$session->id}");
 
@@ -197,11 +246,11 @@ it('shows a manager the final comparison of counted vs expected stock once a han
     $incoming = User::factory()->create();
     $incoming->assignRole('bartender');
 
-    $pinAuth = new \App\Services\PinAuthService();
+    $pinAuth = new \App\Services\PinAuthService;
     $pinAuth->setPin($outgoing, '6284');
     $pinAuth->setPin($incoming, '3971');
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 20], $outgoing->id); // 4 short of 24
@@ -245,11 +294,11 @@ it('gives the Seal the Agreement panel a stable wire:key on each pad, surviving 
     $incoming = User::factory()->create();
     $incoming->assignRole('bartender');
 
-    $pinAuth = new \App\Services\PinAuthService();
+    $pinAuth = new \App\Services\PinAuthService;
     $pinAuth->setPin($outgoing, '6284');
     $pinAuth->setPin($incoming, '3971');
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -289,11 +338,11 @@ it('flags a shortfall on the admin Count Sessions list once a handover with an a
     $incoming = User::factory()->create();
     $incoming->assignRole('bartender');
 
-    $pinAuth = new \App\Services\PinAuthService();
+    $pinAuth = new \App\Services\PinAuthService;
     $pinAuth->setPin($outgoing, '6284');
     $pinAuth->setPin($incoming, '3971');
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 20], $outgoing->id);

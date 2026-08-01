@@ -803,6 +803,23 @@
         @endif
 
         @if($session->status === 'pending_review')
+            <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4">
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Apply one decision to every item below that doesn't already have one — a faster path than deciding each line one at a time.
+                </p>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <select wire:model="bulkDecision" class="border rounded px-2 py-1 text-xs dark:bg-gray-800 dark:border-gray-600">
+                        <option value="">Choose…</option>
+                        <option value="true_up">True-up only</option>
+                        <option value="accountability">True-up + Accountability</option>
+                        <option value="ignored">Ignore</option>
+                    </select>
+                    <input type="text" wire:model="bulkNotes" placeholder="Notes (applied to every item)" class="border rounded px-2 py-1 text-xs w-56 dark:bg-gray-800 dark:border-gray-600">
+                    <button wire:click="applyBulkDecision" wire:confirm="Apply this decision to every undecided item on this session?"
+                        class="px-3 py-1.5 bg-primary-500 text-white rounded text-xs font-bold">Apply to all remaining</button>
+                </div>
+            </div>
+
             <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <table class="w-full text-sm">
                     <thead class="bg-gray-50 dark:bg-gray-800">
