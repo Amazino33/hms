@@ -287,8 +287,7 @@ new class extends Component {
                         <div class="min-w-0">
                             <div class="font-bold truncate">{{ $ticket['origin_label'] }}</div>
                             <div class="text-xs text-gray-300 truncate">
-                                {{ $ticket['order_number'] }}
-                                @if($ticket['waiter_name']) · {{ $ticket['waiter_name'] }} @endif
+                                {{ $ticket['waiter_name'] ?? 'Unknown' }}
                                 @if($ticket['guest_name']) · {{ $ticket['guest_name'] }} @endif
                             </div>
                         </div>
