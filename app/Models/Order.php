@@ -4,8 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Order extends Model
 {
@@ -13,6 +13,7 @@ class Order extends Model
     use LogsActivity;
 
     protected $guarded = [];
+
     protected $casts = [
         'destination' => 'string',
         'paid_cash' => 'decimal:2',
@@ -35,9 +36,9 @@ class Order extends Model
             ->dontLogEmptyChanges();
     }
 
-    public function items() 
-    { 
-        return $this->hasMany(OrderItem::class); 
+    public function items()
+    {
+        return $this->hasMany(OrderItem::class);
     }
 
     public function table()
@@ -91,6 +92,16 @@ class Order extends Model
     }
 
     /**
+     * Distinct from pickedUpBy()/picked_up_at (porter-delivery custody for
+     * room orders only) — this is the KDS board's own "collected from the
+     * kitchen pass" event, set for any kitchen order.
+     */
+    public function kdsPickedUpBy()
+    {
+        return $this->belongsTo(User::class, 'kds_picked_up_by');
+    }
+
+    /**
      * Table name for a dine-in order, "Room N" for a room order, else
      * "Takeaway" — the single place that resolves an order's origin so
      * every display/notification collapses to one call instead of
@@ -110,7 +121,7 @@ class Order extends Model
         }
 
         if ($this->booking_id) {
-            return 'Room ' . ($this->booking?->room?->number ?? '?');
+            return 'Room '.($this->booking?->room?->number ?? '?');
         }
 
         return 'Takeaway';

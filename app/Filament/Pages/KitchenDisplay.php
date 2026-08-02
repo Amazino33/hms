@@ -2,23 +2,22 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Resources\Orders\OrderResource;
-use BackedEnum;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use App\Services\InventoryService;
+use App\Models\Order;
 use App\Services\PermissionService;
 use App\Services\ReturnConfirmationService;
-use App\Models\Order;
-use Filament\Actions\Action;
+use BackedEnum;
+use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class KitchenDisplay extends Page
 {
-    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-fire';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-fire';
+
     protected static ?string $navigationLabel = 'Kitchen Display';
+
     protected string $view = 'filament.pages.kitchen-display';
 
     // Fetch orders for the view
@@ -67,62 +66,10 @@ class KitchenDisplay extends Page
 
     public function markAsReady($orderId)
     {
-        // Scoped to pending+kitchen, not a bare findOrFail — Livewire
-        // methods are callable with any arguments from the client, and
-        // without this guard, calling markAsReady() on an already-ready/
-        // served/paid order (or a BAR-destination one) would silently
-        // flip its status back and re-fire the "Ready!" notification.
-        // Row-locked inside a transaction because a room order's stock
-        // deduction now happens right here — two concurrent clicks must
-        // not deduct twice.
-        $order = DB::transaction(function () use ($orderId) {
-            $order = Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table', 'booking.room'])
-                ->where('status', 'pending')
-                ->where('destination', 'kitchen')
-                ->lockForUpdate()
-                ->findOrFail($orderId);
-
-            $order->update([
-                'status' => 'ready',
-                'processed_by_user_id' => auth()->id()
-            ]);
-
-            // Every other destination already deducted stock at order
-            // creation (OrderSplitter::handle()); a room order deferred it
-            // until now, this exact transition.
-            if ($order->booking_id) {
-                InventoryService::deductInventoryForOrderItems($order);
-            }
-
-            return $order;
-        });
+        (new \App\Services\KitchenOrderService)->markReady($orderId, auth()->id());
 
         Cache::forget('kitchen_display:active_orders');
         Cache::forget('kitchen_display:recent_history');
-
-        // 1. Get the list of items (e.g., "2x Rice, 1x Coke")
-        $itemList = $order->items->map(function ($item) {
-            return "{$item->quantity}x {$item->product_name}";
-        })->join(', ');
-
-        // Send database notification to all staff users
-        $staffUsers = \App\Models\User::whereHas('roles', function($q) {
-            $q->whereIn('name', ['super_admin', 'chef', 'waiter', 'porter']);
-        })->get();
-
-        foreach ($staffUsers as $staffUser) {
-            Notification::make()
-                ->title("Order #{$order->order_number} Ready!")
-                ->body("Order #{$order->id} for {$order->origin_label}\n\rItems: {$itemList}\n\r is ready for pickup.")
-                ->success()
-                ->actions([
-                    // Add a button to the notification to jump to the order
-                    Action::make('view')
-                        ->button()
-                        ->url(OrderResource::getUrl('view', ['record' => $order->id])),
-                ])
-                ->sendToDatabase($staffUser);
-        }
     }
 
     /**
@@ -130,10 +77,11 @@ class KitchenDisplay extends Page
      * changed at all. Only the on-duty chef's own login can do this (checked
      * against their active, non-stale chef shift).
      */
-    public function confirmAndRestock($returnOrderId) {
+    public function confirmAndRestock($returnOrderId)
+    {
         try {
             $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
-            (new ReturnConfirmationService())->confirm($returnOrder, auth()->user());
+            (new ReturnConfirmationService)->confirm($returnOrder, auth()->user());
 
             Cache::forget('kitchen_display:active_orders');
             Cache::forget('kitchen_display:recent_history');
@@ -162,7 +110,7 @@ class KitchenDisplay extends Page
     {
         try {
             $returnOrder = Order::with('items.product')->findOrFail($returnOrderId);
-            (new ReturnConfirmationService())->reject($returnOrder, auth()->user(), $reason);
+            (new ReturnConfirmationService)->reject($returnOrder, auth()->user(), $reason);
 
             Cache::forget('kitchen_display:active_orders');
             Cache::forget('kitchen_display:recent_history');

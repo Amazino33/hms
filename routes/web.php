@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\PwaController;
 
 // PWA Manifest - must be publicly accessible
 // Serve PWA files without any auth middleware
@@ -27,15 +26,17 @@ Route::get('/sw.js', function () {
 
 Route::get('/browserconfig.xml', function () {
     $content = file_get_contents(public_path('browserconfig.xml'));
+
     return response($content, 200, [
-        'Content-Type' => 'text/xml'
+        'Content-Type' => 'text/xml',
     ]);
 })->name('pwa.browserconfig');
 
 Route::get('/offline.html', function () {
     $content = file_get_contents(public_path('offline.html'));
+
     return response($content, 200, [
-        'Content-Type' => 'text/html'
+        'Content-Type' => 'text/html',
     ]);
 })->name('pwa.offline');
 
@@ -49,7 +50,7 @@ Route::get('/offline.html', function () {
  * and only opcache_reset() runs — nothing sensitive is exposed.
  */
 Route::get('/__ops/reset-opcache/{token}', function (string $token) {
-    if (!hash_equals(hash('sha256', config('app.key')), $token)) {
+    if (! hash_equals(hash('sha256', config('app.key')), $token)) {
         abort(404);
     }
 
@@ -66,12 +67,13 @@ Route::get('/__ops/reset-opcache/{token}', function (string $token) {
 if (app()->environment('local')) {
     Route::get('/cron-test', function () {
         \App\Jobs\CronQueueTestJob::dispatch();
+
         return 'queued';
     });
 
     Route::get('/test-manifest', function () {
         return response()->json(['test' => 'manifest working'], 200, [
-            'Content-Type' => 'application/json'
+            'Content-Type' => 'application/json',
         ]);
     });
 
@@ -104,10 +106,10 @@ Route::get('/pos', function () {
 
 require __DIR__.'/settings.php';
 
-use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\FloorPlanController;
-use App\Http\Controllers\HandoverPdfController;
 use App\Http\Controllers\FolioReceiptController;
+use App\Http\Controllers\HandoverPdfController;
+use App\Http\Controllers\StockTransferController;
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/handover/{session}/pdf', [HandoverPdfController::class, 'download'])->name('handover.pdf');
@@ -149,6 +151,12 @@ Route::middleware(['kiosk.device'])->group(function () {
         Route::get('/kiosk/order/{table}', fn ($table) => view('kiosk.order', ['table' => $table]))->name('kiosk.order');
         Route::get('/kiosk/report-damage', fn () => view('kiosk.report-damage'))->name('kiosk.report-damage');
     });
+
+    // Kitchen Display board: viewable by anyone on this registered device
+    // (no PIN needed just to see tickets/timers) — staff_pin is checked
+    // per-action inside the component itself (the "active cook" gate), not
+    // at the route level, so the board never bounces a PIN-less viewer away.
+    Route::get('/kds', fn () => view('kds'))->name('kds.index');
 });
 
 use App\Http\Controllers\StaffLoginController;
