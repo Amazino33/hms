@@ -230,6 +230,7 @@ new class extends Component {
         serverNow: {{ $serverNow }},
         amberSeconds: {{ $amberSeconds }},
         redSeconds: {{ $redSeconds }},
+        showPinPad: @entangle('showPinPad'),
     })"
     x-init="startClock()"
     x-on:kds-tick-sync.window="resyncFrom($event.detail.tickets, $event.detail.serverNow)"
@@ -325,7 +326,7 @@ new class extends Component {
     @endif
 
     {{-- PIN pad overlay --}}
-    <div x-cloak x-show="@js($showPinPad)" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div x-cloak x-show="showPinPad" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
         <div class="bg-gray-900 rounded-2xl p-6 w-full max-w-xs" x-data="{ pin: '' }">
             <h2 class="text-lg font-bold mb-4 text-center">Enter your PIN</h2>
 
@@ -355,11 +356,20 @@ new class extends Component {
 </div>
 
 <script>
-    function kdsBoard({ tickets, serverNow, amberSeconds, redSeconds }) {
+    function kdsBoard({ tickets, serverNow, amberSeconds, redSeconds, showPinPad }) {
         return {
             tickets,
             amberSeconds,
             redSeconds,
+            // Entangled with the Livewire property — a real two-way
+            // binding, not a value baked in once at render time.
+            // openPinPad()/closePinPad() (wire:click) flip the server-side
+            // property and the entangle syncs it back here reactively,
+            // which a literal boolean interpolated once into x-show cannot
+            // do reliably across a Livewire morph (that was the original
+            // bug: the button worked server-side, the overlay just never
+            // reacted to it).
+            showPinPad,
             // Baseline pairs a device-clock reading with the server-computed
             // elapsed_seconds at that same instant — every subsequent tick
             // only ever measures the device-clock DELTA since that pairing,

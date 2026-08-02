@@ -287,3 +287,32 @@ it('reads the amber/red thresholds and poll interval from settings, not a hardco
     expect($data['redSeconds'])->toBe(13 * 60);
     expect($data['pollSeconds'])->toBe(9);
 });
+
+/**
+ * Regression: the PIN pad overlay's visibility must be a real, reactive
+ * binding to the showPinPad property (via @entangle), not a value baked
+ * into the HTML once at render time. The latter is what shipped first —
+ * openPinPad()/closePinPad() correctly flipped the server-side property
+ * (this test), but the overlay never actually appeared on screen because
+ * Alpine's x-show doesn't reliably re-evaluate a literal @js(...) string
+ * across a Livewire morph. If x-show ever regresses back to a literal
+ *
+ * @js($showPinPad) instead of the entangled Alpine property name, this
+ * catches it structurally rather than relying on a human noticing "nothing
+ * happened" in a browser again.
+ */
+it('opens and closes the PIN pad property via wire:click', function () {
+    $component = Livewire::test('kds-board');
+    $component->assertSet('showPinPad', false);
+
+    $component->call('openPinPad')->assertSet('showPinPad', true);
+    $component->call('closePinPad')->assertSet('showPinPad', false);
+});
+
+it('binds the PIN pad overlay to the entangled showPinPad property, not a literal baked-in value', function () {
+    $html = file_get_contents(resource_path('views/livewire/kds-board.blade.php'));
+
+    expect($html)->toContain('x-show="showPinPad"');
+    expect($html)->toContain("showPinPad: @entangle('showPinPad')");
+    expect($html)->not->toContain('x-show="@js($showPinPad)"');
+});
