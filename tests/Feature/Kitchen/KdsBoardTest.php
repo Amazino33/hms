@@ -316,3 +316,27 @@ it('binds the PIN pad overlay to the entangled showPinPad property, not a litera
     expect($html)->toContain("showPinPad: @entangle('showPinPad')");
     expect($html)->not->toContain('x-show="@js($showPinPad)"');
 });
+
+/**
+ * Regression: production threw a raw TypeError (Argument #1 ($pin) must be
+ * of type string, null given) — the Sign In button called
+ * wire:click="submitPin(pin)", whose own argument parser doesn't reliably
+ * resolve an Alpine-scoped variable (kiosk-idle-screen.blade.php already
+ * learned this lesson once, via $wire.submitPin(this.pin) instead). Fixed
+ * by switching the button to @click="$wire.submitPin(pin)"; this pins the
+ * PHP side against ever fatal-erroring on a bad/missing pin again.
+ */
+it('shows a friendly error instead of crashing when submitPin is called with no pin at all', function () {
+    Livewire::test('kds-board')
+        ->call('submitPin', null)
+        ->assertSet('errorMessage', 'Enter all 4 digits first.');
+
+    expect(Auth::guard('staff_pin')->check())->toBeFalse();
+});
+
+it('calls the Livewire method through $wire, not the unreliable wire:click(arg) form', function () {
+    $html = file_get_contents(resource_path('views/livewire/kds-board.blade.php'));
+
+    expect($html)->toContain('@click="$wire.submitPin(pin)"');
+    expect($html)->not->toContain('wire:click="submitPin(pin)"');
+});

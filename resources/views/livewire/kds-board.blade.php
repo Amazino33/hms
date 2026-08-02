@@ -61,8 +61,13 @@ new class extends Component {
         $this->errorMessage = null;
     }
 
-    public function submitPin(string $pin): void
+    public function submitPin(?string $pin): void
     {
+        if (! $pin || strlen($pin) !== PinAuthService::PIN_LENGTH) {
+            $this->errorMessage = 'Enter all 4 digits first.';
+            return;
+        }
+
         $service = new PinAuthService();
 
         try {
@@ -349,7 +354,13 @@ new class extends Component {
                 </template>
             </div>
 
-            <button type="button" wire:click="submitPin(pin)" x-bind:disabled="pin.length !== 4" class="w-full py-3 rounded-lg bg-primary-600 font-bold disabled:opacity-40 kiosk-tap">Sign in</button>
+            {{-- Called via the $wire proxy from a plain Alpine @click, not
+                 a wire:click directive with an inline argument — the same
+                 fix kiosk-idle-screen.blade.php already needed: a directive
+                 argument doesn't reliably resolve an Alpine-scoped variable,
+                 which is exactly how this shipped with a null pin in
+                 production the first time. --}}
+            <button type="button" @click="$wire.submitPin(pin)" x-bind:disabled="pin.length !== 4" class="w-full py-3 rounded-lg bg-primary-600 font-bold disabled:opacity-40 kiosk-tap">Sign in</button>
             <button type="button" wire:click="closePinPad" class="w-full py-2 mt-2 text-sm text-gray-400">Cancel</button>
         </div>
     </div>
