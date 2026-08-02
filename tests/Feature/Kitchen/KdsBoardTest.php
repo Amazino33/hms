@@ -340,3 +340,30 @@ it('calls the Livewire method through $wire, not the unreliable wire:click(arg) 
     expect($html)->toContain('@click="$wire.submitPin(pin)"');
     expect($html)->not->toContain('wire:click="submitPin(pin)"');
 });
+
+it('never lets a whole-number seconds value carry sub-second float noise', function () {
+    ['order' => $order] = seedKdsKitchenOrder();
+    $order->update(['created_at' => now()->subSeconds(701)]);
+
+    $ticket = collect(Livewire::test('kds-board')->instance()->with()['tickets'])->firstWhere('id', $order->id);
+
+    expect($ticket['elapsed_seconds'])->toBeInt();
+});
+
+/**
+ * Regression: the on-screen timer only ever changed when a poll landed,
+ * never ticking smoothly between polls — because x-data's own constructor
+ * baked in @js($tickets)/serverNow, which differ on every single poll.
+ * Since that changes the x-data expression string itself, Alpine (via
+ * Livewire's morph) tore down and rebuilt the whole component every poll,
+ * discarding the running per-second setInterval each time. Fixed by
+ * keeping x-data's constructor free of anything that changes between
+ * polls, feeding ticket data in only through resyncFrom() instead.
+ */
+it('keeps the x-data constructor free of per-poll ticket/serverNow data, so the running clock survives every poll', function () {
+    $html = file_get_contents(resource_path('views/livewire/kds-board.blade.php'));
+
+    expect($html)->toMatch('/x-data="kdsBoard\(\{\s*amberSeconds:/');
+    expect($html)->not->toContain('tickets: @js($tickets)');
+    expect($html)->toContain('x-init="startClock(); resyncFrom(@js($tickets)');
+});

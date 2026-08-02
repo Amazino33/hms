@@ -187,11 +187,12 @@ new class extends Component {
                     'qty' => $i->quantity,
                 ])->all(),
                 'is_ready' => $order->status === 'ready',
-                // abs(): Carbon's diff sign convention has changed across
-                // major versions — this must always read as "time since
-                // creation," never flip negative regardless of which way
-                // a given Carbon version signs the operands.
-                'elapsed_seconds' => abs($now->diffInSeconds($order->created_at)),
+                // (int) abs(...): Carbon's diffInSeconds returns a float
+                // with sub-second precision here (the two instants rarely
+                // land on the exact same microsecond), and abs() alone
+                // guards the sign but leaves that fractional noise —
+                // truncate it, this is a whole-seconds display value.
+                'elapsed_seconds' => (int) abs($now->diffInSeconds($order->created_at)),
             ];
         })->values()->all();
 
@@ -231,13 +232,11 @@ new class extends Component {
 
 <div wire:poll.{{ $pollSeconds }}s="refreshTiles"
     x-data="kdsBoard({
-        tickets: @js($tickets),
-        serverNow: {{ $serverNow }},
         amberSeconds: {{ $amberSeconds }},
         redSeconds: {{ $redSeconds }},
         showPinPad: @entangle('showPinPad'),
     })"
-    x-init="startClock()"
+    x-init="startClock(); resyncFrom(@js($tickets), {{ $serverNow }})"
     x-on:kds-tick-sync.window="resyncFrom($event.detail.tickets, $event.detail.serverNow)"
     class="min-h-screen bg-gray-950 text-white p-4 flex flex-col gap-4"
 >
@@ -367,9 +366,20 @@ new class extends Component {
 </div>
 
 <script>
-    function kdsBoard({ tickets, serverNow, amberSeconds, redSeconds, showPinPad }) {
+    // Deliberately takes only values that stay byte-identical across every
+    // Livewire re-render (settings, and the entangled PIN-pad flag) — NOT
+    // tickets/serverNow, which differ on every single poll. Baking those
+    // into this constructor call was the actual bug behind "the timer only
+    // changes on reload": a changed x-data expression string makes Alpine
+    // (via Livewire's morph) tear down and rebuild this whole component,
+    // discarding the running per-second clock every single poll. Ticket
+    // data now arrives exclusively through resyncFrom(), called once for
+    // the first paint (x-init below) and again on every poll (the
+    // kds-tick-sync listener) — x-data itself never changes, so the
+    // component (and its clock) survives every morph untouched.
+    function kdsBoard({ amberSeconds, redSeconds, showPinPad }) {
         return {
-            tickets,
+            tickets: [],
             amberSeconds,
             redSeconds,
             // Entangled with the Livewire property — a real two-way
@@ -395,8 +405,15 @@ new class extends Component {
             // property ticking every second, not just a pure-function call
             // to the system clock (which Alpine can't observe changing).
             nowMs: Date.now(),
+            clockStarted: false,
 
+            // Guarded so a redundant x-init re-fire (harmless on its own,
+            // since x-data's own state is never rebuilt now) can never
+            // stack up duplicate intervals all fighting to set the same
+            // value.
             startClock() {
+                if (this.clockStarted) return;
+                this.clockStarted = true;
                 setInterval(() => { this.nowMs = Date.now(); }, 1000);
             },
 
