@@ -367,3 +367,25 @@ it('keeps the x-data constructor free of per-poll ticket/serverNow data, so the 
     expect($html)->not->toContain('tickets: @js($tickets)');
     expect($html)->toContain('x-init="startClock(); resyncFrom(@js($tickets)');
 });
+
+/**
+ * The new-order chime itself is pure client-side Web Audio API code, not
+ * something Pest can execute — these lock in the structural pieces that
+ * make it correct: audio is only unlocked from a real user gesture (never
+ * autoplayed on page load, which browsers block anyway), and the chime
+ * only fires for tickets that arrive after the very first paint, never for
+ * ones already on the board when the page loaded.
+ */
+it('wires a window click listener to unlock audio ahead of when a chime is actually needed', function () {
+    $html = file_get_contents(resource_path('views/livewire/kds-board.blade.php'));
+
+    expect($html)->toContain('x-on:click.window="unlockAudio()"');
+});
+
+it('only chimes for tickets that arrive after the initial load, gated by hasLoadedOnce', function () {
+    $html = file_get_contents(resource_path('views/livewire/kds-board.blade.php'));
+
+    expect($html)->toContain('hasLoadedOnce: false');
+    expect($html)->toContain('if (this.hasLoadedOnce)');
+    expect($html)->toContain('playNewOrderChime()');
+});

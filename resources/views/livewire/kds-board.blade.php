@@ -238,6 +238,7 @@ new class extends Component {
     })"
     x-init="startClock(); resyncFrom(@js($tickets), {{ $serverNow }})"
     x-on:kds-tick-sync.window="resyncFrom($event.detail.tickets, $event.detail.serverNow)"
+    x-on:click.window="unlockAudio()"
     class="min-h-screen bg-gray-950 text-white p-4 flex flex-col gap-4"
 >
     <div class="flex items-center justify-between gap-4 flex-wrap">
@@ -405,6 +406,12 @@ new class extends Component {
             // to the system clock (which Alpine can't observe changing).
             nowMs: Date.now(),
             clockStarted: false,
+            // False until the very first resyncFrom (the initial page
+            // load) has run — every ticket already on the board at that
+            // moment must never sound the alarm, only ones that genuinely
+            // arrive afterward.
+            hasLoadedOnce: false,
+            audioCtx: null,
 
             // Guarded so a redundant x-init re-fire (harmless on its own,
             // since x-data's own state is never rebuilt now) can never
@@ -419,11 +426,76 @@ new class extends Component {
             // Called on every wire:poll tick via the kds-tick-sync event —
             // resyncs both the ticket list (new/removed tickets) and the
             // server-truth elapsed_seconds each carries, so drift can never
-            // accumulate between polls.
+            // accumulate between polls. Also the single place new-order
+            // arrivals are detected, since every ticket list update
+            // (initial paint and every poll) passes through here.
             resyncFrom(freshTickets, freshServerNow) {
+                if (this.hasLoadedOnce) {
+                    const previousIds = new Set(this.tickets.map(t => t.id));
+                    const arrived = freshTickets.some(t => !previousIds.has(t.id));
+                    if (arrived) this.playNewOrderChime();
+                }
+                this.hasLoadedOnce = true;
+
                 this.tickets = freshTickets;
                 this.baselineDeviceMs = Date.now();
                 this.nowMs = Date.now();
+            },
+
+            // Called from a window click listener (see the root element)
+            // so the AudioContext is created/resumed off a real user
+            // gesture well before it's actually needed — browsers refuse
+            // to play audio a page tries to start on its own, and a poll
+            // response is never itself a user gesture. A busy kitchen
+            // tablet gets tapped constantly, so by the time an order
+            // actually needs the chime this has almost always already run.
+            unlockAudio() {
+                if (!this.audioCtx) {
+                    const Ctx = window.AudioContext || window.webkitAudioContext;
+                    if (!Ctx) return;
+                    try {
+                        this.audioCtx = new Ctx();
+                    } catch (e) {
+                        return;
+                    }
+                }
+                if (this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume().catch(() => {});
+                }
+            },
+
+            // A short two-note chime synthesized with the Web Audio API —
+            // no bundled sound file to ship or go missing, and it works
+            // identically on every device. Never allowed to throw: a
+            // browser without Web Audio support, or one that's still
+            // refusing playback, must never break the board itself.
+            playNewOrderChime() {
+                try {
+                    this.unlockAudio();
+                    if (!this.audioCtx) return;
+
+                    const ctx = this.audioCtx;
+                    const now = ctx.currentTime;
+
+                    [880, 1320].forEach((freq, i) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.value = freq;
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+
+                        const start = now + i * 0.15;
+                        gain.gain.setValueAtTime(0, start);
+                        gain.gain.linearRampToValueAtTime(0.4, start + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+
+                        osc.start(start);
+                        osc.stop(start + 0.35);
+                    });
+                } catch (e) {
+                    // Never let a sound failure break the board.
+                }
             },
 
             secondsFor(id) {
