@@ -2,10 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Filament\Pages\ReceiveTransfers;
+use App\Filament\Pages\StorekeeperTransfers;
 use App\Models\StockTransfer;
+use App\Services\PermissionService;
 use App\Services\StockTransferService;
 use Illuminate\Http\Request;
 
+/**
+ * Authorization here mirrors whichever Filament Page these actions belong
+ * to (Storekeeper Transfers for create/send, Receive Transfers for
+ * receive), via the same PagePermission check the pages themselves use to
+ * decide who can even see them — not a separate hardcoded role list.
+ * Previously this controller had its own fixed ['storekeeper', 'super_admin']
+ * / ['storekeeper', 'chef', 'bartender'] arrays, completely disconnected
+ * from Page Permissions Manager: a manager could grant a role access to
+ * the page there and it would do nothing, since submitting the actual
+ * form hit this hardcoded list instead. It also meant super_admin was
+ * missing from the receive list entirely, unless that account also held
+ * one of the three named roles.
+ */
 class StockTransferController extends Controller
 {
     protected StockTransferService $service;
@@ -18,7 +34,7 @@ class StockTransferController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['storekeeper','super_admin'])) {
+        if (! PermissionService::canAccessPage(StorekeeperTransfers::class)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -51,7 +67,7 @@ class StockTransferController extends Controller
     public function send(StockTransfer $stockTransfer, Request $request)
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['storekeeper','super_admin'])) {
+        if (! PermissionService::canAccessPage(StorekeeperTransfers::class)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -67,8 +83,7 @@ class StockTransferController extends Controller
     public function receive(StockTransfer $stockTransfer, Request $request)
     {
         $user = $request->user();
-        // allow kitchen/bar staff to receive; also storekeeper can receive
-        if (! ($user->hasAnyRole(['storekeeper','chef','bartender']))) {
+        if (! PermissionService::canAccessPage(ReceiveTransfers::class)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -84,8 +99,7 @@ class StockTransferController extends Controller
     public function bulkReceive(Request $request)
     {
         $user = $request->user();
-        // allow kitchen/bar staff to receive; also storekeeper can receive
-        if (! ($user->hasAnyRole(['storekeeper','chef','bartender']))) {
+        if (! PermissionService::canAccessPage(ReceiveTransfers::class)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
