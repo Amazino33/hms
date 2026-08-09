@@ -4,20 +4,22 @@ namespace App\Filament\Pages;
 
 use App\Models\Ingredient;
 use App\Models\Product;
-use Filament\Notifications\Notification;
-use Filament\Pages\Page;
-use BackedEnum;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use App\Services\PermissionService;
-use App\Services\StockTransferService;
 use App\Models\StockTransfer;
 use App\Models\WareHouse;
+use App\Services\PermissionService;
+use App\Services\StockTransferService;
+use BackedEnum;
+use Filament\Notifications\Notification;
+use Filament\Pages\Page;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class StorekeeperTransfers extends Page
 {
-    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-arrows-right-left';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-arrows-right-left';
+
     protected static ?string $navigationLabel = 'Stock Transfers';
+
     protected string $view = 'filament.pages.storekeeper-transfers';
 
     // Defer loading of paginated recent transfers (which can be expensive)
@@ -83,9 +85,9 @@ class StorekeeperTransfers extends Page
 
         $page = request()->get('page', 1);
         $recent = StockTransfer::with([
-            'items.product', 'items.discrepancy',
-            'ingredientItems.ingredient', 'ingredientItems.discrepancy',
-            'fromWarehouse', 'toWarehouse',
+            'items.product', 'items.discrepancy', 'items.receivedBy',
+            'ingredientItems.ingredient', 'ingredientItems.discrepancy', 'ingredientItems.receivedBy',
+            'fromWarehouse', 'toWarehouse', 'user',
         ])->latest()->paginate(10, ['*'], 'page', $page);
 
         return [

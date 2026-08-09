@@ -5,18 +5,20 @@ namespace App\Filament\Pages;
 use App\Models\IngredientTransferItem;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
+use App\Services\PermissionService;
 use App\Services\StockTransferService;
+use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use BackedEnum;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use App\Services\PermissionService;
 
 class ReceiveTransfers extends Page
 {
-    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-inbox';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-inbox';
+
     protected static ?string $navigationLabel = 'Receive Transfers';
+
     protected string $view = 'filament.pages.receive-transfers';
 
     // Defer loading of transfers list (keeps initial admin pages fast)
@@ -70,18 +72,17 @@ class ReceiveTransfers extends Page
 
         if ($user->hasRole('storekeeper') || $user->hasRole('super_admin')) {
             // Storekeeper can see all transfers regardless of warehouse
-            $transfers = Cache::remember('receive_transfers:all', 5, fn () =>
-                StockTransfer::with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
-                    ->whereIn('status', ['pending','sent','partially_received'])
-                    ->latest()
-                    ->get()
+            $transfers = Cache::remember('receive_transfers:all', 5, fn () => StockTransfer::with(['items.product', 'items.receivedBy', 'ingredientItems.ingredient', 'ingredientItems.receivedBy', 'fromWarehouse', 'toWarehouse', 'user'])
+                ->whereIn('status', ['pending', 'sent', 'partially_received'])
+                ->latest()
+                ->get()
             );
-            $pastTransfers = Cache::remember("receive_transfers:past:all:{$pastPage}", 5, fn () =>
-                StockTransfer::with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
-                    ->where('status', 'received')
-                    ->latest()
-                    ->paginate(10, ['*'], 'past_page', $pastPage)
+            $pastTransfers = Cache::remember("receive_transfers:past:all:{$pastPage}", 5, fn () => StockTransfer::with(['items.product', 'items.receivedBy', 'ingredientItems.ingredient', 'ingredientItems.receivedBy', 'fromWarehouse', 'toWarehouse', 'user'])
+                ->where('status', 'received')
+                ->latest()
+                ->paginate(10, ['*'], 'past_page', $pastPage)
             );
+
             return [
                 'transfers' => $transfers,
                 'pastTransfers' => $pastTransfers,
@@ -91,13 +92,13 @@ class ReceiveTransfers extends Page
         }
 
         // If no role-based warehouse and user has assigned warehouse, use it
-        if (!$warehouseId && $user->warehouse) {
+        if (! $warehouseId && $user->warehouse) {
             $warehouseId = $user->warehouse->id;
             $warehouseName = $user->warehouse->name;
         }
 
         // If still no warehouse, show the error
-        if (!$warehouseId) {
+        if (! $warehouseId) {
             return [
                 'error' => 'No Warehouse Assigned - Your role is not mapped to a warehouse. Contact an administrator.',
                 'transfers' => collect(),
@@ -111,20 +112,18 @@ class ReceiveTransfers extends Page
         $pastTransfers = collect();
         if ($warehouseId) {
             $cacheKey = "receive_transfers:wh:{$warehouseId}";
-            $transfers = Cache::remember($cacheKey, 5, fn () =>
-                StockTransfer::where('to_warehouse_id', $warehouseId)
-                    ->whereIn('status', ['pending','sent','partially_received'])
-                    ->with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
-                    ->latest()
-                    ->get()
+            $transfers = Cache::remember($cacheKey, 5, fn () => StockTransfer::where('to_warehouse_id', $warehouseId)
+                ->whereIn('status', ['pending', 'sent', 'partially_received'])
+                ->with(['items.product', 'items.receivedBy', 'ingredientItems.ingredient', 'ingredientItems.receivedBy', 'fromWarehouse', 'toWarehouse', 'user'])
+                ->latest()
+                ->get()
             );
 
-            $pastTransfers = Cache::remember("receive_transfers:past:wh:{$warehouseId}:{$pastPage}", 5, fn () =>
-                StockTransfer::where('to_warehouse_id', $warehouseId)
-                    ->where('status', 'received')
-                    ->with(['items.product','ingredientItems.ingredient','fromWarehouse','toWarehouse'])
-                    ->latest()
-                    ->paginate(10, ['*'], 'past_page', $pastPage)
+            $pastTransfers = Cache::remember("receive_transfers:past:wh:{$warehouseId}:{$pastPage}", 5, fn () => StockTransfer::where('to_warehouse_id', $warehouseId)
+                ->where('status', 'received')
+                ->with(['items.product', 'items.receivedBy', 'ingredientItems.ingredient', 'ingredientItems.receivedBy', 'fromWarehouse', 'toWarehouse', 'user'])
+                ->latest()
+                ->paginate(10, ['*'], 'past_page', $pastPage)
             );
         }
 

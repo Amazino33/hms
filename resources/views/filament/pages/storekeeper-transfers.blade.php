@@ -164,6 +164,9 @@
                                             <p class="text-sm text-gray-600 dark:text-gray-400">
                                                 <span class="font-medium">To:</span> {{ $transfer->toWarehouse->name ?? 'Unknown' }}
                                             </p>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                                <span class="font-medium">Created by:</span> {{ $transfer->user->name ?? 'Unknown' }}
+                                            </p>
                                         </div>
                                         
                                         <!-- Row 3: Line items — what was actually transferred, sent
@@ -178,6 +181,9 @@
                                                     <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($line->quantity, 2), '0'), '.') }}</span>
                                                     @if($line->received_quantity !== null)
                                                         <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($line->received_quantity, 2), '0'), '.') }}</span>
+                                                        @if($line->receivedBy)
+                                                            <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
+                                                        @endif
                                                     @endif
                                                     <span class="px-2 py-0.5 text-xs font-semibold rounded-full
                                                         @if($line->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
@@ -201,6 +207,9 @@
                                                     <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($line->quantity, 2), '0'), '.') }}</span>
                                                     @if($line->received_quantity !== null)
                                                         <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($line->received_quantity, 2), '0'), '.') }}</span>
+                                                        @if($line->receivedBy)
+                                                            <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
+                                                        @endif
                                                     @endif
                                                     <span class="px-2 py-0.5 text-xs font-semibold rounded-full
                                                         @if($line->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300

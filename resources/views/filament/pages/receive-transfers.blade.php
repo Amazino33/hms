@@ -155,6 +155,7 @@
                                                 <span class="text-sm text-gray-500 dark:text-gray-400">To:</span>
                                                 <span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-md text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</span>
                                             </div>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Created by: {{ $t->user->name ?? 'Unknown' }}</p>
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-4">
@@ -186,6 +187,7 @@
                                                 <span class="text-sm text-gray-500 dark:text-gray-400">To:</span>
                                                 <span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-md text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</span>
                                             </div>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Created by: {{ $t->user->name ?? 'Unknown' }}</p>
                                         </div>
                                         <div class="text-right">
                                             <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">{{ $t->items->count() + $t->ingredientItems->count() }}</p>
@@ -242,6 +244,9 @@
                                                                 <input type="number" x-model.number="receivedQty" min="0" max="{{ $it->quantity }}" step="0.01" class="w-24 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-center">
                                                             @else
                                                                 <span class="text-gray-600 dark:text-gray-400">{{ $it->received_quantity }}</span>
+                                                                @if ($it->receivedBy)
+                                                                    <span class="block text-xs text-gray-400 dark:text-gray-500">by {{ $it->receivedBy->name }}</span>
+                                                                @endif
                                                             @endif
                                                         </td>
                                                         <td class="py-4 pr-4 text-right">
@@ -279,8 +284,14 @@
                                                 </div>
                                             @elseif ($it->outcome === 'received_full')
                                                 <span class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-xs font-semibold">Received {{ $it->received_quantity }}</span>
+                                                @if ($it->receivedBy)
+                                                    <span class="block text-xs text-gray-400 dark:text-gray-500 mt-1">by {{ $it->receivedBy->name }}</span>
+                                                @endif
                                             @elseif ($it->outcome === 'received_short')
                                                 <span class="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg text-xs font-semibold">Short — received {{ $it->received_quantity }}</span>
+                                                @if ($it->receivedBy)
+                                                    <span class="block text-xs text-gray-400 dark:text-gray-500 mt-1">by {{ $it->receivedBy->name }}</span>
+                                                @endif
                                             @else
                                                 <span class="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-xs font-semibold">Rejected</span>
                                             @endif
@@ -315,6 +326,7 @@
                                     <div>
                                         <h4 class="font-bold text-gray-900 dark:text-white">{{ $t->transfer_number }}</h4>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">From: {{ $t->fromWarehouse->name ?? $t->from_warehouse_id }} · To: {{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</p>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400">Created by: {{ $t->user->name ?? 'Unknown' }}</p>
                                     </div>
                                     <span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Received</span>
                                 </div>
@@ -325,6 +337,9 @@
                                             <span class="font-medium text-gray-800 dark:text-gray-200">{{ $line['name'] }}</span>
                                             <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($it->quantity, 2), '0'), '.') }}</span>
                                             <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($it->received_quantity, 2), '0'), '.') }}</span>
+                                            @if($it->receivedBy)
+                                                <span class="text-gray-500 dark:text-gray-400">by {{ $it->receivedBy->name }}</span>
+                                            @endif
                                             <span class="px-2 py-0.5 text-xs font-semibold rounded-full
                                                 @if($it->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
                                                 @elseif($it->outcome === 'received_short') bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300
