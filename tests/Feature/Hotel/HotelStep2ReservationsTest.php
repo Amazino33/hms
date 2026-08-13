@@ -24,7 +24,7 @@ it('creates a reservation with a folio and snapshots the room rate', function ()
     $room = makeRoom(rate: 15000);
     $user = User::factory()->create();
 
-    $booking = (new ReservationService())->createReservation([
+    $booking = (new ReservationService)->createReservation([
         'room_id' => $room->id,
         'guest_name' => 'Jane Doe',
         'guest_phone' => '08010000001',
@@ -50,7 +50,7 @@ it('creates a payment folio line for a deposit at reservation time', function ()
     $room = makeRoom();
     $user = User::factory()->create();
 
-    $booking = (new ReservationService())->createReservation([
+    $booking = (new ReservationService)->createReservation([
         'room_id' => $room->id,
         'guest_name' => 'Deposit Guest',
         'guest_phone' => '08010000002',
@@ -73,7 +73,7 @@ it('resolves an existing guest by phone instead of duplicating', function () {
     $room2 = makeRoom('203');
     $existing = Guest::create(['name' => 'Repeat Guest', 'phone' => '08010000003']);
 
-    $service = new ReservationService();
+    $service = new ReservationService;
     $booking1 = $service->createReservation([
         'room_id' => $room1->id, 'guest_name' => 'Repeat Guest', 'guest_phone' => '08010000003',
         'check_in' => now()->toDateString(), 'check_out' => now()->addDay()->toDateString(), 'deposit' => null,
@@ -90,7 +90,7 @@ it('resolves an existing guest by phone instead of duplicating', function () {
 
 it('rejects a genuinely overlapping reservation for the same room', function () {
     $room = makeRoom();
-    $service = new ReservationService();
+    $service = new ReservationService;
 
     $service->createReservation([
         'room_id' => $room->id, 'guest_name' => 'First Guest', 'guest_phone' => '08010000004',
@@ -105,7 +105,7 @@ it('rejects a genuinely overlapping reservation for the same room', function () 
 
 it('accepts an adjacent, non-overlapping reservation for the same room', function () {
     $room = makeRoom();
-    $service = new ReservationService();
+    $service = new ReservationService;
 
     $service->createReservation([
         'room_id' => $room->id, 'guest_name' => 'First Guest', 'guest_phone' => '08010000006',
@@ -122,7 +122,7 @@ it('accepts an adjacent, non-overlapping reservation for the same room', functio
 
 it('does not let a cancelled or no_show booking block a new reservation for the same dates', function () {
     $room = makeRoom();
-    $service = new ReservationService();
+    $service = new ReservationService;
 
     $cancelled = $service->createReservation([
         'room_id' => $room->id, 'guest_name' => 'Cancelled Guest', 'guest_phone' => '08010000008',
@@ -144,10 +144,38 @@ it('does not let a cancelled or no_show booking block a new reservation for the 
     expect($rebooked->id)->not->toBeNull();
 });
 
+/**
+ * Regression: assertNoOverlap() excluded 'cancelled' and 'no_show' but not
+ * 'checked_out' — a departed guest's original booking kept the room
+ * permanently unbookable for any new reservation whose dates overlapped
+ * the old, already-closed-out stay.
+ */
+it('does not let a checked-out booking block a new reservation for the same room and dates', function () {
+    $room = makeRoom();
+    $service = new ReservationService;
+    $user = User::factory()->create();
+
+    $original = $service->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Departed Guest', 'guest_phone' => '08010000013',
+        'check_in' => now()->toDateString(), 'check_out' => now()->addDays(2)->toDateString(), 'deposit' => null,
+    ], $user->id);
+
+    $original = (new \App\Services\BookingService)->checkIn($original, $user->id);
+    (new \App\Services\FolioService)->recordPayment($original->folio, (float) $original->total_price, 'cash', null, $user->id);
+    (new \App\Services\BookingService)->checkOut($original->fresh(), $user->id);
+
+    $rebooked = $service->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Next Guest', 'guest_phone' => '08010000014',
+        'check_in' => now()->toDateString(), 'check_out' => now()->addDays(2)->toDateString(), 'deposit' => null,
+    ], $user->id);
+
+    expect($rebooked->id)->not->toBeNull();
+});
+
 it('rejects a check-out that is not after check-in', function () {
     $room = makeRoom();
 
-    expect(fn () => (new ReservationService())->createReservation([
+    expect(fn () => (new ReservationService)->createReservation([
         'room_id' => $room->id, 'guest_name' => 'Bad Dates', 'guest_phone' => '08010000011',
         'check_in' => now()->addDays(3)->toDateString(), 'check_out' => now()->addDays(3)->toDateString(), 'deposit' => null,
     ], null))->toThrow(Exception::class);
@@ -155,7 +183,7 @@ it('rejects a check-out that is not after check-in', function () {
 
 it('rejects cancelling an already checked-out or cancelled booking', function () {
     $room = makeRoom();
-    $service = new ReservationService();
+    $service = new ReservationService;
     $booking = $service->createReservation([
         'room_id' => $room->id, 'guest_name' => 'Guest', 'guest_phone' => '08010000012',
         'check_in' => now()->toDateString(), 'check_out' => now()->addDay()->toDateString(), 'deposit' => null,
@@ -170,7 +198,7 @@ it('rejects cancelling an already checked-out or cancelled booking', function ()
 it('auto-releases a same-day no-deposit reservation only once the release hour has passed', function () {
     config(['hms.reservation_auto_release_hour' => 18]);
     $room = makeRoom();
-    $booking = (new ReservationService())->createReservation([
+    $booking = (new ReservationService)->createReservation([
         'room_id' => $room->id, 'guest_name' => 'No Deposit Guest', 'guest_phone' => '08010000013',
         'check_in' => now()->toDateString(), 'check_out' => now()->addDay()->toDateString(), 'deposit' => null,
     ], null);
@@ -190,7 +218,7 @@ it('never auto-releases a deposit-backed reservation', function () {
     config(['hms.reservation_auto_release_hour' => 18]);
     $room = makeRoom();
     $user = User::factory()->create();
-    $booking = (new ReservationService())->createReservation([
+    $booking = (new ReservationService)->createReservation([
         'room_id' => $room->id, 'guest_name' => 'Deposit Guest', 'guest_phone' => '08010000014',
         'check_in' => now()->toDateString(), 'check_out' => now()->addDay()->toDateString(), 'deposit' => 2000,
     ], $user->id);
@@ -205,7 +233,7 @@ it('never auto-releases a deposit-backed reservation', function () {
 it('never auto-releases a reservation for a different date', function () {
     config(['hms.reservation_auto_release_hour' => 18]);
     $room = makeRoom();
-    $booking = (new ReservationService())->createReservation([
+    $booking = (new ReservationService)->createReservation([
         'room_id' => $room->id, 'guest_name' => 'Future Guest', 'guest_phone' => '08010000015',
         'check_in' => now()->addDays(2)->toDateString(), 'check_out' => now()->addDays(3)->toDateString(), 'deposit' => null,
     ], null);
@@ -305,8 +333,8 @@ it('renders the day-list room row with the guest name and status when a booking 
     $receptionist->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'receptionist']));
     $room = Room::create(['number' => '502', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
 
-    (new ReservationService())->createReservation([
-        'room_id' => $room->id, 'guest_name' => 'Timeline Guest', 'guest_phone' => '0809' . fake()->numerify('#######'),
+    (new ReservationService)->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Timeline Guest', 'guest_phone' => '0809'.fake()->numerify('#######'),
         'check_in' => now()->toDateString(), 'check_out' => now()->addDays(2)->toDateString(), 'deposit' => null,
     ], $receptionist->id);
 

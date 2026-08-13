@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 class ReservationService
 {
     /**
-     * @param array{room_id: int, guest_name: string, guest_phone: ?string, check_in: string, check_out: string, deposit: ?float} $data
+     * @param  array{room_id: int, guest_name: string, guest_phone: ?string, check_in: string, check_out: string, deposit: ?float}  $data
      */
     public function createReservation(array $data, ?int $createdByUserId, ?int $shiftId = null): Booking
     {
@@ -85,14 +85,18 @@ class ReservationService
     }
 
     /**
-     * Cancelled/no-show bookings never block a new reservation for the
-     * same room/dates — only a genuinely active (reserved/checked-in)
-     * booking counts as an overlap.
+     * Cancelled/no-show/checked-out bookings never block a new reservation
+     * for the same room/dates — only a genuinely active (reserved/
+     * checked-in) booking counts as an overlap. checked_out was missing
+     * from this list, which meant a room stayed permanently "occupied" for
+     * a since-departed guest's original dates — a fresh booking for that
+     * same room could never be created again for as long as the new dates
+     * overlapped the old, already-closed-out stay.
      */
     private function assertNoOverlap(int $roomId, string $checkIn, string $checkOut): void
     {
         $overlap = Booking::where('room_id', $roomId)
-            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->whereNotIn('status', ['cancelled', 'no_show', 'checked_out'])
             ->where('check_in', '<', $checkOut)
             ->where('check_out', '>', $checkIn)
             ->exists();
