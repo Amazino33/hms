@@ -65,12 +65,12 @@ class RoomOrder extends Page
 
     public function checkedInBookings()
     {
-        return Booking::with(['room', 'guest'])->where('status', 'checked_in')->get();
+        return Booking::with(['room', 'guest'])->currentlyCheckedIn()->get();
     }
 
     public function selectRoom(int $roomId): void
     {
-        $booking = Booking::where('room_id', $roomId)->where('status', 'checked_in')->with('room')->first();
+        $booking = Booking::where('room_id', $roomId)->currentlyCheckedIn()->with('room')->first();
 
         if (! $booking) {
             Notification::make()->title('This room has no checked-in guest')->warning()->send();

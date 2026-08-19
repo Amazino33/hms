@@ -48,7 +48,7 @@ class ExposureService
 
     public function inHouseFolioBalances(): float
     {
-        return (float) Booking::where('status', 'checked_in')
+        return (float) Booking::currentlyCheckedIn()
             ->with('folio.lines')
             ->get()
             ->sum(fn (Booking $b) => $b->folio ? $b->folio->balance() : 0.0);

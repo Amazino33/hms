@@ -143,3 +143,51 @@ it('refuses to select a room with no checked-in booking on the room order screen
 
     expect($component->get('roomId'))->toBeNull();
 });
+
+/**
+ * Regression: a booking whose check_out date already passed without ever
+ * actually being checked out (front desk forgot, or was blocked by an
+ * unpaid folio balance) stays stuck at status='checked_in' forever — a
+ * plain status filter kept treating it as a live, billable guest
+ * indefinitely, cluttering the room picker with long-departed guests and
+ * risking a new room order being billed to the wrong (stale) folio.
+ */
+it('does not list or bill a stale checked_in booking whose checkout date has already passed', function () {
+    $room = Room::create(['number' => '504', 'type' => 'Standard', 'price_per_night' => 15000, 'status' => 'available', 'housekeeping' => 'clean']);
+    $receptionist = User::factory()->create();
+
+    $stale = (new ReservationService)->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Long Departed Guest', 'guest_phone' => '0805'.fake()->numerify('#######'),
+        'check_in' => now()->subDays(10)->toDateString(), 'check_out' => now()->subDays(8)->toDateString(), 'deposit' => null,
+    ], $receptionist->id);
+    $stale->update(['status' => 'checked_in']);
+
+    expect((new RoomOrder)->checkedInBookings()->pluck('id'))->not->toContain($stale->id);
+
+    expect(fn () => (new RoomOrderService)->placeOrder($room->id, ['1' => ['name' => 'x', 'price' => 100, 'quantity' => 1]], $receptionist->id))
+        ->toThrow(Exception::class, 'This room has no checked-in guest to bill a room order to.');
+});
+
+/**
+ * The critical half of the same bug: when a stale checked_in booking and
+ * the real current guest both exist for the same room, a new room order
+ * must land on the genuine current guest's folio, never the stale one —
+ * the earlier bare where('status','checked_in')->first() had no date
+ * filter and no explicit ordering, so it could silently pick either.
+ */
+it('bills a room order to the genuinely current guest even when a stale checked_in booking exists for the same room', function () {
+    [$room, $currentBooking, $receptionist, $beer] = seedRoomOrderFixture();
+    Shift::create(['user_id' => User::factory()->create()->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
+
+    $stale = (new ReservationService)->createReservation([
+        'room_id' => $room->id, 'guest_name' => 'Long Departed Guest', 'guest_phone' => '0806'.fake()->numerify('#######'),
+        'check_in' => now()->subDays(10)->toDateString(), 'check_out' => now()->subDays(8)->toDateString(), 'deposit' => null,
+    ], $receptionist->id);
+    $stale->update(['status' => 'checked_in']);
+
+    $cart = [(string) $beer->id => ['name' => $beer->name, 'price' => 800, 'quantity' => 1]];
+    $orders = (new RoomOrderService)->placeOrder($room->id, $cart, $receptionist->id);
+
+    expect($orders[0]->booking_id)->toBe($currentBooking->id);
+    expect($orders[0]->booking_id)->not->toBe($stale->id);
+});

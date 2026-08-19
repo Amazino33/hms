@@ -97,6 +97,28 @@ class Booking extends Model
         return $this->status === 'checked_out';
     }
 
+    /**
+     * A booking that's genuinely still the room's current occupant right
+     * now — status='checked_in' is not enough on its own: a booking whose
+     * check_out date has already passed without ever actually being
+     * checked out (front desk forgot, or was blocked by an unpaid folio
+     * balance) stays stuck at status='checked_in' indefinitely, and a
+     * plain status filter would keep treating it as live forever. Mirrors
+     * Room::occupancyState()'s "occupied"/"due_out_today" combined
+     * definition — check_out is inclusive here (today counts, since a
+     * guest checking out today may still want room service before they
+     * leave), unlike OccupancyReportService's night-counting convention
+     * where check_out is exclusive.
+     */
+    public function scopeCurrentlyCheckedIn($query)
+    {
+        $today = now()->toDateString();
+
+        return $query->where('status', 'checked_in')
+            ->where('check_in', '<=', $today)
+            ->where('check_out', '>=', $today);
+    }
+
     public function hasDeposit(): bool
     {
         return $this->deposit !== null && (float) $this->deposit > 0;

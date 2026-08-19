@@ -17,19 +17,19 @@ use App\Models\FolioLine;
 class RoomOrderService
 {
     /**
-     * @param array $cart same shape OrderSplitter::handle() expects: keyed
-     *   by product id (or "menu_{id}") => ['name','price','quantity']
+     * @param  array  $cart  same shape OrderSplitter::handle() expects: keyed
+     *                       by product id (or "menu_{id}") => ['name','price','quantity']
      * @return array created Order models
      */
     public function placeOrder(int $roomId, array $cart, int $userId): array
     {
-        $booking = Booking::where('room_id', $roomId)->where('status', 'checked_in')->first();
+        $booking = Booking::where('room_id', $roomId)->currentlyCheckedIn()->first();
 
         if (! $booking) {
             throw new \Exception('This room has no checked-in guest to bill a room order to.');
         }
 
-        $orders = (new OrderSplitter())->handle($cart, null, $userId, [
+        $orders = (new OrderSplitter)->handle($cart, null, $userId, [
             'booking_id' => $booking->id,
             'defer_stock_deduction' => true,
             'status' => 'pending',

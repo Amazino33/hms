@@ -71,7 +71,7 @@ class ReportExplorer extends Page
 
     public function range(): DateRange
     {
-        return (new DateRangeResolver())->resolvePreset($this->preset, $this->customFrom, $this->customTo);
+        return (new DateRangeResolver)->resolvePreset($this->preset, $this->customFrom, $this->customTo);
     }
 
     /**
@@ -97,7 +97,7 @@ class ReportExplorer extends Page
 
     private function salesData(DateRange $range): array
     {
-        $service = new RevenueReportService();
+        $service = new RevenueReportService;
         $lineItems = $service->lineItems($range);
         $chartRange = $this->trailingChartRange($range);
 
@@ -134,7 +134,7 @@ class ReportExplorer extends Page
 
     private function productsData(DateRange $range): array
     {
-        $service = new RevenueReportService();
+        $service = new RevenueReportService;
         $lineItems = $service->lineItems($range);
         $breakdown = $service->productBreakdown($lineItems);
 
@@ -251,7 +251,7 @@ class ReportExplorer extends Page
 
     private function debtsData(DateRange $range): array
     {
-        $service = new LeakageReportService();
+        $service = new LeakageReportService;
 
         return [
             'summary' => $service->summary($range),
@@ -312,7 +312,7 @@ class ReportExplorer extends Page
 
     private function roomsData(DateRange $range): array
     {
-        $service = new OccupancyReportService();
+        $service = new OccupancyReportService;
         $breakdown = $service->nightlyBreakdown($range);
 
         $byRoom = collect();
@@ -327,7 +327,7 @@ class ReportExplorer extends Page
             'nightly' => $breakdown,
             'by_room' => $byRoom->sortByDesc('nights_sold')->values(),
             'open_folios' => $this->openFolios(),
-            'profit' => (new RoomProfitService())->summary($range),
+            'profit' => (new RoomProfitService)->summary($range),
         ];
     }
 
@@ -339,7 +339,7 @@ class ReportExplorer extends Page
      */
     private function openFolios(): Collection
     {
-        return \App\Models\Booking::where('status', 'checked_in')
+        return \App\Models\Booking::currentlyCheckedIn()
             ->with(['folio', 'guest', 'room'])
             ->get()
             ->map(fn ($b) => ['booking' => $b, 'balance' => $b->folio ? $b->folio->balance() : 0.0])
