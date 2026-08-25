@@ -476,6 +476,31 @@ it('backfills a zero-quantity Main Store row for an ingredient only ever stocked
     expect((float) IngredientInventoryItem::where('ingredient_id', $ingredient->id)->where('warehouse_id', $kitchen->id)->value('quantity'))->toEqual(8.0);
 });
 
+/**
+ * Regression: a brand-new ingredient (just added for a new menu item's
+ * recipe) has no IngredientInventoryItem row at the kitchen warehouse
+ * until actual stock physically arrives there via a transfer — the
+ * backfill that already covered main_store_stocktake never applied to
+ * kitchen_handover, so it silently never showed up on a chef's count
+ * with no way to even notice it was missing.
+ */
+it('backfills a zero-quantity Kitchen row for a brand-new ingredient with no stock anywhere yet, so a handover count can see it', function () {
+    $kitchen = WareHouse::create(['name' => 'Kitchen', 'type' => 'consumer']);
+    $newIngredient = Ingredient::create(['name' => 'New Sauce', 'sku' => 'ING-NEWSAUCE', 'unit_name' => 'kg', 'quantity' => 0, 'cost_per_unit' => 5, 'category' => 'Sauces']);
+
+    $outgoing = User::factory()->create();
+    $incoming = User::factory()->create();
+
+    $service = new CountSessionService;
+    $session = $service->openSession('kitchen_handover', $kitchen->id, $outgoing->id, $outgoing->id, $incoming->id);
+
+    $item = $session->items->firstWhere('ingredient_id', $newIngredient->id);
+    expect($item)->not->toBeNull();
+    expect((float) $item->expected_quantity_at_open)->toEqual(0.0);
+
+    expect((float) IngredientInventoryItem::where('ingredient_id', $newIngredient->id)->where('warehouse_id', $kitchen->id)->value('quantity'))->toEqual(0.0);
+});
+
 it('does not add ingredients to a bar_handover session — the bar never stocks them', function () {
     $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
     $category = Category::create(['name' => 'Drinks', 'type' => 'drink']);

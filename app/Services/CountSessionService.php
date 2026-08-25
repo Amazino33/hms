@@ -186,7 +186,14 @@ class CountSessionService
                 }
             }
 
-            if ($type === 'main_store_stocktake' && $countsIngredients) {
+            // Kitchen handover included here too, not just main_store_
+            // stocktake — a brand-new ingredient (just added for a new
+            // menu item's recipe) has no IngredientInventoryItem row at
+            // the kitchen warehouse until actual stock physically arrives
+            // there via a transfer, so it silently never showed up on a
+            // chef's count until then, with no way to even notice it was
+            // missing.
+            if (in_array($type, ['main_store_stocktake', 'kitchen_handover'], true) && $countsIngredients) {
                 $existingIngredientIds = IngredientInventoryItem::where('warehouse_id', $warehouseId)->pluck('ingredient_id');
                 $missingIngredientIds = Ingredient::whereNotIn('id', $existingIngredientIds)->pluck('id');
 
