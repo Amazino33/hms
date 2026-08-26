@@ -637,6 +637,8 @@ class CountSessionDetail extends Page
             && ! $session->items()->whereHas('review', fn ($q) => $q->where('outcome', 'disputed'))->exists();
     }
 
+    public string $handoverNote = '';
+
     /**
      * Returns whether the seal actually succeeded — the dual-PIN screen's
      * JS uses this to reset itself back to the first PIN entry on failure.
@@ -648,8 +650,13 @@ class CountSessionDetail extends Page
      */
     public function sealAgreement(string $firstPin, string $secondPin): bool
     {
+        if (trim($this->handoverNote) === '') {
+            Notification::make()->title('A handover note is required.')->body('Please write suggestions, complaints, ideas, reason for discrepancy, etc., before sealing.')->danger()->persistent()->send();
+            return false;
+        }
+
         try {
-            (new CountSessionService)->sealAgreement($this->session, $firstPin, $secondPin, $this->pinThrottleKey('seal'));
+            (new CountSessionService)->sealAgreement($this->session, $firstPin, $secondPin, $this->pinThrottleKey('seal'), trim($this->handoverNote));
             $this->refreshSession();
             Notification::make()->title('Handover sealed')->success()->send();
 

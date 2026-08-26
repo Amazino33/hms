@@ -27,6 +27,15 @@
     class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 relative overflow-hidden">
     <h3 class="text-lg font-bold text-gray-900 dark:text-white text-center mb-1">Seal the Agreement</h3>
 
+    <!-- COMPULSORY NOTE -->
+    <div class="mb-4">
+        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+            Handover Note (Required) <br>
+            <span class="text-xs font-normal text-gray-500">Suggestions, complaints, ideas, damage drinks, reason for discrepancy, etc.</span>
+        </label>
+        <textarea wire:model="handoverNote" rows="3" class="w-full rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:ring-primary-500 focus:border-primary-500 p-3" placeholder="Write your note here..."></textarea>
+    </div>
+
     <template x-if="step === 'first'">
         {{-- onComplete gets embedded as Promise.resolve({{ $onComplete }}) inside
              pin-keypad's digit() — a semicolon there is inside a function call's

@@ -44,6 +44,14 @@
                         </div>
                     </div>
                 @endif
+                @if($session->notes)
+                    <div class="col-span-2 md:col-span-4 mt-2">
+                        <div class="text-gray-500 dark:text-gray-400 uppercase text-xs font-bold">Handover Note</div>
+                        <div class="text-gray-900 dark:text-white text-sm bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700 italic">
+                            {{ $session->notes }}
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
         @endunless

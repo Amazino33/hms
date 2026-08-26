@@ -725,7 +725,7 @@ class CountSessionService
      * InventoryTransaction, and the incoming custodian's shift starts,
      * lifting the freeze beginHandoverFreeze() started at declaration.
      */
-    public function sealAgreement(CountSession $session, string $firstPin, string $secondPin, string $throttleKey): CountSession
+    public function sealAgreement(CountSession $session, string $firstPin, string $secondPin, string $throttleKey, string $handoverNote = ''): CountSession
     {
         if (! $session->isHandoverWithSuccessor()) {
             throw new \Exception('Only a handover count with a successor is sealed this way.');
@@ -790,7 +790,7 @@ class CountSessionService
             throw new \Exception("Incoming signature: PIN does not match {$incomingName}'s PIN.");
         }
 
-        return DB::transaction(function () use ($session, $isUnwitnessed, $firstUser, $secondUser) {
+        return DB::transaction(function () use ($session, $isUnwitnessed, $firstUser, $secondUser, $handoverNote) {
             if ($isUnwitnessed) {
                 $session->update(['witness_user_id' => $firstUser->id]);
             }
@@ -799,6 +799,10 @@ class CountSessionService
             // here, an overage never gets a discrepancy row for a handover,
             // only the session-level total_overage_quantity.
             $session = $this->closeSessionAndReconcile($session, $secondUser->id, trackOverages: false);
+
+            if (trim($handoverNote) !== '') {
+                $session->update(['notes' => trim($handoverNote)]);
+            }
 
             (new BartenderChefShiftService)->completeHandoverBoundary($session->fresh());
 
