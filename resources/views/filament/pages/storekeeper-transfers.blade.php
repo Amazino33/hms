@@ -36,7 +36,7 @@
                             <select name="from_warehouse_id" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all duration-200 outline-none">
                                 <option value="">Select From Warehouse</option>
                                 @foreach($warehouses as $warehouse)
-                                    <option value="{{ $warehouse->id }}">{{ $warehouse->name }}</option>
+                                    <option value="{{ $warehouse->id }}" {{ str_contains(strtolower($warehouse->name), 'main') ? 'selected' : '' }}>{{ $warehouse->name }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -169,63 +169,69 @@
                                             </p>
                                         </div>
                                         
-                                        <!-- Row 3: Line items — what was actually transferred, sent
-                                             vs. received, and any discrepancy — not just a count, so
-                                             the storekeeper can see exactly what happened to each
-                                             transfer without opening anything else. -->
-                                        <div class="space-y-1.5">
-                                            @foreach($transfer->items as $line)
-                                                @php($discrepancy = $line->discrepancy)
-                                                <div class="flex flex-wrap items-center gap-2 text-sm">
-                                                    <span class="font-medium text-gray-800 dark:text-gray-200">{{ $line->product->name ?? 'Unknown product' }}</span>
-                                                    <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($line->quantity, 2), '0'), '.') }}</span>
-                                                    @if($line->received_quantity !== null)
-                                                        <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($line->received_quantity, 2), '0'), '.') }}</span>
-                                                        @if($line->receivedBy)
-                                                            <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
+                                        <!-- Row 3: Line items (Collapsible) -->
+                                        <div x-data="{ expanded: false }" class="mt-1">
+                                            <button type="button" @click="expanded = !expanded" class="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 touch-manipulation">
+                                                <span x-text="expanded ? 'Hide Details' : 'View Details'"></span>
+                                                <svg class="w-4 h-4 transition-transform duration-200" :class="expanded ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                                </svg>
+                                            </button>
+                                            
+                                            <div x-show="expanded" x-collapse class="space-y-1.5 mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+                                                @foreach($transfer->items as $line)
+                                                    @php($discrepancy = $line->discrepancy)
+                                                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                                                        <span class="font-medium text-gray-800 dark:text-gray-200">{{ $line->product->name ?? 'Unknown product' }}</span>
+                                                        <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($line->quantity, 2), '0'), '.') }}</span>
+                                                        @if($line->received_quantity !== null)
+                                                            <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($line->received_quantity, 2), '0'), '.') }}</span>
+                                                            @if($line->receivedBy)
+                                                                <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
+                                                            @endif
                                                         @endif
-                                                    @endif
-                                                    <span class="px-2 py-0.5 text-xs font-semibold rounded-full
-                                                        @if($line->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
-                                                        @elseif($line->outcome === 'received_short') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
-                                                        @elseif($line->outcome === 'rejected') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
-                                                        @else bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
-                                                        @endif">
-                                                        {{ str_replace('_', ' ', ucfirst($line->outcome ?? 'pending')) }}
-                                                    </span>
-                                                    @if($discrepancy && $discrepancy->isOpen())
-                                                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-600 text-white">
-                                                            ⚠ {{ rtrim(rtrim(number_format($discrepancy->missing_base_qty, 2), '0'), '.') }} unresolved
+                                                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full
+                                                            @if($line->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                                            @elseif($line->outcome === 'received_short') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
+                                                            @elseif($line->outcome === 'rejected') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
+                                                            @else bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
+                                                            @endif">
+                                                            {{ str_replace('_', ' ', ucfirst($line->outcome ?? 'pending')) }}
                                                         </span>
-                                                    @endif
-                                                </div>
-                                            @endforeach
-                                            @foreach($transfer->ingredientItems as $line)
-                                                @php($discrepancy = $line->discrepancy)
-                                                <div class="flex flex-wrap items-center gap-2 text-sm">
-                                                    <span class="font-medium text-gray-800 dark:text-gray-200">{{ $line->ingredient->name ?? 'Unknown ingredient' }}</span>
-                                                    <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($line->quantity, 2), '0'), '.') }}</span>
-                                                    @if($line->received_quantity !== null)
-                                                        <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($line->received_quantity, 2), '0'), '.') }}</span>
-                                                        @if($line->receivedBy)
-                                                            <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
+                                                        @if($discrepancy && $discrepancy->isOpen())
+                                                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-600 text-white">
+                                                                ⚠ {{ rtrim(rtrim(number_format($discrepancy->missing_base_qty, 2), '0'), '.') }} unresolved
+                                                            </span>
                                                         @endif
-                                                    @endif
-                                                    <span class="px-2 py-0.5 text-xs font-semibold rounded-full
-                                                        @if($line->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
-                                                        @elseif($line->outcome === 'received_short') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
-                                                        @elseif($line->outcome === 'rejected') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
-                                                        @else bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
-                                                        @endif">
-                                                        {{ str_replace('_', ' ', ucfirst($line->outcome ?? 'pending')) }}
-                                                    </span>
-                                                    @if($discrepancy && $discrepancy->isOpen())
-                                                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-600 text-white">
-                                                            ⚠ {{ rtrim(rtrim(number_format($discrepancy->missing_base_qty, 2), '0'), '.') }} unresolved
+                                                    </div>
+                                                @endforeach
+                                                @foreach($transfer->ingredientItems as $line)
+                                                    @php($discrepancy = $line->discrepancy)
+                                                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                                                        <span class="font-medium text-gray-800 dark:text-gray-200">{{ $line->ingredient->name ?? 'Unknown ingredient' }}</span>
+                                                        <span class="text-gray-500 dark:text-gray-400">sent {{ rtrim(rtrim(number_format($line->quantity, 2), '0'), '.') }}</span>
+                                                        @if($line->received_quantity !== null)
+                                                            <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($line->received_quantity, 2), '0'), '.') }}</span>
+                                                            @if($line->receivedBy)
+                                                                <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
+                                                            @endif
+                                                        @endif
+                                                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full
+                                                            @if($line->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                                            @elseif($line->outcome === 'received_short') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
+                                                            @elseif($line->outcome === 'rejected') bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
+                                                            @else bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
+                                                            @endif">
+                                                            {{ str_replace('_', ' ', ucfirst($line->outcome ?? 'pending')) }}
                                                         </span>
-                                                    @endif
-                                                </div>
-                                            @endforeach
+                                                        @if($discrepancy && $discrepancy->isOpen())
+                                                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-600 text-white">
+                                                                ⚠ {{ rtrim(rtrim(number_format($discrepancy->missing_base_qty, 2), '0'), '.') }} unresolved
+                                                            </span>
+                                                        @endif
+                                                    </div>
+                                                @endforeach
+                                            </div>
                                         </div>
                                     </div>
 
@@ -689,6 +695,12 @@
                 return;
             }
             errorDiv.classList.add('hidden');
+
+            const toWarehouseName = document.querySelector('select[name="to_warehouse_id"] option:checked')?.text || 'the destination';
+            const totalLines = items.length + ingredientItems.length;
+            if (!confirm(`You are about to transfer ${totalLines} line(s) to ${toWarehouseName}. Are you sure you want to proceed?`)) {
+                return;
+            }
 
             const payload = {
                 from_warehouse_id: document.querySelector('select[name="from_warehouse_id"]').value,
