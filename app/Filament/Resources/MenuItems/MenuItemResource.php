@@ -7,9 +7,9 @@ use App\Filament\Resources\MenuItems\Pages\EditMenuItem;
 use App\Filament\Resources\MenuItems\Pages\ListMenuItems;
 use App\Filament\Resources\MenuItems\Pages\ViewMenuItem;
 use App\Filament\Resources\MenuItems\Schemas\MenuItemInfolist;
+use App\Models\Category;
 use App\Models\Ingredient;
 use App\Models\MenuItem;
-use App\Models\Category;
 use BackedEnum;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
@@ -18,15 +18,12 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Infolists\Components\TextEntry;
-use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use UnitEnum;
 
 class MenuItemResource extends Resource
 {
@@ -41,7 +38,7 @@ class MenuItemResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([
-            TextInput::make('name')->required(),
+            TextInput::make('name')->required()->unique(ignoreRecord: true),
             TextInput::make('sku')->required()->unique(ignoreRecord: true),
             Select::make('category_id')
                 ->label('Category')
@@ -69,8 +66,9 @@ class MenuItemResource extends Resource
                 ->collapsible(),
             Placeholder::make('total_recipe_cost')
                 ->label('Total Recipe Cost')
-                ->content(fn ($get) => '₦' . collect($get('recipes'))->sum(function ($recipe) {
+                ->content(fn ($get) => '₦'.collect($get('recipes'))->sum(function ($recipe) {
                     $ingredient = Ingredient::find($recipe['ingredient_id']);
+
                     return $ingredient ? $recipe['quantity_needed'] * $ingredient->cost_per_unit : 0;
                 })),
         ]);
@@ -83,7 +81,7 @@ class MenuItemResource extends Resource
 
     public static function table(Table $table): Table
     {
-        
+
         return $table->columns([
             TextColumn::make('name')->searchable(),
             TextColumn::make('sku'),

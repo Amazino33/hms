@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\CashDrop;
+use App\Console\Commands\Concerns\BacksUpDatabase;
 use App\Models\CountSession;
 use App\Models\FridgeRestockMark;
 use App\Models\IngredientTransaction;
@@ -16,7 +16,6 @@ use App\Models\StockTransfer;
 use App\Models\Table;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Notification;
 use Spatie\Activitylog\Models\Activity;
 
 /**
@@ -36,6 +35,8 @@ use Spatie\Activitylog\Models\Activity;
  */
 class ClearTestDataCommand extends Command
 {
+    use BacksUpDatabase;
+
     protected $signature = 'app:clear-test-data {--force : Skip the confirmation prompt}';
 
     protected $description = 'Clear all transactional/history data (orders, shifts, counts, stock movements, logs, sessions) for a fresh start';
@@ -66,7 +67,7 @@ class ClearTestDataCommand extends Command
         $this->line('It will NOT touch users, products, current stock quantities, categories, menu items, warehouses, roles, or guests/rooms/bookings.');
         $this->newLine();
 
-        if (!$this->option('force') && !$this->confirm('Are you sure you want to continue?')) {
+        if (! $this->option('force') && ! $this->confirm('Are you sure you want to continue?')) {
             $this->info('Cancelled — nothing was deleted.');
 
             return self::SUCCESS;
@@ -75,8 +76,8 @@ class ClearTestDataCommand extends Command
         // Tests run against an in-memory SQLite database, not the real
         // mysql connection this backs up — nothing meaningful to shell out
         // to mysqldump for there, and doing so would just break every test.
-        if (!app()->environment('testing')) {
-            $backupFile = $this->backupDatabase();
+        if (! app()->environment('testing')) {
+            $backupFile = $this->backupDatabase('pre_reset');
             $this->info("Backup saved to {$backupFile}");
             $this->newLine();
         }
@@ -119,34 +120,5 @@ class ClearTestDataCommand extends Command
         $this->info('Done — every table is now available for a fresh start.');
 
         return self::SUCCESS;
-    }
-
-    private function backupDatabase(): string
-    {
-        $connection = config('database.connections.mysql');
-
-        $backupDir = storage_path('backups');
-        if (!is_dir($backupDir)) {
-            mkdir($backupDir, 0755, true);
-        }
-
-        $backupFile = $backupDir . '/pre_reset_' . now()->format('Ymd_His') . '.sql';
-
-        $command = sprintf(
-            'mysqldump -h %s -u %s -p%s %s > %s',
-            escapeshellarg($connection['host']),
-            escapeshellarg($connection['username']),
-            escapeshellarg($connection['password']),
-            escapeshellarg($connection['database']),
-            escapeshellarg($backupFile),
-        );
-
-        exec($command, result_code: $exitCode);
-
-        if ($exitCode !== 0 || !file_exists($backupFile) || filesize($backupFile) === 0) {
-            throw new \RuntimeException('Backup failed — aborting before any data was deleted. Check that mysqldump is installed and reachable.');
-        }
-
-        return $backupFile;
     }
 }

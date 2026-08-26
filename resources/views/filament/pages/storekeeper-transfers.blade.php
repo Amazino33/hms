@@ -624,32 +624,62 @@
         // CSRF token, landing on Laravel's raw 419 page. A listener on
         // document survives any number of re-renders, since document
         // itself is never replaced.
-        document.addEventListener('submit', function (e) {
+        document.addEventListener('submit', async function (e) {
             if (!e.target || e.target.id !== 'transfer-form') return;
 
             e.preventDefault();
 
-            // Guards against the exact bug that produced duplicate transfers
-            // in production: nothing previously stopped a second (or third,
-            // or fourth) click on "Create Transfer" from firing this whole
-            // handler again — including another full POST — before the
-            // first request's response came back. The button being disabled
-            // IS the guard; a click while disabled never reaches here in a
-            // real browser, but this is a defensive belt-and-braces check
-            // in case some path re-enables it unexpectedly.
             const submitBtn = document.getElementById('transfer-submit-btn');
             if (submitBtn && submitBtn.disabled) return;
+
+            const fromWarehouseId = document.querySelector('select[name="from_warehouse_id"]').value;
+            const toWarehouseId = document.querySelector('select[name="to_warehouse_id"]').value;
+
+            const errorMessages = [];
+            if (!fromWarehouseId) {
+                errorMessages.push('Please select a From Warehouse.');
+            }
+            if (!toWarehouseId) {
+                errorMessages.push('Please select a To Warehouse.');
+            }
 
             const rows = document.querySelectorAll('#items-list > .item-row');
             const items = [];
             const ingredientItems = [];
-            const errorMessages = [];
+
+            // Temporarily disable button and show loading while we verify stock
+            const submitBtnText = document.getElementById('transfer-submit-btn-text');
+            const originalText = submitBtnText ? submitBtnText.textContent : 'Create Transfer';
+            if (submitBtn) submitBtn.disabled = true;
+            if (submitBtnText) submitBtnText.textContent = 'Verifying stock...';
 
             for (const r of rows) {
                 const { type, itemId, item, enteredQty, enteredUnit, baseQty } = rowData(r);
                 if (!itemId) continue;
 
-                const available = availabilityCache[`${type}:${itemId}`] ?? 0;
+                const cacheKey = `${type}:${itemId}`;
+                let available = availabilityCache[cacheKey];
+
+                // If it's missing from the cache (e.g. they clicked submit too fast before the preview fetch finished),
+                // we strictly await it now so we don't falsely claim 0 available.
+                if (available === undefined && fromWarehouseId && itemId) {
+                    try {
+                        const url = type === 'ingredient'
+                            ? `/warehouses/${fromWarehouseId}/ingredient/${itemId}/quantity`
+                            : `/warehouses/${fromWarehouseId}/product/${itemId}/quantity`;
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        available = data.quantity ?? 0;
+                        availabilityCache[cacheKey] = available;
+                    } catch (e) {
+                        available = 0;
+                        availabilityCache[cacheKey] = 0;
+                    }
+                }
+
+                // Fallback to 0 if still undefined
+                available = available ?? 0;
+
                 if (baseQty > available) {
                     errorMessages.push(`Cannot transfer ${baseQty} ${baseUnitLabel(type, item)} of "${item.name}" - only ${available} available`);
                 }
@@ -673,6 +703,8 @@
                 errorDiv.innerHTML = errorMessages.map(msg => `<p>${msg}</p>`).join('');
                 errorDiv.classList.remove('hidden');
                 showToast('Please fix the errors before submitting', 'error');
+                if (submitBtn) submitBtn.disabled = false;
+                if (submitBtnText) submitBtnText.textContent = originalText;
                 return;
             }
             errorDiv.classList.add('hidden');
@@ -680,6 +712,8 @@
             const toWarehouseName = document.querySelector('select[name="to_warehouse_id"] option:checked')?.text || 'the destination';
             const totalLines = items.length + ingredientItems.length;
             if (!confirm(`You are about to transfer ${totalLines} line(s) to ${toWarehouseName}. Are you sure you want to proceed?`)) {
+                if (submitBtn) submitBtn.disabled = false;
+                if (submitBtnText) submitBtnText.textContent = originalText;
                 return;
             }
 
@@ -690,7 +724,6 @@
                 ingredient_items: ingredientItems,
             };
 
-            const submitBtnText = document.getElementById('transfer-submit-btn-text');
             if (submitBtn) submitBtn.disabled = true;
             if (submitBtnText) submitBtnText.textContent = 'Creating…';
 
