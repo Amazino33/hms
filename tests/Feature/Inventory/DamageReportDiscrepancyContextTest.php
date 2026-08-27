@@ -23,9 +23,9 @@ use Spatie\Permission\Models\Role;
  * without ever mutating the discrepancy's own frozen figures.
  */
 it('lets a handover seal proceed normally even with a pending damage report open for the same product', function () {
-    $bar = WareHouse::create(['name' => 'Bar ' . uniqid(), 'type' => 'consumer', 'is_active' => 1]);
+    $bar = WareHouse::create(['name' => 'Bar '.uniqid(), 'type' => 'consumer', 'is_active' => 1]);
     $category = Category::firstOrCreate(['name' => 'Drinks'], ['type' => 'drink']);
-    $product = Product::create(['name' => 'Heineken ' . uniqid(), 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
+    $product = Product::create(['name' => 'Heineken '.uniqid(), 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
     InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $bar->id, 'quantity' => 24]);
 
     Role::firstOrCreate(['name' => 'bartender']);
@@ -34,7 +34,7 @@ it('lets a handover seal proceed normally even with a pending damage report open
     $incoming = User::factory()->create();
     $incoming->assignRole('bartender');
 
-    $pinAuth = new PinAuthService();
+    $pinAuth = new PinAuthService;
     $outgoingPin = (string) random_int(1000, 9999);
     $incomingPin = (string) random_int(1000, 9999);
     $pinAuth->setPin($outgoing, $outgoingPin);
@@ -50,12 +50,12 @@ it('lets a handover seal proceed normally even with a pending damage report open
         $outgoing->id,
     );
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
-    $session = $service->declare($session, $outgoingPin, 'damage-seal-declare-' . uniqid());
-    $service->bindIncomingCustodian($session, $incomingPin, 'damage-seal-bind-' . uniqid());
+    $session = $service->declare($session, $outgoingPin, 'damage-seal-declare-'.uniqid());
+    $service->bindIncomingCustodian($session, $incomingPin, 'damage-seal-bind-'.uniqid());
     $item->refresh();
     $service->reviewProduct($item, $incoming->id, 'accepted');
 
@@ -65,6 +65,7 @@ it('lets a handover seal proceed normally even with a pending damage report open
     );
 
     $component = Livewire::actingAs($outgoing)->test(CountSessionDetail::class, ['session_id' => $session->id]);
+    $component->set('handoverNote', 'Nothing unusual to report.');
     $ok = $component->instance()->sealAgreement($outgoingPin, $incomingPin);
 
     expect($ok)->toBeTrue();

@@ -2,15 +2,14 @@
 
 use App\Filament\Pages\CountSessionDetail;
 use App\Models\Category;
-use App\Models\CountSession;
 use App\Models\InventoryItem;
 use App\Models\PagePermission;
 use App\Models\Product;
 use App\Models\Shift;
 use App\Models\User;
+use App\Models\WareHouse;
 use App\Services\CountSessionService;
 use App\Services\PinAuthService;
-use App\Models\WareHouse;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 
@@ -27,7 +26,7 @@ function seedIdentityBindingScenario(int $quantity = 24): array
     $incoming = User::factory()->create();
     $incoming->assignRole('bartender');
 
-    $pinAuth = new PinAuthService();
+    $pinAuth = new PinAuthService;
     $pinAuth->setPin($outgoing, '5793');
     $pinAuth->setPin($incoming, '2846');
 
@@ -39,7 +38,7 @@ function seedIdentityBindingScenario(int $quantity = 24): array
 it('binds the incoming custodian by PIN lookup at review start, overwriting the outgoing custodian\'s guess', function () {
     ['bar' => $bar, 'outgoing' => $outgoing, 'incoming' => $incoming] = seedIdentityBindingScenario();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     // openSession's incoming_user_id is only ever a guess — simulate the
     // outgoing custodian guessing WRONG by naming a different bartender.
     $wronglyGuessedIncoming = User::factory()->create();
@@ -70,7 +69,7 @@ it('binds the incoming custodian by PIN lookup at review start, overwriting the 
 it('refuses to bind the incoming custodian to the same person as the outgoing', function () {
     ['bar' => $bar, 'outgoing' => $outgoing, 'incoming' => $incoming] = seedIdentityBindingScenario();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -85,9 +84,9 @@ it('refuses to bind a PIN that does not belong to a bartender', function () {
     Role::firstOrCreate(['name' => 'storekeeper']);
     $storekeeper = User::factory()->create();
     $storekeeper->assignRole('storekeeper');
-    (new PinAuthService())->setPin($storekeeper, '9012');
+    (new PinAuthService)->setPin($storekeeper, '9012');
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -100,7 +99,7 @@ it('refuses to bind a PIN that does not belong to a bartender', function () {
 it('leaves the seal unreachable until the incoming custodian has bound their identity', function () {
     ['bar' => $bar, 'outgoing' => $outgoing, 'incoming' => $incoming] = seedIdentityBindingScenario();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -127,7 +126,7 @@ it('seals successfully with correct PINs no matter which account is logged into 
         ['page_class' => CountSessionDetail::class, 'page_name' => 'Count Session Detail', 'role_name' => 'bartender']
     );
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -140,6 +139,7 @@ it('seals successfully with correct PINs no matter which account is logged into 
     // session entirely — sealAgreement() must not care.
     $component = Livewire::actingAs($unrelatedBartender)
         ->test(CountSessionDetail::class, ['session_id' => $session->id])
+        ->set('handoverNote', 'Nothing unusual to report.')
         ->call('sealAgreement', '5793', '2846');
 
     expect($session->fresh()->status)->toBe('reviewed');
@@ -150,9 +150,9 @@ it('fails the seal with a named error when the incoming PIN belongs to someone e
 
     $someoneElse = User::factory()->create();
     $someoneElse->assignRole('bartender');
-    (new PinAuthService())->setPin($someoneElse, '4455');
+    (new PinAuthService)->setPin($someoneElse, '4455');
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -173,10 +173,10 @@ it('auto-binds the witness by PIN lookup at co-sign time on the unwitnessed path
     $actualWitness = User::factory()->create();
     $actualWitness->assignRole('storekeeper');
 
-    $pinAuth = new PinAuthService();
+    $pinAuth = new PinAuthService;
     $pinAuth->setPin($actualWitness, '1357'); // guessedWitness's PIN is never entered
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession(
         'bar_handover',
         $bar->id,

@@ -26,7 +26,7 @@ function seedSealReturnValueScenario(): array
     $incoming = User::factory()->create();
     $incoming->assignRole('bartender');
 
-    $pinAuth = new PinAuthService();
+    $pinAuth = new PinAuthService;
     $pinAuth->setPin($outgoing, '5793');
     $pinAuth->setPin($incoming, '2846');
 
@@ -49,7 +49,7 @@ function seedSealReturnValueScenario(): array
 it('returns false from the page-level sealAgreement when the first (outgoing) PIN is wrong', function () {
     ['bar' => $bar, 'outgoing' => $outgoing, 'incoming' => $incoming] = seedSealReturnValueScenario();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -75,7 +75,7 @@ it('returns false from the page-level sealAgreement when the first (outgoing) PI
 it('returns true from the page-level sealAgreement on a genuine successful seal', function () {
     ['bar' => $bar, 'outgoing' => $outgoing, 'incoming' => $incoming] = seedSealReturnValueScenario();
 
-    $service = new CountSessionService();
+    $service = new CountSessionService;
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
@@ -91,6 +91,7 @@ it('returns true from the page-level sealAgreement on a genuine successful seal'
 
     $component = Livewire::actingAs($outgoing)
         ->test(CountSessionDetail::class, ['session_id' => $session->id]);
+    $component->set('handoverNote', 'Nothing unusual to report.');
 
     $ok = $component->instance()->sealAgreement('5793', '2846');
 
