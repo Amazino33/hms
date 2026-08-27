@@ -1,16 +1,23 @@
 <?php
 
-use App\Models\Product;
 use App\Models\Category;
-use App\Models\WareHouse;
 use App\Models\InventoryItem;
+use App\Models\Product;
 use App\Models\User;
+use App\Models\WareHouse;
 use Spatie\Permission\Models\Role;
 
 it('allows storekeeper to create, send and allows recipient to receive transfer updating inventory', function () {
     // create roles
     Role::findOrCreate('storekeeper');
     Role::findOrCreate('bartender');
+
+    // StockTransferController's create/send/receive actions authorize via
+    // PagePermission (StorekeeperTransfers / ReceiveTransfers) now, not a
+    // hardcoded role list — this seeder is what actually grants storekeeper
+    // and bartender access to those pages, same as production gets on
+    // every deploy.
+    \Illuminate\Support\Facades\Artisan::call('db:seed', ['--class' => 'PagePermissionsSeeder', '--force' => true]);
 
     // create users
     $store = User::factory()->create();
@@ -32,8 +39,8 @@ it('allows storekeeper to create, send and allows recipient to receive transfer 
         'from_warehouse_id' => 3,
         'to_warehouse_id' => 4,
         'items' => [
-            ['product_id' => $product->id, 'quantity' => 5]
-        ]
+            ['product_id' => $product->id, 'quantity' => 5],
+        ],
     ];
 
     // create transfer
