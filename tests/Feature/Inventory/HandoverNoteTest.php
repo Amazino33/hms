@@ -14,12 +14,12 @@ use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 
 /**
- * The compulsory handover note (git 3c2518d): the dual-PIN peer-sealed
- * handover screen requires a non-blank note before it will seal at all —
- * intentionally scoped to that one flow only (isHandoverWithSuccessor()),
- * never main_store_stocktake or a manager-reviewed session.
+ * The handover note on the dual-PIN peer-sealed handover screen (git
+ * 3c2518d) is optional, not required — sealing must succeed whether or not
+ * one is written, and a note that is provided gets trimmed and saved onto
+ * the session for the record.
  */
-function seedCompulsoryNoteScenario(): array
+function seedHandoverNoteScenario(): array
 {
     $bar = WareHouse::create(['name' => 'Bar '.uniqid(), 'type' => 'consumer', 'is_active' => 1]);
     $category = Category::firstOrCreate(['name' => 'Drinks'], ['type' => 'drink']);
@@ -49,40 +49,39 @@ function seedCompulsoryNoteScenario(): array
     $session = $service->openSession('bar_handover', $bar->id, $outgoing->id, $outgoing->id, $incoming->id);
     $item = $session->items()->first();
     $service->recordCount($item, ['Fridge' => 24], $outgoing->id);
-    $session = $service->declare($session, $outgoingPin, 'compulsory-note-declare-'.uniqid());
-    $service->bindIncomingCustodian($session, $incomingPin, 'compulsory-note-bind-'.uniqid());
+    $session = $service->declare($session, $outgoingPin, 'handover-note-declare-'.uniqid());
+    $service->bindIncomingCustodian($session, $incomingPin, 'handover-note-bind-'.uniqid());
     $item->refresh();
     $service->reviewProduct($item, $incoming->id, 'accepted');
 
     return compact('bar', 'product', 'outgoing', 'incoming', 'outgoingPin', 'incomingPin', 'session');
 }
 
-it('refuses to seal with a blank handover note, leaving the session unsealed', function () {
-    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedCompulsoryNoteScenario();
+it('seals successfully with no note at all', function () {
+    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedHandoverNoteScenario();
 
     $component = Livewire::actingAs($outgoing)->test(CountSessionDetail::class, ['session_id' => $session->id]);
     $ok = $component->instance()->sealAgreement($outgoingPin, $incomingPin);
 
-    expect($ok)->toBeFalse();
-    expect($session->fresh()->status)->not->toBe('reviewed');
-
-    $last = collect(session('filament.notifications', []))->last();
-    expect($last['title'])->toBe('A handover note is required.');
+    expect($ok)->toBeTrue();
+    expect($session->fresh()->status)->toBe('reviewed');
+    expect($session->fresh()->notes)->toBeNull();
 });
 
-it('refuses to seal with a whitespace-only handover note', function () {
-    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedCompulsoryNoteScenario();
+it('seals successfully with a whitespace-only note, saving nothing', function () {
+    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedHandoverNoteScenario();
 
     $component = Livewire::actingAs($outgoing)->test(CountSessionDetail::class, ['session_id' => $session->id]);
     $component->set('handoverNote', "   \n  ");
     $ok = $component->instance()->sealAgreement($outgoingPin, $incomingPin);
 
-    expect($ok)->toBeFalse();
-    expect($session->fresh()->status)->not->toBe('reviewed');
+    expect($ok)->toBeTrue();
+    expect($session->fresh()->status)->toBe('reviewed');
+    expect($session->fresh()->notes)->toBeNull();
 });
 
 it('seals and saves the trimmed note onto the session once provided', function () {
-    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedCompulsoryNoteScenario();
+    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedHandoverNoteScenario();
 
     $component = Livewire::actingAs($outgoing)->test(CountSessionDetail::class, ['session_id' => $session->id]);
     $component->set('handoverNote', '  Two crates arrived damaged.  ');
@@ -94,7 +93,7 @@ it('seals and saves the trimmed note onto the session once provided', function (
 });
 
 it('shows the saved handover note on the count session detail page', function () {
-    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedCompulsoryNoteScenario();
+    ['outgoing' => $outgoing, 'session' => $session, 'outgoingPin' => $outgoingPin, 'incomingPin' => $incomingPin] = seedHandoverNoteScenario();
 
     Livewire::actingAs($outgoing)
         ->test(CountSessionDetail::class, ['session_id' => $session->id])
@@ -106,29 +105,9 @@ it('shows the saved handover note on the count session detail page', function ()
         ->assertSee('Fridge was warm this morning.');
 });
 
-/**
- * The compulsory note is deliberately scoped to the dual-PIN peer-sealed
- * handover only (sealAgreement() itself throws for any session that isn't
- * isHandoverWithSuccessor()) — a manager-reviewed session (finalizeReview(),
- * used by main_store_stocktake and by manager review generally) has no such
- * requirement and must be unaffected.
- */
-it('does not require a note on a manager-reviewed session, which never goes through sealAgreement at all', function () {
-    $mainStore = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
-    $category = Category::firstOrCreate(['name' => 'Drinks'], ['type' => 'drink']);
-    $product = Product::create(['name' => 'Beer', 'price' => 500, 'category_id' => $category->id, 'is_active' => true]);
-    InventoryItem::create(['product_id' => $product->id, 'warehouse_id' => $mainStore->id, 'quantity' => 20]);
+it('labels the note field as optional on the seal screen', function () {
+    $view = file_get_contents(resource_path('views/filament/pages/partials/count-session-dual-seal.blade.php'));
 
-    $storekeeper = User::factory()->create();
-    $manager = User::factory()->create();
-
-    $service = new CountSessionService;
-    $session = $service->openSession('main_store_stocktake', $mainStore->id, $storekeeper->id);
-    $item = $session->items()->first();
-    $service->recordCount($item, ['Shelf A' => 20], $storekeeper->id);
-    $session = $service->submitForReview($session->fresh());
-
-    $reviewed = $service->finalizeReview($session, $manager->id);
-
-    expect($reviewed->status)->toBe('reviewed');
+    expect($view)->toContain('Handover Note (Optional)');
+    expect($view)->not->toContain('Handover Note (Required)');
 });

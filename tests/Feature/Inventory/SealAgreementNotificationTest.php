@@ -63,7 +63,6 @@ it('blocks sealing while a product is still unreviewed, sending a persistent dan
     session()->forget('filament.notifications');
 
     $component = Livewire::actingAs($outgoing)->test(CountSessionDetail::class, ['session_id' => $session->id]);
-    $component->set('handoverNote', 'Nothing unusual to report.');
     $ok = $component->instance()->sealAgreement($outgoingPin, $incomingPin);
 
     expect($ok)->toBeFalse();
@@ -93,7 +92,6 @@ it('seals a fully-reviewed handover with a success notification', function () {
     session()->forget('filament.notifications');
 
     $component = Livewire::actingAs($outgoing)->test(CountSessionDetail::class, ['session_id' => $session->id]);
-    $component->set('handoverNote', 'Nothing unusual to report.');
     $ok = $component->instance()->sealAgreement($outgoingPin, $incomingPin);
 
     expect($ok)->toBeTrue();

@@ -139,7 +139,6 @@ it('seals successfully with correct PINs no matter which account is logged into 
     // session entirely — sealAgreement() must not care.
     $component = Livewire::actingAs($unrelatedBartender)
         ->test(CountSessionDetail::class, ['session_id' => $session->id])
-        ->set('handoverNote', 'Nothing unusual to report.')
         ->call('sealAgreement', '5793', '2846');
 
     expect($session->fresh()->status)->toBe('reviewed');

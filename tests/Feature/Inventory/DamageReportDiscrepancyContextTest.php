@@ -65,7 +65,6 @@ it('lets a handover seal proceed normally even with a pending damage report open
     );
 
     $component = Livewire::actingAs($outgoing)->test(CountSessionDetail::class, ['session_id' => $session->id]);
-    $component->set('handoverNote', 'Nothing unusual to report.');
     $ok = $component->instance()->sealAgreement($outgoingPin, $incomingPin);
 
     expect($ok)->toBeTrue();

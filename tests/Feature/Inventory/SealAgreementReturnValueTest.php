@@ -91,7 +91,6 @@ it('returns true from the page-level sealAgreement on a genuine successful seal'
 
     $component = Livewire::actingAs($outgoing)
         ->test(CountSessionDetail::class, ['session_id' => $session->id]);
-    $component->set('handoverNote', 'Nothing unusual to report.');
 
     $ok = $component->instance()->sealAgreement('5793', '2846');
 

@@ -650,11 +650,6 @@ class CountSessionDetail extends Page
      */
     public function sealAgreement(string $firstPin, string $secondPin): bool
     {
-        if (trim($this->handoverNote) === '') {
-            Notification::make()->title('A handover note is required.')->body('Please write suggestions, complaints, ideas, reason for discrepancy, etc., before sealing.')->danger()->persistent()->send();
-            return false;
-        }
-
         try {
             (new CountSessionService)->sealAgreement($this->session, $firstPin, $secondPin, $this->pinThrottleKey('seal'), trim($this->handoverNote));
             $this->refreshSession();
