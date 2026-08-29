@@ -18,13 +18,21 @@
             
             <div wire:poll.5s class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 w-full">
                 @forelse($orders as $order)
-                    @php
-                        // Filter items safely.
-                        $relevantItems = $order->items->filter(fn($item) => $item->product?->category?->type === 'drink');
-                    @endphp
-                    
-                    @if($relevantItems->isNotEmpty() || $order->is_return)
-                        
+                        {{-- Every order here already matched
+                             destination='bar' + status='pending' in the
+                             query itself — there is deliberately no further
+                             gate on item composition. A gate here (this
+                             used to hide the whole card whenever none of an
+                             order's items were drink-category, including
+                             an order with zero items at all) silently made
+                             a stuck order permanently invisible to the one
+                             screen that could ever resolve it, while POS
+                             checkout still correctly refused to let that
+                             table pay — an unresolvable deadlock with no
+                             recovery path except editing the database
+                             directly. Always show the card; an empty item
+                             list inside is still enough for staff to hit
+                             Mark Ready and unblock the table. --}}
                         {{-- ========================================== --}}
                         {{-- 🛑 RETURN TICKET STATE                     --}}
                         {{-- ========================================== --}}
@@ -111,8 +119,8 @@
                                     </div>
                                     
                                     <div class="space-y-2 pt-1">
-                                        @foreach($order->items as $item)
-                                            @if ($item->product?->category?->type === 'drink')
+                                        @php $drinkItems = $order->items->filter(fn ($item) => $item->product?->category?->type === 'drink'); @endphp
+                                        @forelse($drinkItems as $item)
                                             <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/30 p-2 rounded-lg border border-gray-100 dark:border-gray-700">
                                                 <span class="font-black text-lg text-gray-900 dark:text-gray-100 w-10">
                                                     {{ $item->quantity }}x
@@ -121,8 +129,16 @@
                                                     {{ $item->product_name }}
                                                 </span>
                                             </div>
-                                            @endif
-                                        @endforeach
+                                        @empty
+                                            {{-- No zero-item or non-drink-item order is hidden anymore
+                                                 (see the comment at the top of this loop) — this is what
+                                                 that now looks like instead: still visible, still
+                                                 resolvable, clearly flagged as unusual rather than a
+                                                 blank card with no explanation. --}}
+                                            <div class="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2 rounded-lg italic">
+                                                No drink items on this order — safe to Mark Ready to clear it.
+                                            </div>
+                                        @endforelse
                                     </div>
                                 </div>
 
@@ -138,8 +154,6 @@
                                 </div>
                             </div>
                         @endif
-
-                    @endif
                 @empty
                     <div class="col-span-full flex flex-col items-center justify-center p-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 shadow-sm">
                         <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-full mb-4">

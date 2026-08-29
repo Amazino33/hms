@@ -16,14 +16,22 @@
 
         @forelse($orders as $order)
             @php
-                // Filter items: show food products AND all menu items (since kitchen handles food)
+                // Still computed for the per-item badge below (menu item vs
+                // product), just no longer used to decide whether the whole
+                // CARD renders — every order here already matched
+                // destination='kitchen' + status='pending' in the query
+                // itself. Gating the card on this used to hide an order
+                // entirely whenever none of its items happened to be
+                // food-category/menu-item (including an order with zero
+                // items at all), while POS checkout still correctly
+                // refused to let that table pay — an unresolvable deadlock
+                // with no recovery path except editing the database
+                // directly.
                 $relevantItems = $order->items->filter(function($item) {
-                    return ($item->product && $item->product->category && $item->product->category->type === 'food') || 
+                    return ($item->product && $item->product->category && $item->product->category->type === 'food') ||
                            $item->item_type === 'menu_item';
                 });
             @endphp
-            {{-- 👇 Only show the Card if there are actual items to show --}}
-            @if($relevantItems->isNotEmpty())
                 <div class="bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-md flex flex-col">
                 
                 <div class="bg-red-50 dark:bg-red-900/20 p-4 border-b border-red-100 dark:border-red-800 flex justify-between items-center">
@@ -47,8 +55,7 @@
                         Waiter: {{ $order->user->name ?? 'Admin' }}
                     </div>
                     
-                    @foreach($order->items as $item)
-                        @if ($relevantItems->contains($item))
+                    @forelse($relevantItems as $item)
                         <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-3 mb-2">
                             <div class="flex items-center justify-between mb-2">
                                 <span class="font-bold text-lg text-gray-700 dark:text-gray-300">
@@ -85,8 +92,17 @@
                                 </div>
                             @endif
                         </div>
-                        @endif
-                    @endforeach
+                    @empty
+                        {{-- No zero-item or non-food/non-menu-item order is
+                             hidden anymore (see the comment above) — this is
+                             what that now looks like instead: still
+                             visible, still resolvable, clearly flagged as
+                             unusual rather than a blank card with no
+                             explanation. --}}
+                        <div class="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2 rounded-lg italic">
+                            No food/menu items on this order — safe to Mark Ready to clear it.
+                        </div>
+                    @endforelse
                 </div>
 
                 <div class="p-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
@@ -97,7 +113,6 @@
                     </button>
                 </div>
                 </div>
-            @endif
         @empty
             <div class="col-span-full flex flex-col items-center justify-center p-10 text-gray-400 dark:text-gray-500">
                 <x-heroicon-o-check-circle class="w-16 h-16 mb-4"/>

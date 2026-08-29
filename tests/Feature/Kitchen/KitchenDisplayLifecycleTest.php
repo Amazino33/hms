@@ -39,7 +39,7 @@ function seedKitchenOrder(): array
     Shift::create(['user_id' => $chef->id, 'type' => 'chef', 'started_at' => now(), 'status' => 'active']);
 
     $order = Order::create([
-        'order_number' => 'ORD-' . uniqid(),
+        'order_number' => 'ORD-'.uniqid(),
         'table_id' => $table->id,
         'user_id' => $chef->id,
         'status' => 'pending',
@@ -79,7 +79,7 @@ it('walks a kitchen order through the real pending -> ready -> served -> paid li
     $component->call('markAsReady', $order->id);
     expect($order->fresh()->status)->toBe('ready');
 
-    (new ServedConfirmationService())->confirm($order->fresh(), $chef);
+    (new ServedConfirmationService)->confirm($order->fresh(), $chef);
     expect($order->fresh()->status)->toBe('served');
 
     $order->fresh()->update(['status' => 'paid']);
@@ -121,7 +121,7 @@ it('refuses to mark a bar-destination order ready from the kitchen display', fun
 
     $chef = User::factory()->create();
     $barOrder = Order::create([
-        'order_number' => 'ORD-' . uniqid(), 'table_id' => $table->id, 'user_id' => $chef->id,
+        'order_number' => 'ORD-'.uniqid(), 'table_id' => $table->id, 'user_id' => $chef->id,
         'status' => 'pending', 'destination' => 'bar', 'total_amount' => 500,
     ]);
     OrderItem::create([
@@ -158,7 +158,7 @@ it('matches the same three fixes on the bar display', function () {
     Shift::create(['user_id' => $bartender->id, 'type' => 'bartender', 'started_at' => now(), 'status' => 'active']);
 
     $order = Order::create([
-        'order_number' => 'ORD-' . uniqid(), 'table_id' => $table->id, 'user_id' => $bartender->id,
+        'order_number' => 'ORD-'.uniqid(), 'table_id' => $table->id, 'user_id' => $bartender->id,
         'status' => 'pending', 'destination' => 'bar', 'total_amount' => 500,
     ]);
     OrderItem::create([
@@ -179,4 +179,58 @@ it('matches the same three fixes on the bar display', function () {
 
     expect(fn () => $component->instance()->markAsReady($order->id))
         ->toThrow(ModelNotFoundException::class);
+});
+
+/**
+ * Regression: production had pending kitchen/bar orders with zero
+ * OrderItem rows (e.g. a split that left an empty destination) that the
+ * getViewData() query correctly returned, but the blade template used to
+ * wrap the ENTIRE order card in an `if ($relevantItems->isNotEmpty())`
+ * gate — silently hiding any such order from the display forever, while
+ * POS's own destination-agnostic checkout block kept refusing payment for
+ * that table because the order was still 'pending'. There was no way to
+ * ever see or resolve the order short of editing the database directly.
+ * The card must always render, with a fallback message where the item
+ * list would be, so staff can still hit "Mark Ready" and unblock the
+ * table.
+ */
+it('still shows a pending kitchen order with zero items, and lets it be marked ready', function () {
+    $table = TableModel::create(['name' => 'Table 4', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    $chef = User::factory()->create();
+
+    $order = Order::create([
+        'order_number' => 'ORD-'.uniqid(), 'table_id' => $table->id, 'user_id' => $chef->id,
+        'status' => 'pending', 'destination' => 'kitchen', 'total_amount' => 0,
+    ]);
+
+    $admin = actingAdmin();
+
+    $component = Livewire::actingAs($admin)->test(KitchenDisplay::class);
+    $orders = $component->instance()->getViewData()['orders'];
+    expect($orders->pluck('id'))->toContain($order->id);
+
+    $component->call('markAsReady', $order->id);
+    expect($order->fresh()->status)->toBe('ready');
+});
+
+it('still shows a pending bar order with zero items, and lets it be marked ready', function () {
+    $table = TableModel::create(['name' => 'Table 5', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    // BarDisplay's fridge-restock panel resolves the bar warehouse on every
+    // render; id 4 exists in every real environment (see barWarehouse()).
+    WareHouse::firstOrCreate(['id' => 4], ['name' => 'Bar', 'type' => 'consumer', 'is_active' => 1]);
+    $bartender = User::factory()->create();
+
+    $order = Order::create([
+        'order_number' => 'ORD-'.uniqid(), 'table_id' => $table->id, 'user_id' => $bartender->id,
+        'status' => 'pending', 'destination' => 'bar', 'total_amount' => 0,
+    ]);
+
+    $admin = actingAdmin();
+
+    $component = Livewire::actingAs($admin)->test(BarDisplay::class);
+    $orders = $component->instance()->getViewData()['orders'];
+    expect($orders->pluck('id'))->toContain($order->id);
+
+    $component->call('markAsReady', $order->id);
+    expect($order->fresh()->status)->toBe('ready');
 });
