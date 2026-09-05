@@ -3,14 +3,18 @@
 namespace App\Filament\Resources\StaffDebts\Tables;
 
 use App\Models\StaffDebt;
+use App\Services\StaffDebtReportService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class StaffDebtsTable
 {
@@ -25,13 +29,13 @@ class StaffDebtsTable
                     ->sortable()
                     ->searchable(),
 
+                // Labelled from the shared map, not a local match() with a
+                // 'Manual' default — that default silently mislabelled every
+                // reason added after this column was written (count session,
+                // reception and cashier-session shortfalls) as manual entries.
                 TextColumn::make('reason')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'shift_shortfall' => 'Shift Shortfall',
-                        'unpaid_order_conversion' => 'Unpaid Order',
-                        default => 'Manual',
-                    }),
+                    ->formatStateUsing(fn (string $state): string => StaffDebtReportService::reasonLabel($state)),
 
                 TextColumn::make('amount')
                     ->money('NGN')
@@ -51,6 +55,14 @@ class StaffDebtsTable
                         'settled' => 'success',
                         default => 'gray',
                     }),
+
+                TextColumn::make('origin')
+                    ->label('Source')
+                    ->badge()
+                    ->state(fn (StaffDebt $record): string => StaffDebtReportService::isHandoverReason($record->reason)
+                        ? 'During handover'
+                        : 'Recorded by a person')
+                    ->color(fn (string $state): string => $state === 'During handover' ? 'info' : 'gray'),
 
                 TextColumn::make('shift.started_at')
                     ->label('Shift')
@@ -74,22 +86,41 @@ class StaffDebtsTable
                         'settled' => 'Settled',
                     ]),
                 SelectFilter::make('reason')
+                    ->options(StaffDebtReportService::REASON_LABELS)
+                    ->multiple(),
+                SelectFilter::make('origin')
+                    ->label('Source')
                     ->options([
-                        'shift_shortfall' => 'Shift Shortfall',
-                        'unpaid_order_conversion' => 'Unpaid Order',
-                        'manual' => 'Manual',
-                    ]),
+                        'handover' => 'Raised during a handover',
+                        'recorded' => 'Recorded by a person',
+                    ])
+                    ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? null) {
+                        'handover' => $query->whereIn('reason', StaffDebtReportService::HANDOVER_REASONS),
+                        'recorded' => $query->whereNotIn('reason', StaffDebtReportService::HANDOVER_REASONS),
+                        default => $query,
+                    }),
                 SelectFilter::make('user')
+                    ->label('Staff')
                     ->relationship('user', 'name')
+                    ->multiple()
                     ->searchable()
                     ->preload(),
+                Filter::make('raised_between')
+                    ->label('Date raised')
+                    ->form([
+                        DatePicker::make('from')->label('From'),
+                        DatePicker::make('until')->label('Until'),
+                    ])
+                    ->query(fn (Builder $query, array $data): Builder => $query
+                        ->when($data['from'] ?? null, fn ($q, $date) => $q->whereDate('created_at', '>=', $date))
+                        ->when($data['until'] ?? null, fn ($q, $date) => $q->whereDate('created_at', '<=', $date))),
             ])
             ->recordActions([
                 Action::make('viewRepayments')
                     ->label('Repayment History')
                     ->icon('heroicon-o-clock')
                     ->color('gray')
-                    ->modalHeading(fn (StaffDebt $record) => 'Repayment history — ' . ($record->user->name ?? 'Unknown'))
+                    ->modalHeading(fn (StaffDebt $record) => 'Repayment history — '.($record->user->name ?? 'Unknown'))
                     ->modalContent(fn (StaffDebt $record) => view('filament.resources.staff-debts.repayment-history', [
                         'debt' => $record->loadMissing('repayments.recordedBy'),
                     ]))
@@ -107,7 +138,7 @@ class StaffDebtsTable
                             ->required()
                             ->minValue(0.01)
                             ->maxValue($record->remainingBalance())
-                            ->helperText('Outstanding balance: ₦' . number_format($record->remainingBalance(), 2)),
+                            ->helperText('Outstanding balance: ₦'.number_format($record->remainingBalance(), 2)),
                         Select::make('method')
                             ->options([
                                 'cash' => 'Cash',
