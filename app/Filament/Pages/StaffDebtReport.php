@@ -152,6 +152,63 @@ class StaffDebtReport extends Page
         return $this->perStaffMemo ??= $this->service()->perStaff($this->rows());
     }
 
+    private ?Collection $shortagesMemo = null;
+
+    /**
+     * Handover shortages nobody has ruled on yet. Hidden when the filters
+     * are asking a question these can't answer — a settled-debts view or a
+     * manually-recorded-only view — since an unruled shortage is neither.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    #[Computed]
+    public function unresolvedShortages(): Collection
+    {
+        if ($this->origin === 'recorded' || in_array($this->status, ['settled', 'partially_settled'], true)) {
+            return collect();
+        }
+
+        return $this->shortagesMemo ??= $this->service()->unresolvedShortages([
+            'from' => $this->dateFrom ?: null,
+            'to' => $this->dateTo ?: null,
+            'user_ids' => $this->userIds,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    #[Computed]
+    public function shortageSummary(): array
+    {
+        return $this->service()->shortageSummary($this->unresolvedShortages());
+    }
+
+    /**
+     * @return array{count: int, latest: ?string, outstanding: float}
+     */
+    #[Computed]
+    public function outsideRange(): array
+    {
+        return $this->service()->outsideRange([
+            'from' => $this->dateFrom ?: null,
+            'to' => $this->dateTo ?: null,
+            'user_ids' => $this->userIds,
+            'status' => $this->status,
+            'origin' => $this->origin,
+        ]);
+    }
+
+    /**
+     * Widens the window to cover every debt matching the other filters —
+     * the one click that answers "is it really zero, or is it my range?"
+     */
+    public function showAllDates(): void
+    {
+        $this->dateFrom = '';
+        $this->dateTo = '';
+    }
+
     /**
      * @return Collection<int, \App\Models\User>
      */
@@ -196,7 +253,7 @@ class StaffDebtReport extends Page
     public function exportCsv(): StreamedResponse
     {
         return $this->csvResponse(
-            'staff-debts-'.$this->dateFrom.'-to-'.$this->dateTo.'.csv',
+            'staff-debts-'.$this->rangeSlug().'.csv',
             [
                 'Business Day', 'Recorded At', 'Staff', 'Source', 'Reason', 'Shift',
                 'Amount', 'Repaid', 'Outstanding', 'Status', 'Recorded By', 'Order #', 'Age (days)', 'Notes',
@@ -227,7 +284,7 @@ class StaffDebtReport extends Page
     public function exportStaffSummaryCsv(): StreamedResponse
     {
         return $this->csvResponse(
-            'staff-debts-per-staff-'.$this->dateFrom.'-to-'.$this->dateTo.'.csv',
+            'staff-debts-per-staff-'.$this->rangeSlug().'.csv',
             [
                 'Staff', 'Debts', 'Charged', 'Repaid', 'Outstanding', 'Still Pending',
                 'Outstanding From Handovers', 'Outstanding Recorded By A Person', 'Oldest Pending (days)', 'Last Debt On',
@@ -250,9 +307,10 @@ class StaffDebtReport extends Page
     public function exportPdf(): StreamedResponse
     {
         $summary = $this->summary();
+        $shortages = $this->shortageSummary();
 
         return $this->pdfResponse(
-            'staff-debts-'.$this->dateFrom.'-to-'.$this->dateTo.'.pdf',
+            'staff-debts-'.$this->rangeSlug().'.pdf',
             'Staff Debt Report',
             $this->filtersDescription(),
             [
@@ -262,6 +320,13 @@ class StaffDebtReport extends Page
                 'Still outstanding' => '₦'.number_format($summary['outstanding'], 2).' over '.$summary['pending_count'].' pending debt(s)',
                 'Raised during handover' => '₦'.number_format($summary['handover_charged'], 2).' charged, ₦'.number_format($summary['handover_outstanding'], 2).' outstanding',
                 'Recorded by a person' => '₦'.number_format($summary['recorded_charged'], 2).' charged, ₦'.number_format($summary['recorded_outstanding'], 2).' outstanding',
+                // Stated as its own line, never added to the totals above:
+                // nobody has ruled on these yet, so none of it is money that
+                // can legitimately be deducted from anyone today.
+                'Handover shortages not yet ruled on' => $shortages['count'] === 0
+                    ? 'None'
+                    : '₦'.number_format($shortages['value'], 2).' over '.$shortages['count'].' line(s), '
+                        .$shortages['staff'].' custodian(s) — not counted in the totals above',
             ],
             [
                 'Business Day', 'Recorded At', 'Staff', 'Source', 'Reason', 'Shift',
@@ -284,6 +349,44 @@ class StaffDebtReport extends Page
     }
 
     /**
+     * Unruled handover shortages on their own — the queue a manager has to
+     * work through before any of it can become a deduction.
+     */
+    public function exportShortagesCsv(): StreamedResponse
+    {
+        return $this->csvResponse(
+            'unresolved-handover-shortages-'.$this->rangeSlug().'.csv',
+            [
+                'Business Day', 'Opened At', 'Custodian', 'Warehouse', 'Session',
+                'Item', 'Qty Short', 'Unit Price', 'Value', 'Status', 'Age (days)',
+            ],
+            $this->unresolvedShortages()->map(fn (array $r) => [
+                $r['business_day'],
+                $r['created_at']?->format('Y-m-d H:i'),
+                $r['staff_name'],
+                $r['warehouse'] ?? '',
+                $r['session_id'] ? '#'.$r['session_id'] : '',
+                $r['item_name'],
+                number_format($r['quantity'], 2, '.', ''),
+                number_format($r['unit_price'], 2, '.', ''),
+                number_format($r['value'], 2, '.', ''),
+                $r['status_label'],
+                $r['age_days'],
+            ])
+        );
+    }
+
+    /** Empty dates mean "every date", and a filename has to say so. */
+    private function rangeSlug(): string
+    {
+        if ($this->dateFrom === '' && $this->dateTo === '') {
+            return 'all-dates';
+        }
+
+        return ($this->dateFrom ?: 'start').'-to-'.($this->dateTo ?: 'today');
+    }
+
+    /**
      * Printed on the PDF so a filtered export can never be mistaken for
      * the whole ledger once it has left the screen.
      */
@@ -291,7 +394,9 @@ class StaffDebtReport extends Page
     {
         $staff = $this->selectedStaffNames();
 
-        return 'Business days '.$this->dateFrom.' to '.$this->dateTo
+        return ($this->dateFrom === '' && $this->dateTo === ''
+                ? 'All dates'
+                : 'Business days '.($this->dateFrom ?: 'start').' to '.($this->dateTo ?: 'today'))
             .' (trading day closes 9am WAT)'
             .' | Staff: '.($staff === [] ? 'All' : implode(', ', $staff))
             .' | Status: '.match ($this->status) {

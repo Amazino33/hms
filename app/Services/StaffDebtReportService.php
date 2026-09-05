@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\HandoverDiscrepancy;
 use App\Models\StaffDebt;
 use App\Models\User;
 use App\Support\BusinessDay;
@@ -211,9 +212,133 @@ class StaffDebtReportService
     }
 
     /**
+     * Handover count shortages that have NOT become debts.
+     *
+     * Sealing a count never raises a StaffDebt — it opens a
+     * HandoverDiscrepancy and leaves the ruling (recount / debit / pend /
+     * write off) to a manager, because a shortage can still turn out to be
+     * an already-reported breakage. So until somebody hits Debit there is
+     * no staff_debts row to find, and a report built only on that table
+     * honestly reads zero while real shortages sit in the queue.
+     *
+     * These are surfaced alongside the debts, never added into them: an
+     * unruled shortage is exposure, not yet money the staff member owes,
+     * and folding it into an outstanding-debt total would overstate what
+     * can legitimately be deducted from anyone.
+     *
+     * @param  array{from?: ?string, to?: ?string, user_ids?: array<int|string>}  $filters
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function unresolvedShortages(array $filters = []): Collection
+    {
+        $query = HandoverDiscrepancy::query()
+            ->where('direction', 'shortage')
+            ->whereIn('status', ['pending_resolution', 'pending_investigation'])
+            ->with(['item.product:id,name', 'item.ingredient:id,name', 'item.session.warehouse:id,name']);
+
+        [$start, $end] = self::window($filters['from'] ?? null, $filters['to'] ?? null);
+
+        if ($start) {
+            $query->where('created_at', '>=', $start);
+        }
+
+        if ($end) {
+            $query->where('created_at', '<', $end);
+        }
+
+        $userIds = array_values(array_filter(array_map('intval', $filters['user_ids'] ?? [])));
+
+        if ($userIds !== []) {
+            // Mirrors CountSession::accountableUserId() — outgoing custodian
+            // normally, whoever opened it on a solo store count. Matching
+            // only outgoing_user_id here would silently drop every
+            // storekeeper row.
+            $query->whereHas('item.session', fn ($q) => $q
+                ->whereIn('outgoing_user_id', $userIds)
+                ->orWhere(fn ($q2) => $q2->whereNull('outgoing_user_id')->whereIn('opened_by', $userIds)));
+        }
+
+        $discrepancies = $query->orderByDesc('created_at')->get();
+
+        $names = User::query()
+            ->whereIn('id', $discrepancies->map(fn (HandoverDiscrepancy $d) => $d->item?->session?->accountableUserId())->filter()->unique())
+            ->pluck('name', 'id');
+
+        $now = CarbonImmutable::now();
+
+        return $discrepancies->map(function (HandoverDiscrepancy $discrepancy) use ($names, $now) {
+            $session = $discrepancy->item?->session;
+            $staffId = $session?->accountableUserId();
+
+            return [
+                'id' => $discrepancy->id,
+                'business_day' => BusinessDay::labelFor($discrepancy->created_at),
+                'created_at' => $discrepancy->created_at,
+                'staff_id' => $staffId,
+                'staff_name' => $staffId ? ($names[$staffId] ?? 'Unknown') : 'No custodian recorded',
+                'session_id' => $session?->id,
+                'warehouse' => $session?->warehouse?->name,
+                'item_name' => $discrepancy->item?->itemName() ?? '—',
+                'quantity' => (float) $discrepancy->shortfall_quantity,
+                'unit_price' => (float) $discrepancy->unit_price,
+                'value' => (float) $discrepancy->naira_value,
+                'status' => $discrepancy->status,
+                'status_label' => $discrepancy->status === 'pending_investigation'
+                    ? 'Pending investigation'
+                    : 'Awaiting a decision',
+                'age_days' => (int) $discrepancy->created_at->diffInDays($now),
+            ];
+        });
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $shortages
+     * @return array<string, mixed>
+     */
+    public function shortageSummary(Collection $shortages): array
+    {
+        return [
+            'count' => $shortages->count(),
+            'staff' => $shortages->pluck('staff_id')->filter()->unique()->count(),
+            'value' => round((float) $shortages->sum('value'), 2),
+            'oldest_days' => (int) ($shortages->max('age_days') ?? 0),
+            'investigating' => $shortages->where('status', 'pending_investigation')->count(),
+        ];
+    }
+
+    /**
+     * How much the chosen date window is hiding. Without this a manager
+     * reading ₦0.00 cannot tell "nobody owes anything" apart from "your
+     * range is wrong" — and the staff picker lists anyone with a debt
+     * ever, which makes the second case look exactly like the first.
+     *
+     * @param  array{from?: ?string, to?: ?string, user_ids?: array<int|string>, status?: ?string, origin?: ?string}  $filters
+     * @return array{count: int, latest: ?string, outstanding: float}
+     */
+    public function outsideRange(array $filters = []): array
+    {
+        $unbounded = $this->rows(array_merge($filters, ['from' => null, 'to' => null]));
+        [$start, $end] = self::window($filters['from'] ?? null, $filters['to'] ?? null);
+
+        $outside = $unbounded->filter(function (array $row) use ($start, $end) {
+            $at = $row['created_at'];
+
+            return ($start && $at->lt($start)) || ($end && $at->gte($end));
+        });
+
+        return [
+            'count' => $outside->count(),
+            'latest' => $outside->max('business_day'),
+            'outstanding' => round((float) $outside->sum('outstanding'), 2),
+        ];
+    }
+
+    /**
      * The staff picker only offers people who have actually been charged
      * something — on a full roster the useful names would otherwise be
-     * buried among everyone who never owed a naira.
+     * buried among everyone who never owed a naira. Custodians carrying an
+     * unruled handover shortage are included too, since those are exactly
+     * the people this report is about even before anyone hits Debit.
      *
      * @return Collection<int, User>
      */
@@ -221,9 +346,28 @@ class StaffDebtReportService
     {
         return User::query()
             ->select(['id', 'name'])
-            ->whereHas('debts')
+            ->where(fn ($q) => $q
+                ->whereHas('debts')
+                ->orWhereIn('id', $this->custodiansWithUnresolvedShortages()))
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function custodiansWithUnresolvedShortages(): array
+    {
+        return HandoverDiscrepancy::query()
+            ->where('direction', 'shortage')
+            ->whereIn('status', ['pending_resolution', 'pending_investigation'])
+            ->with('item.session:id,outgoing_user_id,opened_by')
+            ->get()
+            ->map(fn (HandoverDiscrepancy $d) => $d->item?->session?->accountableUserId())
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

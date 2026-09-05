@@ -225,7 +225,7 @@ it('rolls the same rows up per staff member, split by where the debt came from',
         ->and($row['recorded_outstanding'])->toBe(3000.0);
 });
 
-it('offers only staff who actually have a debt in the picker', function () {
+it('leaves staff who have never owed anything out of the picker', function () {
     $withDebt = User::factory()->create(['name' => 'Chidi']);
     User::factory()->create(['name' => 'Never Owed Anything']);
 
@@ -311,4 +311,165 @@ it('moves the date range onto business days for a preset', function () {
 
     $component->assertSet('dateFrom', BusinessDay::today())
         ->assertSet('dateTo', BusinessDay::today());
+});
+
+/**
+ * The gap this report had on day one: sealing a count opens a
+ * HandoverDiscrepancy, not a StaffDebt. A manager looking at ₦0.00 while
+ * real shortages sat unruled in the queue had no way to tell.
+ */
+it('surfaces handover shortages that have not been ruled on yet', function () {
+    ['outgoing' => $outgoing] = sealedHandoverScenario(24, 20);
+
+    $shortages = (new StaffDebtReportService)->unresolvedShortages();
+
+    expect($shortages)->toHaveCount(1);
+
+    $row = $shortages->first();
+
+    expect($row['staff_id'])->toBe($outgoing->id)
+        ->and($row['value'])->toBe(2000.0)
+        ->and($row['quantity'])->toBe(4.0)
+        ->and($row['status_label'])->toBe('Awaiting a decision')
+        ->and($row['item_name'])->toContain('Heineken');
+});
+
+it('keeps unruled shortages out of every debt total', function () {
+    sealedHandoverScenario(24, 20);
+
+    $service = new StaffDebtReportService;
+    $summary = $service->summary($service->rows());
+
+    expect($summary['debts'])->toBe(0)
+        ->and($summary['charged'])->toBe(0.0)
+        ->and($summary['outstanding'])->toBe(0.0)
+        ->and($service->shortageSummary($service->unresolvedShortages())['value'])->toBe(2000.0);
+});
+
+it('moves a shortage out of the unruled list and into the debts once it is debited', function () {
+    ['outgoing' => $outgoing] = sealedHandoverScenario(24, 20);
+    $manager = User::factory()->create(['name' => 'Manager']);
+
+    (new \App\Services\CountSessionService)->debitDiscrepancy(
+        \App\Models\HandoverDiscrepancy::first(),
+        $manager->id,
+    );
+
+    $service = new StaffDebtReportService;
+    $rows = $service->rows();
+
+    expect($service->unresolvedShortages())->toHaveCount(0)
+        ->and($rows)->toHaveCount(1)
+        ->and($rows->first()['reason'])->toBe('count_session_shortfall')
+        ->and($rows->first()['origin'])->toBe('handover')
+        ->and($rows->first()['staff_id'])->toBe($outgoing->id)
+        ->and($service->summary($rows)['outstanding'])->toBe(2000.0);
+});
+
+it('offers custodians carrying an unruled shortage in the staff picker', function () {
+    ['outgoing' => $outgoing] = sealedHandoverScenario(24, 20);
+
+    expect((new StaffDebtReportService)->staffWithDebts()->pluck('id')->all())
+        ->toContain($outgoing->id);
+});
+
+it('filters unruled shortages to the selected custodians', function () {
+    ['outgoing' => $outgoing] = sealedHandoverScenario(24, 20);
+    $someoneElse = User::factory()->create();
+
+    $service = new StaffDebtReportService;
+
+    expect($service->unresolvedShortages(['user_ids' => [$outgoing->id]]))->toHaveCount(1)
+        ->and($service->unresolvedShortages(['user_ids' => [$someoneElse->id]]))->toHaveCount(0);
+});
+
+it('renders the unruled shortages on the page with a not-yet-a-debt warning', function () {
+    $admin = debtReportAdmin();
+    sealedHandoverScenario(24, 20);
+
+    Livewire::actingAs($admin)
+        ->test(StaffDebtReport::class)
+        ->assertOk()
+        ->assertSee('Handover shortages not yet ruled on')
+        ->assertSee('not debts yet');
+});
+
+it('hides unruled shortages when the filters are asking a question they cannot answer', function () {
+    $admin = debtReportAdmin();
+    sealedHandoverScenario(24, 20);
+
+    $component = Livewire::actingAs($admin)->test(StaffDebtReport::class);
+
+    expect($component->instance()->unresolvedShortages())->toHaveCount(1);
+
+    // "Recorded by a person" and "settled" are both claims about a debt
+    // that exists; an unruled shortage is neither.
+    expect($component->set('origin', 'recorded')->instance()->unresolvedShortages())->toHaveCount(0);
+    expect($component->set('origin', 'all')->set('status', 'settled')->instance()->unresolvedShortages())->toHaveCount(0);
+});
+
+it('downloads the unruled shortages as their own csv', function () {
+    $admin = debtReportAdmin();
+    sealedHandoverScenario(24, 20);
+
+    $csv = downloadedBody(
+        Livewire::actingAs($admin)->test(StaffDebtReport::class)->instance()->exportShortagesCsv()
+    );
+
+    expect($csv)->toContain('Custodian')
+        ->toContain('Qty Short')
+        ->toContain('Heineken')
+        ->toContain('2000.00');
+});
+
+/**
+ * ₦0.00 because nobody owes anything and ₦0.00 because the range is wrong
+ * look identical on screen — the staff picker lists anyone who has ever
+ * had a debt, so it cannot disambiguate them either.
+ */
+it('says how many debts the chosen date range is hiding', function () {
+    $staff = User::factory()->create(['name' => 'Chidi']);
+
+    $old = debtFor($staff, ['amount' => 4000]);
+    $old->forceFill(['created_at' => now()->subYear()])->save();
+
+    $service = new StaffDebtReportService;
+    $filters = ['from' => BusinessDay::today(), 'to' => BusinessDay::today()];
+
+    expect($service->rows($filters))->toHaveCount(0);
+
+    $outside = $service->outsideRange($filters);
+
+    expect($outside['count'])->toBe(1)
+        ->and($outside['outstanding'])->toBe(4000.0)
+        ->and($outside['latest'])->toBe(BusinessDay::labelFor($old->fresh()->created_at));
+});
+
+it('reports nothing hidden when the range already covers every debt', function () {
+    $staff = User::factory()->create();
+    debtFor($staff, ['amount' => 4000]);
+
+    $outside = (new StaffDebtReportService)->outsideRange([
+        'from' => CarbonImmutable::parse(BusinessDay::today())->subDays(7)->toDateString(),
+        'to' => BusinessDay::today(),
+    ]);
+
+    expect($outside['count'])->toBe(0)
+        ->and($outside['outstanding'])->toBe(0.0);
+});
+
+it('widens to every date when the hidden-debts shortcut is used', function () {
+    $admin = debtReportAdmin();
+    $staff = User::factory()->create();
+    $old = debtFor($staff, ['amount' => 4000]);
+    $old->forceFill(['created_at' => now()->subYear()])->save();
+
+    $component = Livewire::actingAs($admin)->test(StaffDebtReport::class);
+
+    expect($component->instance()->rows())->toHaveCount(0);
+
+    $component->call('showAllDates');
+
+    expect($component->instance()->rows())->toHaveCount(1)
+        ->and($component->instance()->filtersDescription())->toContain('All dates');
 });

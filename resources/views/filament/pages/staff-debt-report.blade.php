@@ -4,6 +4,9 @@
         $rows = $this->rows();
         $perStaff = $this->perStaff();
         $selectedNames = $this->selectedStaffNames();
+        $shortages = $this->unresolvedShortages();
+        $shortageSummary = $this->shortageSummary();
+        $outside = $this->outsideRange();
     @endphp
 
     {{-- Filters --}}
@@ -112,11 +115,37 @@
                 class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200">
                 Download PDF
             </button>
+            @if ($shortages->isNotEmpty())
+                <button type="button" wire:click="exportShortagesCsv"
+                    class="px-3 py-1.5 text-sm rounded-lg border border-warning-400 text-warning-700 dark:text-warning-300">
+                    Download CSV (unruled shortages)
+                </button>
+            @endif
             <span class="text-xs text-gray-500 dark:text-gray-400">
                 Downloads exactly what the filters above are showing — {{ number_format($summary['debts']) }} debt(s).
             </span>
         </div>
     </div>
+
+    {{-- ₦0.00 on screen has two very different causes and a manager cannot
+         tell them apart unaided: nobody owes anything, or the date range is
+         wrong. The staff picker makes this worse by listing anyone who has
+         ever had a debt, so say plainly what the window is hiding. --}}
+    @if ($outside['count'] > 0)
+        <div class="rounded-lg border border-info-300 dark:border-info-800 bg-info-50 dark:bg-info-900/30 px-4 py-3 flex flex-wrap items-center gap-3">
+            <div class="text-sm text-info-900 dark:text-info-200">
+                <span class="font-semibold">{{ $outside['count'] }} more debt(s)</span> match these filters but fall
+                outside the selected dates — ₦{{ number_format($outside['outstanding'], 2) }} of it still outstanding.
+                @if ($outside['latest'])
+                    The most recent is on <span class="font-semibold">{{ $outside['latest'] }}</span>.
+                @endif
+            </div>
+            <button type="button" wire:click="showAllDates"
+                class="px-3 py-1.5 text-xs rounded-lg bg-info-600 text-white ml-auto">
+                Show every date
+            </button>
+        </div>
+    @endif
 
     {{-- Summary --}}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -160,6 +189,87 @@
             </div>
         @endforeach
     </div>
+
+    {{-- Sealing a count opens a discrepancy, not a debt — the debt only
+         exists once a manager hits Debit. Without this section the report
+         reads ₦0.00 while real shortages sit unruled in the queue, which
+         is the one way it could actively mislead. Kept out of every total
+         above on purpose: unruled is exposure, not money owed yet. --}}
+    @if ($shortages->isNotEmpty())
+        <div class="bg-white dark:bg-gray-800 rounded-lg border-2 border-warning-300 dark:border-warning-800 overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                    Handover shortages not yet ruled on
+                </h3>
+                <span class="text-sm font-bold text-warning-700 dark:text-warning-300">
+                    ₦{{ number_format($shortageSummary['value'], 2) }}
+                </span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ $shortageSummary['count'] }} line(s) · {{ $shortageSummary['staff'] }} custodian(s)
+                    @if ($shortageSummary['investigating'] > 0)
+                        · {{ $shortageSummary['investigating'] }} under investigation
+                    @endif
+                    @if ($shortageSummary['oldest_days'] > 0)
+                        · oldest {{ $shortageSummary['oldest_days'] }}d
+                    @endif
+                </span>
+                <a href="{{ \App\Filament\Pages\HandoverDiscrepancies::getUrl() }}"
+                    class="text-xs text-primary-600 dark:text-primary-400 underline ml-auto">
+                    Rule on these in Handover Discrepancies →
+                </a>
+            </div>
+            <div class="px-4 py-2 text-xs text-warning-800 dark:text-warning-200 bg-warning-50 dark:bg-warning-900/20">
+                These are <span class="font-semibold">not debts yet</span> and are excluded from every total above.
+                A shortage becomes a debt only when someone debits it — until then it may still be recounted,
+                written off against a reported damage, or held for investigation.
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-900/50 text-left text-gray-500 dark:text-gray-400">
+                        <tr>
+                            <th class="px-4 py-2">Business day</th>
+                            <th class="px-4 py-2">Custodian</th>
+                            <th class="px-4 py-2">Item</th>
+                            <th class="px-4 py-2">Where</th>
+                            <th class="px-4 py-2 text-right">Qty short</th>
+                            <th class="px-4 py-2 text-right">Value</th>
+                            <th class="px-4 py-2">Status</th>
+                            <th class="px-4 py-2 text-right">Age</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        @foreach ($shortages as $shortage)
+                            <tr class="text-gray-700 dark:text-gray-200">
+                                <td class="px-4 py-2 whitespace-nowrap">{{ $shortage['business_day'] }}</td>
+                                <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ $shortage['staff_name'] }}</td>
+                                <td class="px-4 py-2">{{ $shortage['item_name'] }}</td>
+                                <td class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
+                                    {{ $shortage['warehouse'] ?? '—' }}
+                                    @if ($shortage['session_id'])
+                                        · session #{{ $shortage['session_id'] }}
+                                    @endif
+                                </td>
+                                <td class="px-4 py-2 text-right">{{ number_format($shortage['quantity'], 2) }}</td>
+                                <td class="px-4 py-2 text-right font-semibold text-warning-700 dark:text-warning-300">
+                                    ₦{{ number_format($shortage['value'], 2) }}
+                                </td>
+                                <td class="px-4 py-2">
+                                    <span @class([
+                                        'inline-block px-2 py-0.5 rounded text-xs font-medium',
+                                        'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' => $shortage['status'] === 'pending_investigation',
+                                        'bg-warning-100 text-warning-800 dark:bg-warning-900/40 dark:text-warning-200' => $shortage['status'] !== 'pending_investigation',
+                                    ])>
+                                        {{ $shortage['status_label'] }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-right">{{ $shortage['age_days'] }}d</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
 
     {{-- Per staff --}}
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
