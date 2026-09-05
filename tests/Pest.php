@@ -109,3 +109,32 @@ function sealedHandoverScenario(int $liveStockQuantity = 24, int $countedQuantit
 
     return compact('service', 'session', 'item', 'product', 'outgoing', 'incoming', 'bar', 'outgoingPin', 'incomingPin');
 }
+
+
+/**
+ * Announcement fixtures, shared across the service and notice-board test
+ * files rather than declared in one of them — Pest loads every test file
+ * into the same global scope, so a second copy would be a fatal redeclare.
+ *
+ * Creates a DRAFT: nothing is live until AnnouncementService::publish()
+ * runs, which is also what freezes the roster.
+ */
+function makeAnnouncement(array $attributes = []): \App\Models\Announcement
+{
+    return \App\Models\Announcement::create(array_merge([
+        'title' => 'Staff meeting Friday',
+        'body' => '<p>Everyone in the back office at 10am.</p>',
+        'severity' => 'info',
+        'must_acknowledge' => true,
+        'show_on_kiosk' => true,
+        'audience' => 'all',
+    ], $attributes));
+}
+
+function announcementStaff(string $role, string $name = 'Staff'): \App\Models\User
+{
+    $user = \App\Models\User::factory()->create(['name' => $name]);
+    $user->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => $role]));
+
+    return $user;
+}

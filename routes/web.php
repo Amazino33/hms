@@ -150,6 +150,12 @@ Route::middleware(['kiosk.device'])->group(function () {
     Route::middleware(['staff_pin.auth'])->group(function () {
         Route::get('/kiosk/order/{table}', fn ($table) => view('kiosk.order', ['table' => $table]))->name('kiosk.order');
         Route::get('/kiosk/report-damage', fn () => view('kiosk.report-damage'))->name('kiosk.report-damage');
+        // Notice archive. Behind staff_pin.auth like the order screen —
+        // it lists the announcements sent to ONE named person, so it must
+        // not be reachable from a shared kiosk that nobody has tapped
+        // into. Read-only; anything still outstanding is already shown by
+        // the announcement board in the layout.
+        Route::get('/kiosk/notices', fn () => view('kiosk.notices'))->name('kiosk.notices');
     });
 
     // Kitchen Display board: viewable by anyone on this registered device
@@ -183,5 +189,6 @@ Route::middleware(['trusted.device'])->group(function () {
     Route::middleware(['staff_pin.auth'])->group(function () {
         Route::get('/staff/order/{table}', fn ($table) => view('kiosk.order', ['table' => $table]))->name('staff.order');
         Route::get('/staff/report-damage', fn () => view('kiosk.report-damage'))->name('staff.report-damage');
+        Route::get('/staff/notices', fn () => view('kiosk.notices'))->name('staff.notices');
     });
 });

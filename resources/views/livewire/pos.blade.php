@@ -1163,6 +1163,14 @@ new class extends Component {
                     <a href="{{ session('kiosk_device_id') ? route('kiosk.report-damage') : route('staff.report-damage') }}"
                         class="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 text-white touch-manipulation">⚠️ Report Damage</a>
                 @endif
+                {{-- Deliberately NOT gated on an active shift the way
+                     Report Damage is: reading a notice you were sent is
+                     not a shift action, and a staff member who has just
+                     tapped in should be able to check one before starting. --}}
+                @if(session('kiosk_device_id') || session('trusted_device_user_id'))
+                    <a href="{{ session('kiosk_device_id') ? route('kiosk.notices') : route('staff.notices') }}"
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-sky-600 text-white touch-manipulation">📢 Notices</a>
+                @endif
                 @if(session('kiosk_device_id') || session('trusted_device_user_id'))
                     <button @click="$wire.dispatch('lock-requested')"
                         class="text-xs font-bold px-3 py-1.5 rounded-lg bg-gray-700 text-white flex items-center gap-1 touch-manipulation">

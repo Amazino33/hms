@@ -86,11 +86,22 @@ new class extends Component {
         Auth::guard('staff_pin')->login($user);
         $this->showPinPad = false;
         $this->errorMessage = null;
+
+        // This board signs a cook in and out in place, with no navigation —
+        // unlike the idle screen, which redirects into the order screen and
+        // re-mounts everything. The announcement board is a sibling
+        // component in the kiosk layout, so it has no other way to learn
+        // that somebody is now present and may have a notice to read.
+        $this->dispatch('staff-pin-changed');
     }
 
     public function signOutCook(): void
     {
         Auth::guard('staff_pin')->logout();
+
+        // Same reason in reverse: clear the outgoing cook's notices off the
+        // screen instead of leaving them up for whoever signs in next.
+        $this->dispatch('staff-pin-changed');
     }
 
     /**

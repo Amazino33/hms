@@ -111,6 +111,16 @@
         }
     </script>
 
+    {{-- Staff announcements. Renders nothing at all until someone has
+         tapped in on the staff_pin guard, so the idle table grid stays
+         clean — the notice lands on the first screen after PIN entry
+         rather than in front of the PIN pad itself.
+
+         context 'kiosk' makes the component read staff_pin (never `web`)
+         and stamps every signature given here as coming from the floor
+         rather than the office. Notices the author left off the kiosk
+         (show_on_kiosk = false) never reach this surface. --}}
+    @livewire('announcement-board', ['context' => 'kiosk'])
     <livewire:notifications />
     @include('partials.livewire-failure-handler')
     {{-- @filamentScripts(withCore: true) already bundles and boots

@@ -361,5 +361,24 @@ class AdminPanelProvider extends PanelProvider
                 @livewire('shift-manager')
             HTML)
         );
+
+        // ─── Body End: Staff announcements ───────────────────────────────────────
+        // Registered as its own hook rather than appended to the block
+        // above so it stays independent of the notification-sound script.
+        //
+        // Deliberately NOT the panel's database notifications (enabled
+        // above): those are per-user copies with no forced acknowledgement
+        // and no roster. An announcement is ONE message that many people
+        // sign, so a manager can answer "who has not read this yet".
+        //
+        // Mounted with context 'admin' — the component reads the `web`
+        // guard on this surface and the `staff_pin` guard on the kiosk,
+        // and never falls back from one to the other.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn () => Blade::render(<<<'HTML'
+                @livewire('announcement-board', ['context' => 'admin'])
+            HTML)
+        );
     }
 }
