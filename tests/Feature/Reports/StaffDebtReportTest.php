@@ -473,3 +473,118 @@ it('widens to every date when the hidden-debts shortcut is used', function () {
     expect($component->instance()->rows())->toHaveCount(1)
         ->and($component->instance()->filtersDescription())->toContain('All dates');
 });
+
+/**
+ * The bug this fixes: a screen showing ₦9.6m of unruled shortages and no
+ * debts handed back a CSV containing nothing but a header row, because
+ * the export only ever walked the debts.
+ */
+it('exports the unruled shortages alongside the debts in the main csv', function () {
+    $admin = debtReportAdmin();
+    ['outgoing' => $outgoing] = sealedHandoverScenario(24, 20);
+    debtFor(User::factory()->create(['name' => 'Chidi']), ['amount' => 2500, 'created_by' => $admin->id]);
+
+    $csv = downloadedBody(
+        Livewire::actingAs($admin)->test(StaffDebtReport::class)->instance()->exportCsv()
+    );
+
+    expect($csv)->toContain('Unruled Shortage Value')
+        ->toContain('Chidi')
+        ->toContain('2500.00')
+        ->toContain('Unruled shortage')
+        ->toContain('Heineken')
+        ->toContain('2000.00')
+        ->toContain('not a debt yet')
+        ->toContain($outgoing->name);
+});
+
+it('exports shortages even when there is not a single debt to report', function () {
+    $admin = debtReportAdmin();
+    sealedHandoverScenario(24, 20);
+
+    $component = Livewire::actingAs($admin)->test(StaffDebtReport::class);
+
+    expect($component->instance()->rows())->toHaveCount(0);
+
+    $lines = array_values(array_filter(explode("\n", downloadedBody($component->instance()->exportCsv()))));
+
+    expect($lines)->toHaveCount(2)
+        ->and($lines[1])->toContain('Unruled shortage')
+        ->toContain('Heineken');
+});
+
+/**
+ * Keeping the two kinds of money in separate columns is what lets the
+ * combined file stay honest — a SUM() over Outstanding must never pick up
+ * a shortage nobody has ruled on.
+ */
+it('keeps shortage value out of the debt money columns in the export', function () {
+    $admin = debtReportAdmin();
+    sealedHandoverScenario(24, 20);
+    debtFor(User::factory()->create(['name' => 'Chidi']), ['amount' => 2500, 'created_by' => $admin->id]);
+
+    $rows = Livewire::actingAs($admin)->test(StaffDebtReport::class)
+        ->instance()
+        ->exportCsv();
+
+    $lines = array_values(array_filter(explode("\n", downloadedBody($rows))));
+    $parsed = array_map('str_getcsv', $lines);
+    $headers = $parsed[0];
+
+    $outstanding = array_search('Outstanding', $headers, true);
+    $shortageValue = array_search('Unruled Shortage Value', $headers, true);
+    $type = array_search('Type', $headers, true);
+
+    foreach (array_slice($parsed, 1) as $row) {
+        if ($row[$type] === 'Debt') {
+            expect($row[$shortageValue])->toBe('');
+        } else {
+            expect($row[$outstanding])->toBe('');
+        }
+    }
+
+    $totalOutstanding = array_sum(array_map(
+        fn ($r) => (float) ($r[$outstanding] ?: 0),
+        array_slice($parsed, 1)
+    ));
+
+    expect($totalOutstanding)->toBe(2500.0);
+});
+
+it('gives a custodian with only unruled shortages a row in the per staff export', function () {
+    $admin = debtReportAdmin();
+    ['outgoing' => $outgoing] = sealedHandoverScenario(24, 20);
+
+    $csv = downloadedBody(
+        Livewire::actingAs($admin)->test(StaffDebtReport::class)->instance()->exportStaffSummaryCsv()
+    );
+
+    expect($csv)->toContain('Unruled Shortage Value')
+        ->toContain($outgoing->name)
+        ->toContain('2000.00');
+});
+
+it('rolls shortages up per staff without touching that staff member\'s debt figures', function () {
+    ['outgoing' => $outgoing] = sealedHandoverScenario(24, 20);
+    debtFor($outgoing, ['amount' => 1000]);
+
+    $service = new StaffDebtReportService;
+    $row = $service->perStaff($service->rows(), $service->unresolvedShortages())
+        ->firstWhere('staff_id', $outgoing->id);
+
+    expect($row['charged'])->toBe(1000.0)
+        ->and($row['outstanding'])->toBe(1000.0)
+        ->and($row['shortage_lines'])->toBe(1)
+        ->and($row['shortage_value'])->toBe(2000.0);
+});
+
+it('puts the shortages into the pdf table too', function () {
+    $admin = debtReportAdmin();
+    sealedHandoverScenario(24, 20);
+
+    $bytes = downloadedBody(
+        Livewire::actingAs($admin)->test(StaffDebtReport::class)->instance()->exportPdf()
+    );
+
+    expect($bytes)->toStartWith('%PDF');
+});

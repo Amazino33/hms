@@ -149,7 +149,7 @@ class StaffDebtReport extends Page
     #[Computed]
     public function perStaff(): Collection
     {
-        return $this->perStaffMemo ??= $this->service()->perStaff($this->rows());
+        return $this->perStaffMemo ??= $this->service()->perStaff($this->rows(), $this->unresolvedShortages());
     }
 
     private ?Collection $shortagesMemo = null;
@@ -250,31 +250,132 @@ class StaffDebtReport extends Page
         return in_array($id, array_map('intval', $this->userIds), true);
     }
 
+    /**
+     * Column headers for the everything-on-screen export.
+     *
+     * @return array<int, string>
+     */
+    private function combinedHeaders(): array
+    {
+        return [
+            'Type', 'Business Day', 'Recorded At', 'Staff', 'Source', 'Detail', 'Shift / Session',
+            'Debt Amount', 'Repaid', 'Outstanding', 'Unruled Shortage Value',
+            'Status', 'Recorded By', 'Order #', 'Age (days)', 'Notes',
+        ];
+    }
+
+    /**
+     * Debts and unruled shortages in one list, because "download what I am
+     * looking at" is the only reading of the export button anyone actually
+     * has. Splitting them across separate files meant a screen showing ₦9m
+     * of shortages handed back an empty CSV.
+     *
+     * They stay honest by living in different money columns rather than a
+     * shared one: summing Outstanding still gives only real debt, and
+     * summing Unruled Shortage Value gives only what is still unruled, so
+     * neither total can quietly absorb the other.
+     *
+     * @return Collection<int, array<int, mixed>>
+     */
+    private function combinedExportRows(): Collection
+    {
+        $debts = $this->rows()->map(fn (array $r) => [
+            'Debt',
+            $r['business_day'],
+            $r['created_at']?->format('Y-m-d H:i'),
+            $r['staff_name'],
+            $r['origin'] === 'handover' ? 'During handover' : 'Recorded by a person',
+            $r['reason_label'],
+            $r['shift_id'] ? '#'.$r['shift_id'].' ('.$r['shift_type'].')' : '',
+            number_format($r['amount'], 2, '.', ''),
+            number_format($r['repaid'], 2, '.', ''),
+            number_format($r['outstanding'], 2, '.', ''),
+            '',
+            $r['status_label'],
+            $r['recorded_by'],
+            $r['order_number'] ?? '',
+            $r['age_days'],
+            $r['notes'] ?? '',
+        ]);
+
+        $shortages = $this->unresolvedShortages()->map(fn (array $r) => [
+            'Unruled shortage',
+            $r['business_day'],
+            $r['created_at']?->format('Y-m-d H:i'),
+            $r['staff_name'],
+            'During handover',
+            $r['item_name'],
+            trim(($r['warehouse'] ?? '').($r['session_id'] ? ' session #'.$r['session_id'] : '')),
+            '',
+            '',
+            '',
+            number_format($r['value'], 2, '.', ''),
+            $r['status_label'].' — not a debt yet',
+            '',
+            '',
+            $r['age_days'],
+            number_format($r['quantity'], 2).' short at ₦'.number_format($r['unit_price'], 2).' each',
+        ]);
+
+        return $debts->concat($shortages);
+    }
+
     public function exportCsv(): StreamedResponse
     {
         return $this->csvResponse(
             'staff-debts-'.$this->rangeSlug().'.csv',
-            [
-                'Business Day', 'Recorded At', 'Staff', 'Source', 'Reason', 'Shift',
-                'Amount', 'Repaid', 'Outstanding', 'Status', 'Recorded By', 'Order #', 'Age (days)', 'Notes',
-            ],
-            $this->rows()->map(fn (array $r) => [
-                $r['business_day'],
-                $r['created_at']?->format('Y-m-d H:i'),
-                $r['staff_name'],
-                $r['origin'] === 'handover' ? 'During handover' : 'Recorded by a person',
-                $r['reason_label'],
-                $r['shift_id'] ? '#'.$r['shift_id'].' ('.$r['shift_type'].')' : '',
-                number_format($r['amount'], 2, '.', ''),
-                number_format($r['repaid'], 2, '.', ''),
-                number_format($r['outstanding'], 2, '.', ''),
-                $r['status_label'],
-                $r['recorded_by'],
-                $r['order_number'] ?? '',
-                $r['age_days'],
-                $r['notes'] ?? '',
-            ])
+            $this->combinedHeaders(),
+            $this->combinedExportRows()
         );
+    }
+
+    /**
+     * The same two kinds of row, narrowed for print. All 16 CSV columns on
+     * A4 landscape squeeze down to unreadable — a spreadsheet can scroll,
+     * a sheet of paper cannot.
+     *
+     * @return array<int, string>
+     */
+    private function printHeaders(): array
+    {
+        return [
+            'Type', 'Business Day', 'Staff', 'Detail', 'Where',
+            'Debt Amount', 'Repaid', 'Outstanding', 'Unruled Shortage', 'Status',
+        ];
+    }
+
+    /**
+     * @return Collection<int, array<int, mixed>>
+     */
+    private function printRows(): Collection
+    {
+        $debts = $this->rows()->map(fn (array $r) => [
+            'Debt',
+            $r['business_day'],
+            $r['staff_name'],
+            $r['reason_label'],
+            $r['shift_id'] ? 'Shift #'.$r['shift_id'] : ($r['order_number'] ? 'Order '.$r['order_number'] : '—'),
+            number_format($r['amount'], 2),
+            number_format($r['repaid'], 2),
+            number_format($r['outstanding'], 2),
+            '—',
+            $r['status_label'],
+        ]);
+
+        $shortages = $this->unresolvedShortages()->map(fn (array $r) => [
+            'Unruled shortage',
+            $r['business_day'],
+            $r['staff_name'],
+            $r['item_name'].' ('.number_format($r['quantity'], 2).' short)',
+            trim(($r['warehouse'] ?? '').($r['session_id'] ? ' #'.$r['session_id'] : '')) ?: '—',
+            '—',
+            '—',
+            '—',
+            number_format($r['value'], 2),
+            $r['status_label'],
+        ]);
+
+        return $debts->concat($shortages);
     }
 
     /**
@@ -287,7 +388,9 @@ class StaffDebtReport extends Page
             'staff-debts-per-staff-'.$this->rangeSlug().'.csv',
             [
                 'Staff', 'Debts', 'Charged', 'Repaid', 'Outstanding', 'Still Pending',
-                'Outstanding From Handovers', 'Outstanding Recorded By A Person', 'Oldest Pending (days)', 'Last Debt On',
+                'Outstanding From Handovers', 'Outstanding Recorded By A Person',
+                'Unruled Shortage Lines', 'Unruled Shortage Value',
+                'Oldest Pending (days)', 'Last Debt On',
             ],
             $this->perStaff()->map(fn (array $r) => [
                 $r['staff_name'],
@@ -298,6 +401,8 @@ class StaffDebtReport extends Page
                 $r['pending_count'],
                 number_format($r['handover_outstanding'], 2, '.', ''),
                 number_format($r['recorded_outstanding'], 2, '.', ''),
+                $r['shortage_lines'],
+                number_format($r['shortage_value'], 2, '.', ''),
                 $r['oldest_pending_days'],
                 $r['last_debt_on'],
             ])
@@ -328,23 +433,8 @@ class StaffDebtReport extends Page
                     : '₦'.number_format($shortages['value'], 2).' over '.$shortages['count'].' line(s), '
                         .$shortages['staff'].' custodian(s) — not counted in the totals above',
             ],
-            [
-                'Business Day', 'Recorded At', 'Staff', 'Source', 'Reason', 'Shift',
-                'Amount', 'Repaid', 'Outstanding', 'Status', 'Recorded By',
-            ],
-            $this->rows()->map(fn (array $r) => [
-                $r['business_day'],
-                $r['created_at']?->format('M j, g:ia'),
-                $r['staff_name'],
-                $r['origin'] === 'handover' ? 'During handover' : 'Recorded by a person',
-                $r['reason_label'],
-                $r['shift_id'] ? '#'.$r['shift_id'] : '—',
-                number_format($r['amount'], 2),
-                number_format($r['repaid'], 2),
-                number_format($r['outstanding'], 2),
-                $r['status_label'],
-                $r['recorded_by'],
-            ])
+            $this->printHeaders(),
+            $this->printRows()
         );
     }
 

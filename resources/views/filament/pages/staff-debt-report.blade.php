@@ -105,7 +105,7 @@
         <div class="flex flex-wrap items-center gap-2 border-t border-gray-200 dark:border-gray-700 pt-3">
             <button type="button" wire:click="exportCsv"
                 class="px-3 py-1.5 text-sm rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900">
-                Download CSV (every debt)
+                Download CSV (everything shown)
             </button>
             <button type="button" wire:click="exportStaffSummaryCsv"
                 class="px-3 py-1.5 text-sm rounded-lg bg-gray-700 dark:bg-gray-300 text-white dark:text-gray-900">
@@ -122,7 +122,8 @@
                 </button>
             @endif
             <span class="text-xs text-gray-500 dark:text-gray-400">
-                Downloads exactly what the filters above are showing — {{ number_format($summary['debts']) }} debt(s).
+                Downloads exactly what the filters above are showing —
+                {{ number_format($summary['debts']) }} debt(s){{ $shortages->isNotEmpty() ? ' and ' . number_format($shortages->count()) . ' unruled shortage line(s)' : '' }}.
             </span>
         </div>
     </div>
@@ -288,6 +289,7 @@
                         <th class="px-4 py-2 text-right">Pending</th>
                         <th class="px-4 py-2 text-right">From handover</th>
                         <th class="px-4 py-2 text-right">Recorded</th>
+                        <th class="px-4 py-2 text-right">Unruled shortages</th>
                         <th class="px-4 py-2 text-right">Oldest pending</th>
                         <th class="px-4 py-2">Last debt</th>
                     </tr>
@@ -305,13 +307,16 @@
                             <td class="px-4 py-2 text-right">{{ $staff['pending_count'] }}</td>
                             <td class="px-4 py-2 text-right">₦{{ number_format($staff['handover_outstanding'], 2) }}</td>
                             <td class="px-4 py-2 text-right">₦{{ number_format($staff['recorded_outstanding'], 2) }}</td>
+                            <td class="px-4 py-2 text-right {{ $staff['shortage_value'] > 0 ? 'text-warning-700 dark:text-warning-300 font-semibold' : '' }}">
+                                {{ $staff['shortage_lines'] > 0 ? '₦' . number_format($staff['shortage_value'], 2) . ' (' . $staff['shortage_lines'] . ')' : '—' }}
+                            </td>
                             <td class="px-4 py-2 text-right">{{ $staff['pending_count'] > 0 ? $staff['oldest_pending_days'] . 'd' : '—' }}</td>
-                            <td class="px-4 py-2">{{ $staff['last_debt_on'] }}</td>
+                            <td class="px-4 py-2">{{ $staff['last_debt_on'] ?? '—' }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
-                                No debts match these filters.
+                            <td colspan="11" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                                No debts or shortages match these filters.
                             </td>
                         </tr>
                     @endforelse

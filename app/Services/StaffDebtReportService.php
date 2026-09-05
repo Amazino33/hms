@@ -180,22 +180,36 @@ class StaffDebtReportService
     }
 
     /**
-     * Per-staff rollup of the same rows — what a manager reads first, and
-     * what makes a multi-staff selection worth having.
+     * Per-staff rollup — what a manager reads first, and what makes a
+     * multi-staff selection worth having.
+     *
+     * Shortages are rolled up in their own columns rather than added to
+     * the debt figures, and a custodian who has only unruled shortages
+     * still gets a row: leaving them out was how a screen showing ₦9m of
+     * shortages produced a per-staff export with nothing in it.
      *
      * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  Collection<int, array<string, mixed>>|null  $shortages
      * @return Collection<int, array<string, mixed>>
      */
-    public function perStaff(Collection $rows): Collection
+    public function perStaff(Collection $rows, ?Collection $shortages = null): Collection
     {
-        return $rows->groupBy('staff_id')
-            ->map(function (Collection $staffRows) {
-                $first = $staffRows->first();
+        $shortages ??= collect();
+        $shortagesByStaff = $shortages->filter(fn (array $s) => $s['staff_id'])->groupBy('staff_id');
+
+        $staffIds = $rows->pluck('staff_id')->merge($shortagesByStaff->keys())->filter()->unique();
+
+        return $staffIds
+            ->map(function ($staffId) use ($rows, $shortagesByStaff) {
+                $staffRows = $rows->where('staff_id', $staffId)->values();
+                $staffShortages = collect($shortagesByStaff->get($staffId, []));
                 $pending = $staffRows->filter(fn (array $r) => $r['outstanding'] > 0);
 
                 return [
-                    'staff_id' => $first['staff_id'],
-                    'staff_name' => $first['staff_name'],
+                    'staff_id' => $staffId,
+                    'staff_name' => $staffRows->first()['staff_name']
+                        ?? $staffShortages->first()['staff_name']
+                        ?? 'Unknown',
                     'debts' => $staffRows->count(),
                     'charged' => round((float) $staffRows->sum('amount'), 2),
                     'repaid' => round((float) $staffRows->sum('repaid'), 2),
@@ -205,9 +219,14 @@ class StaffDebtReportService
                     'recorded_outstanding' => round((float) $staffRows->where('origin', 'recorded')->sum('outstanding'), 2),
                     'oldest_pending_days' => (int) ($pending->max('age_days') ?? 0),
                     'last_debt_on' => $staffRows->max('business_day'),
+                    'shortage_lines' => $staffShortages->count(),
+                    'shortage_value' => round((float) $staffShortages->sum('value'), 2),
                 ];
             })
-            ->sortByDesc('outstanding')
+            // Whatever the staff member is most on the hook for decides the
+            // order, so a custodian with only shortages can't sort to the
+            // bottom under everyone holding a ₦0 settled debt.
+            ->sortByDesc(fn (array $r) => max($r['outstanding'], $r['shortage_value']))
             ->values();
     }
 
