@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\PayrollLine;
 use App\Models\PayrollLineDeduction;
 use App\Models\PayrollRun;
 use App\Models\StaffDebt;
@@ -58,8 +57,22 @@ class PayrollRunDetail extends Page
         ])->find($this->payrollRunId);
     }
 
+    /**
+     * The id check has to come before $this->run is touched at all, not
+     * just before it's used. Filament Shield builds the role-permission
+     * matrix by instantiating every Page and calling getTitle() on it
+     * (HasLabelResolver::getLocalizedPageLabel) — outside any request, so
+     * Livewire never boots the component and #[Computed] is never wired
+     * up. Reading $this->run there falls through to Livewire's __get and
+     * throws PropertyNotFoundException, which took out the entire
+     * /admin/shield/roles/{id}/edit screen for every role.
+     */
     public function getTitle(): string
     {
+        if (! $this->payrollRunId) {
+            return 'Payroll Run';
+        }
+
         $run = $this->run;
 
         return $run ? 'Payroll Run — '.$run->period_start->format('M j').' – '.$run->period_end->format('M j, Y') : 'Payroll Run';
@@ -87,7 +100,7 @@ class PayrollRunDetail extends Page
     public function refreshDraft(): void
     {
         try {
-            (new PayrollCompilationService())->refreshDraft($this->run);
+            (new PayrollCompilationService)->refreshDraft($this->run);
             $this->refreshRun();
             Notification::make()->title('Figures recomputed')->success()->send();
         } catch (\Exception $e) {
@@ -119,7 +132,7 @@ class PayrollRunDetail extends Page
         }
 
         try {
-            (new PayrollCompilationService())->setDeduction($line, $debt, $amount);
+            (new PayrollCompilationService)->setDeduction($line, $debt, $amount);
             $this->deductionDebtId[$lineId] = null;
             $this->deductionAmount[$lineId] = null;
             $this->refreshRun();
@@ -138,7 +151,7 @@ class PayrollRunDetail extends Page
         }
 
         try {
-            (new PayrollCompilationService())->removeDeduction($deduction);
+            (new PayrollCompilationService)->removeDeduction($deduction);
             $this->refreshRun();
             Notification::make()->title('Deduction removed')->success()->send();
         } catch (\Exception $e) {
@@ -149,7 +162,7 @@ class PayrollRunDetail extends Page
     public function sealRun(): void
     {
         try {
-            (new PayrollCompilationService())->sealRun($this->run);
+            (new PayrollCompilationService)->sealRun($this->run);
             $this->refreshRun();
             Notification::make()->title('Payroll run sealed — figures are now frozen and visible to the CEO for payment')->success()->send();
         } catch (\Exception $e) {

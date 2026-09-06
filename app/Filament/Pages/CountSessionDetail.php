@@ -287,8 +287,18 @@ class CountSessionDetail extends Page
         return (string) $quantity;
     }
 
+    /**
+     * Guarded before $this->session is touched for the same reason as
+     * PayrollRunDetail::getTitle() — Shield instantiates every Page and
+     * calls getTitle() outside a request to label the role-permission
+     * matrix, where #[Computed] is not wired up and reading it throws.
+     */
     public function getTitle(): string
     {
+        if (! $this->countSessionId) {
+            return 'Count Session';
+        }
+
         return 'Count Session #'.($this->session?->id ?? '');
     }
 
