@@ -15,10 +15,49 @@ use Illuminate\Support\Facades\DB;
 class InventoryService
 {
     /**
-     * Return inventory items back to stock when an order is cancelled or returned.
+     * Return inventory items back to stock when an order is cancelled or
+     * returned — but only what actually left it.
+     *
+     * A room order defers its deduction until the kitchen/bar display
+     * marks it Ready (RoomOrderService's defer_stock_deduction). Cancel
+     * one before that and there is nothing to give back: crediting it
+     * anyway invented stock that was never on the shelf, which then read
+     * as a shortage at the next handover count because the physical shelf
+     * never had it. stock_deducted_at is the record of what really
+     * happened; no flag means no deduction, so nothing comes back.
+     *
+     * A return ticket is the deliberate exception. It is its own Order
+     * (is_return = true), created directly by the POS return flow rather
+     * than through OrderSplitter, so it never deducts anything — putting
+     * stock back IS its entire purpose, and ReturnConfirmationService
+     * flips it to 'returned' precisely to trigger this method. Gating it
+     * on a deduction it was never supposed to make would silently disable
+     * returns altogether.
+     *
+     * The flag is cleared in memory rather than saved: the only caller is
+     * OrderObserver::updating(), whose in-flight save persists it, and
+     * writing here would recurse into that same save. A direct caller
+     * outside the observer must save the order itself.
      */
     public static function returnInventoryForCancelledOrder(Order $order): void
     {
+        // Read the marker from the database, not the in-memory model. A
+        // caller can easily hold an Order instance that was loaded before
+        // the deduction was stamped — deduction is frequently performed on
+        // a freshly-loaded copy of the same row — and trusting a stale
+        // attribute would silently skip a restock that genuinely is owed.
+        // That is the worst direction for this guard to fail in: stock
+        // that really did leave never comes back, and the shortfall lands
+        // on whoever is holding the count. is_return needs no such care;
+        // it is set at creation and never changes.
+        $deductedAt = $order->exists
+            ? DB::table('orders')->where('id', $order->getKey())->value('stock_deducted_at')
+            : $order->stock_deducted_at;
+
+        if (! $order->is_return && is_null($deductedAt)) {
+            return;
+        }
+
         foreach ($order->items as $orderItem) {
             if ($orderItem->item_type === 'product') {
                 self::returnProductInventory($orderItem, $order);
@@ -26,6 +65,10 @@ class InventoryService
                 self::returnMenuItemIngredients($orderItem, $order);
             }
         }
+
+        // Stock is back where it started, so the order no longer holds
+        // any — a second return must not double-credit.
+        $order->stock_deducted_at = null;
     }
 
     /**
@@ -130,6 +173,19 @@ class InventoryService
                 self::deductMenuItemIngredients($item, $order);
             }
         }
+
+        // Recorded so a later cancellation can tell "give back what left
+        // the shelf" from "this never left the shelf at all". A room order
+        // defers deduction to markReady, so an order cancelled before that
+        // must not be credited anything — see the migration that added
+        // this column. Marked even when the loop deducted nothing (an
+        // order of recipe-less menu items): the return path is symmetric
+        // and would give back nothing either way.
+        //
+        // Deliberately not $order->update(): this runs inside the same
+        // transaction as the deduction, and touching status here would
+        // re-enter OrderObserver. Only this one column is written.
+        $order->forceFill(['stock_deducted_at' => now()])->saveQuietly();
     }
 
     /**

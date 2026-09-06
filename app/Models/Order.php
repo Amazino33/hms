@@ -19,6 +19,7 @@ class Order extends Model
         'paid_cash' => 'decimal:2',
         'paid_pos' => 'decimal:2',
         'served_at' => 'datetime',
+        'stock_deducted_at' => 'datetime',
     ];
 
     /**
