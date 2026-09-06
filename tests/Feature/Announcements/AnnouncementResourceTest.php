@@ -233,3 +233,34 @@ it('never lets the read receipts be edited or deleted from the panel', function 
     // evidence of anything.
     expect($relationManager->instance()->isReadOnly())->toBeTrue();
 });
+
+/**
+ * deploy.sh grants production permissions by reading
+ * ShieldSeeder::getRolesWithPermissions() — that map is the only route a
+ * Shield permission has onto a live database. A resource missing from it
+ * ships with a perfectly good policy and no way for anyone to be granted
+ * it, so it silently never appears in the sidebar on production. That is
+ * exactly what happened on this feature's first deploy, and it is the same
+ * failure deploy.sh's own comment describes having hit before.
+ *
+ * This test grants nothing by hand: if the seeder map regresses, it fails.
+ */
+it('ships the announcement permissions in ShieldSeeder so a deploy actually grants them', function () {
+    $this->seed(ShieldSeeder::class);
+
+    foreach (['super_admin', 'admin', 'manager'] as $roleName) {
+        $role = collect(ShieldSeeder::getRolesWithPermissions())->firstWhere('name', $roleName);
+
+        expect($role['permissions'])->toContain('ViewAny:Announcement')
+            ->and($role['permissions'])->toContain('Create:Announcement')
+            ->and($role['permissions'])->toContain('Update:Announcement');
+    }
+
+    // End to end: a manager who was granted nothing by hand can still open
+    // the resource, because the seeder alone gave it to them.
+    $manager = announcementStaff('manager');
+
+    Livewire::actingAs($manager)
+        ->test(ListAnnouncements::class)
+        ->assertSuccessful();
+});
