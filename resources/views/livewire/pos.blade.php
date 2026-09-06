@@ -952,8 +952,11 @@ new class extends Component {
         };
 
         $buildMenuItems = function () {
+            // .inventory is what MenuItem::getAvailableStockAttribute()
+            // reads for its portions figure — without it that accessor
+            // lazy-loads one query per recipe ingredient, per tile.
             $query = \App\Models\MenuItem::where('available_for_sale', true)
-                ->with(['recipes.ingredient']);
+                ->with(['recipes.ingredient.inventory']);
 
             if (!empty($this->search))
                 $query->where(fn($q) => $q->where('name', 'like', "%{$this->search}%")->orWhere('sku', 'like', "%{$this->search}%"));
