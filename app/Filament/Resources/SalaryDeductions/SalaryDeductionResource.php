@@ -18,9 +18,7 @@ class SalaryDeductionResource extends Resource
 {
     protected static ?string $model = SalaryDeduction::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
-
-    protected static ?string $navigationGroup = 'User Management'; 
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-banknotes'; 
 
     public static function form(Schema $schema): Schema
     {

@@ -18,9 +18,7 @@ class AttendanceLogResource extends Resource
 {
     protected static ?string $model = AttendanceLog::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
-
-    protected static ?string $navigationGroup = 'Staff Shifts Report'; // Put it near shift reports or similar, or just leave it out. Let's leave it out.
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clock';
 
     public static function form(Schema $schema): Schema
     {
