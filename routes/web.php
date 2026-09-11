@@ -1,10 +1,18 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ZKTecoController;
+use Illuminate\Support\Facades\Route;
 
+// ZKTeco ADMS (iclock push). The terminal has no session, no cookies and no
+// CSRF token, so every POST here is exempted. Order matters to nothing, but
+// the GET on /iclock/cdata is the handshake that turns the device icon green —
+// without it the router answers a GET to that URI with 405 Method Not Allowed
+// and the terminal never proceeds to the other three endpoints.
+Route::get('/iclock/cdata', [ZKTecoController::class, 'handshake']);
 Route::get('/iclock/getrequest', [ZKTecoController::class, 'getRequest']);
 Route::post('/iclock/cdata', [ZKTecoController::class, 'receiveData'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+Route::post('/iclock/devicecmd', [ZKTecoController::class, 'deviceCommand'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 // PWA Manifest - must be publicly accessible
