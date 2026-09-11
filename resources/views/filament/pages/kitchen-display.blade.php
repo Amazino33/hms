@@ -135,7 +135,7 @@
                             <div class="flex justify-between items-start">
                                 <div>
                                     <div class="font-medium text-gray-900 dark:text-white">{{ $order->order_number }}</div>
-                                    <div class="text-sm text-gray-500 dark:text-gray-400">{{ $order->created_at->format('H:i') }}</div>
+                                    <div class="text-sm text-gray-500 dark:text-gray-400">{{ $order->created_at->venueTime()->format('H:i') }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-400">{{ $order->origin_label }}</div>
                                 </div>
                                 <div class="text-right">

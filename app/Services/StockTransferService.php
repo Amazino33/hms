@@ -9,6 +9,7 @@ use App\Models\IngredientTransferItem;
 use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
+use App\Models\Shift;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
 use App\Models\TransferDiscrepancy;
@@ -19,6 +20,118 @@ use Illuminate\Support\Str;
 
 class StockTransferService
 {
+    /**
+     * The floor-custodian roles whose receiving is bound to a shift and to
+     * a single warehouse, mapped to the Shift `type` that puts them on
+     * duty. Anyone outside this list (storekeeper, super_admin, or a role
+     * a manager has granted the Receive Transfers page to) receives under
+     * the page permission alone, exactly as before — they hold no shift to
+     * check and no single warehouse to be confined to.
+     */
+    public const CUSTODIAN_ROLE_SHIFT_TYPE = [
+        'bartender' => 'bartender',
+        'chef' => 'chef',
+    ];
+
+    /**
+     * Roles that receive across every warehouse with no shift requirement.
+     * Checked FIRST, so an account holding both storekeeper and bartender
+     * keeps the storekeeper's wider reach rather than being narrowed to
+     * the bar — the precedence Receive Transfers already used.
+     */
+    private const UNRESTRICTED_ROLES = ['storekeeper', 'super_admin'];
+
+    /**
+     * Which custodian role this user receives as, or null if they receive
+     * unrestricted (storekeeper/admin) or aren't a custodian at all.
+     */
+    public static function custodianRoleFor(?User $user): ?string
+    {
+        if (! $user || $user->hasAnyRole(self::UNRESTRICTED_ROLES)) {
+            return null;
+        }
+
+        foreach (array_keys(self::CUSTODIAN_ROLE_SHIFT_TYPE) as $role) {
+            if ($user->hasRole($role)) {
+                return $role;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The one warehouse a custodian role may ever receive into. Resolved
+     * through InventoryService rather than re-deriving "first/second
+     * consumer warehouse" locally — Receive Transfers used to keep its own
+     * copy of that positional logic, which could drift out of step with
+     * the same question asked anywhere else in the app.
+     */
+    public static function custodianWarehouseId(string $role): ?int
+    {
+        return match ($role) {
+            'bartender' => InventoryService::getBarWarehouseId(),
+            'chef' => InventoryService::getKitchenWarehouseId(),
+            default => null,
+        };
+    }
+
+    /**
+     * The custodian shift putting this user on duty right now, or null.
+     */
+    public static function activeCustodianShiftFor(User $user, string $role): ?Shift
+    {
+        $type = self::CUSTODIAN_ROLE_SHIFT_TYPE[$role] ?? null;
+
+        if (! $type) {
+            return null;
+        }
+
+        return Shift::query()
+            ->where('user_id', $user->id)
+            ->activeNonStale($type)
+            ->latest('started_at')
+            ->first();
+    }
+
+    /**
+     * The single gate every receive path goes through — page button, the
+     * whole-transfer route, and bulk receive alike — so no route can be
+     * the loose one. Returns the shift id to stamp on the receipt, or
+     * null for an unrestricted receiver who holds no shift.
+     *
+     * Two rules, both hard:
+     *  - a custodian may only receive into their OWN warehouse, so a chef
+     *    can never close out a bar line (or the reverse) and quietly move
+     *    stock onto someone else's shelf;
+     *  - a custodian must be on duty, because receiving credits the
+     *    warehouse the moment it happens and it is the person on shift who
+     *    then answers for that stock at the next count.
+     */
+    public static function resolveReceivingShiftId(User $user, StockTransfer $transfer): ?int
+    {
+        $role = self::custodianRoleFor($user);
+
+        if (! $role) {
+            return null;
+        }
+
+        $ownWarehouseId = self::custodianWarehouseId($role);
+        $destination = $transfer->toWarehouse?->name ?? "warehouse #{$transfer->to_warehouse_id}";
+
+        if ($ownWarehouseId !== null && (int) $transfer->to_warehouse_id !== (int) $ownWarehouseId) {
+            throw new \Exception("This transfer is going to {$destination}, not to your own store — only the custodian on duty there can receive it.");
+        }
+
+        $shift = self::activeCustodianShiftFor($user, $role);
+
+        if (! $shift) {
+            throw new \Exception("You are not on shift. Stock can only be received by the {$role} currently on duty — receiving while off shift puts the stock on someone else's count.");
+        }
+
+        return $shift->id;
+    }
+
     /**
      * How many transfers are still sitting unresolved (never opened, or
      * only partly received) at a given destination warehouse — used to
@@ -200,23 +313,48 @@ class StockTransferService
      */
     public function receiveTransfer(StockTransfer $transfer, int $receivedByUserId): StockTransfer
     {
-        return DB::transaction(function () use ($transfer, $receivedByUserId) {
+        $receiver = User::findOrFail($receivedByUserId);
+        $shiftId = self::resolveReceivingShiftId($receiver, $transfer);
+
+        return DB::transaction(function () use ($transfer, $receivedByUserId, $shiftId) {
             if ($transfer->status !== 'pending' && $transfer->status !== 'sent') {
                 throw new \Exception('Transfer cannot be received.');
             }
 
             foreach ($transfer->items as $item) {
                 $this->moveProductStock($transfer, $item, $receivedByUserId);
+                $this->stampFullReceipt($item, $receivedByUserId, $shiftId);
             }
 
             foreach ($transfer->ingredientItems as $item) {
                 $this->moveIngredientStock($transfer, $item, $receivedByUserId);
+                $this->stampFullReceipt($item, $receivedByUserId, $shiftId);
             }
 
             $transfer->update(['status' => 'received']);
 
             return $transfer;
         });
+    }
+
+    /**
+     * The all-or-nothing path moved the stock but left every line's
+     * received_quantity/outcome/received_by/received_at untouched, so a
+     * bulk-received transfer showed up in history with a blank received
+     * column and no receipt trail at all — the per-line path
+     * (receiveTransferLine) was the only one that ever recorded any of it.
+     * This receipt is a full one by definition: nothing here can be short,
+     * since the whole transfer moved or the whole transaction rolled back.
+     */
+    private function stampFullReceipt(StockTransferItem|IngredientTransferItem $item, int $receivedByUserId, ?int $shiftId): void
+    {
+        $item->update([
+            'received_quantity' => $item->quantity,
+            'outcome' => 'received_full',
+            'received_by' => $receivedByUserId,
+            'received_at' => now(),
+            'received_shift_id' => $shiftId,
+        ]);
     }
 
     private function moveProductStock(StockTransfer $transfer, StockTransferItem $item, int $userId): void
@@ -332,7 +470,10 @@ class StockTransferService
      */
     public function receiveTransferLine(StockTransferItem|IngredientTransferItem $item, float $receivedBaseQty, int $receivedByUserId): StockTransferItem|IngredientTransferItem
     {
-        return DB::transaction(function () use ($item, $receivedBaseQty, $receivedByUserId) {
+        $receiver = User::findOrFail($receivedByUserId);
+        $shiftId = self::resolveReceivingShiftId($receiver, $item->transfer);
+
+        return DB::transaction(function () use ($item, $receivedBaseQty, $receivedByUserId, $shiftId) {
             $item = $item->fresh();
             $transfer = $item->transfer;
 
@@ -369,6 +510,7 @@ class StockTransferService
                 'outcome' => $outcome,
                 'received_by' => $receivedByUserId,
                 'received_at' => now(),
+                'received_shift_id' => $shiftId,
             ]);
 
             if ($shortfall > 0) {

@@ -162,7 +162,7 @@ class AnnouncementBoard extends Component
                 'body' => $a->body,
                 'severity' => $a->severity,
                 'must_acknowledge' => $a->must_acknowledge,
-                'published_at' => $a->published_at?->format('M j, Y g:ia'),
+                'published_at' => $a->published_at?->venueTime()->format('M j, Y g:ia'),
                 'author' => $a->creator?->name,
             ])
             ->values()

@@ -63,6 +63,20 @@ Flow: a device is trusted first (shared kiosk via a one-time registration code �
 
 `app/Support/BusinessDay.php` defines the trading day as closing at 9am `Africa/Lagos` (fixed UTC+1) rather than the more typical 4am, so a 1am sale belongs to "last night" and overnight staff still have until mid-morning to settle up, hand over, and reconcile before that business day closes out from under them. **Every date boundary in owner/CEO reporting must go through `BusinessDay`, never `Carbon::today()/yesterday()`** — otherwise the snapshot and the live dashboard disagree with each other for the same business day. Shifts themselves are unscheduled (no fixed handover clock); this boundary is purely a reporting convention layered on top.
 
+It is no longer only a CEO-reporting convention: **staff-facing daily figures use it too.** `StaffReportService::staffDailyHistory()` (My History) and `expectedCashByDestination()` (the staff cash widget) both key on `BusinessDay`, so one trading night stays in one row instead of splitting at midnight. When adding another "per day" staff figure, group it the same way — and note `BusinessDay::boundsFor()` is half-open `[start, end)`, so compare with `>= $start` and `< $end`, never an inclusive `whereBetween`, or a 9am-sharp record lands in two days at once.
+
+### Timestamps: stored in UTC, displayed in venue time
+
+`config('app.timezone')` is `UTC` and stays that way — `now()` writes true UTC no matter what the server's own clock is set to, and UTC storage is what keeps date comparisons in queries honest. Lagos is UTC+1, so **anything shown to a human must be converted on the way out** or it reads an hour early, and anything between midnight and 1am Lagos shows under the previous date.
+
+`app/Support/VenueTime.php` owns that conversion:
+
+- **Blade / PHP display** — `$instant->venueTime()->format(...)`, or `VenueTime::format($instant)` when you also want the null placeholder. `venueTime()` is a macro on both `Carbon` and `CarbonImmutable`, and it is **idempotent** (`setTimezone()` on an already-Lagos value is a no-op), so it is always safe to add at a display site.
+- **Filament** — `FilamentTimezone::set()` in `AppServiceProvider` already covers every `->dateTime()` column, infolist entry and date-time picker in both panels. Plain `->date()` columns do *not* consult it, but every one in this repo points at a real `date` column, where there is nothing to convert.
+- **Never convert** cache keys, filenames, `groupBy` keys, filter defaults, or anything fed back into a query — those want the raw UTC value. `diffForHumans()` needs no conversion either; an interval between two instants is timezone-independent.
+
+Storage was never wrong, so there is nothing to migrate: converting at the display layer makes the entire existing history read correctly too.
+
 ### Enforced conventions (checked by an architecture test)
 
 `tests/Feature/Architecture/NoBareAbortTest.php` fails the suite if any `abort()` call exists outside `app/Http/Middleware/`. Every other guard in the app (Livewire, Filament, services) must surface failures through `UserFeedback` or `Filament\Notifications\Notification` instead — a bare `abort()` drops the user on a blank framework error page with no cause/remedy message, which this system treats as a bug class, not a style preference.

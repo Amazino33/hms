@@ -89,8 +89,8 @@
                     <tbody>
                         @forelse($this->shiftRows() as $row)
                             <tr class="border-b border-gray-100 dark:border-gray-700/50">
-                                <td class="p-2">{{ $row['started_at']?->format('M j, Y g:ia') }}</td>
-                                <td class="p-2">{{ $row['date']->format('M j, Y g:ia') }}</td>
+                                <td class="p-2">{{ $row['started_at']?->venueTime()->format('M j, Y g:ia') }}</td>
+                                <td class="p-2">{{ $row['date']->venueTime()->format('M j, Y g:ia') }}</td>
                                 <td class="p-2 text-right">{{ $row['orders_count'] }}</td>
                                 <td class="p-2 text-right">₦{{ number_format($row['total_sales'], 2) }}</td>
                                 <td class="p-2 text-right text-green-600">₦{{ number_format($row['commission'], 2) }}</td>
@@ -121,7 +121,7 @@
                         @forelse($this->orderRows() as $row)
                             <tr class="border-b border-gray-100 dark:border-gray-700/50">
                                 <td class="p-2">{{ $row['order_number'] }}</td>
-                                <td class="p-2">{{ $row['date']?->format('M j, Y g:ia') }}</td>
+                                <td class="p-2">{{ $row['date']?->venueTime()->format('M j, Y g:ia') }}</td>
                                 <td class="p-2 capitalize">{{ $row['status'] }}</td>
                                 <td class="p-2 text-right">₦{{ number_format($row['total_amount'], 2) }}</td>
                                 <td class="p-2 text-right text-green-600">₦{{ number_format($row['commission'], 2) }}</td>
@@ -145,7 +145,7 @@
                     <tbody>
                         @forelse($this->debtRows() as $row)
                             <tr class="border-b border-gray-100 dark:border-gray-700/50">
-                                <td class="p-2">{{ $row['date']?->format('M j, Y g:ia') }}</td>
+                                <td class="p-2">{{ $row['date']?->venueTime()->format('M j, Y g:ia') }}</td>
                                 <td class="p-2 capitalize">{{ str_replace('_', ' ', $row['reason']) }}</td>
                                 <td class="p-2 capitalize">{{ str_replace('_', ' ', $row['status']) }}</td>
                                 <td class="p-2 text-right">₦{{ number_format($row['amount'], 2) }}</td>

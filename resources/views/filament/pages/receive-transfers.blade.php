@@ -156,6 +156,7 @@
                                                 <span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-md text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</span>
                                             </div>
                                             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Created by: {{ $t->user->name ?? 'Unknown' }}</p>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400">Sent: {{ $t->sent_at_label ?? '—' }}</p>
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-4">
@@ -188,6 +189,7 @@
                                                 <span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-md text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</span>
                                             </div>
                                             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Created by: {{ $t->user->name ?? 'Unknown' }}</p>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400">Sent: {{ $t->sent_at_label ?? '—' }}</p>
                                         </div>
                                         <div class="text-right">
                                             <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">{{ $t->items->count() + $t->ingredientItems->count() }}</p>
@@ -327,6 +329,15 @@
                                         <h4 class="font-bold text-gray-900 dark:text-white">{{ $t->transfer_number }}</h4>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">From: {{ $t->fromWarehouse->name ?? $t->from_warehouse_id }} · To: {{ $t->toWarehouse->name ?? $t->to_warehouse_id }}</p>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">Created by: {{ $t->user->name ?? 'Unknown' }}</p>
+                                        {{-- Sent and received sit side by side deliberately: the
+                                             answer people actually come to this history for is how
+                                             long stock sat in transit, which neither date gives
+                                             alone. Stacks on narrow screens rather than wrapping
+                                             mid-date. --}}
+                                        <div class="flex flex-col sm:flex-row sm:items-center gap-x-4 mt-1">
+                                            <span class="text-sm text-gray-500 dark:text-gray-400">Sent: <span class="font-medium text-gray-700 dark:text-gray-300">{{ $t->sent_at_label ?? '—' }}</span></span>
+                                            <span class="text-sm text-gray-500 dark:text-gray-400">Received: <span class="font-medium text-gray-700 dark:text-gray-300">{{ $t->received_at_label ?? '—' }}</span></span>
+                                        </div>
                                     </div>
                                     <span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Received</span>
                                 </div>
@@ -339,6 +350,9 @@
                                             <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($it->received_quantity, 2), '0'), '.') }}</span>
                                             @if($it->receivedBy)
                                                 <span class="text-gray-500 dark:text-gray-400">by {{ $it->receivedBy->name }}</span>
+                                            @endif
+                                            @if($it->received_at_label)
+                                                <span class="text-gray-500 dark:text-gray-400">on {{ $it->received_at_label }}</span>
                                             @endif
                                             <span class="px-2 py-0.5 text-xs font-semibold rounded-full
                                                 @if($it->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300

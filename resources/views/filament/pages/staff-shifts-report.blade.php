@@ -107,9 +107,9 @@
                                                         @endif
                                                     </div>
                                                     <div class="text-sm text-gray-600 dark:text-gray-400">
-                                                        Started: {{ $shift['started_at']->format('M j, Y g:i A') }}
+                                                        Started: {{ $shift['started_at']->venueTime()->format('M j, Y g:i A') }}
                                                         @if($shift['ended_at'])
-                                                            • Ended: {{ $shift['ended_at']->format('g:i A') }}
+                                                            • Ended: {{ $shift['ended_at']->venueTime()->format('g:i A') }}
                                                             • Duration: {{ $shift['duration'] }} minutes
                                                         @else
                                                             • Duration: {{ $shift['started_at']->diffForHumans(now(), true) }}

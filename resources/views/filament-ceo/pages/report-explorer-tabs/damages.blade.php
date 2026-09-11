@@ -45,7 +45,7 @@
                     <td class="p-2">{{ $row['report']->warehouse?->name }}</td>
                     <td class="p-2">{{ $row['report']->reportedBy?->name }}</td>
                     <td class="p-2">{{ $row['report']->resolvedBy?->name }}</td>
-                    <td class="p-2">{{ $row['report']->resolved_at?->format('M j, H:i') }}</td>
+                    <td class="p-2">{{ $row['report']->resolved_at?->venueTime()->format('M j, H:i') }}</td>
                 </tr>
             @empty
                 <tr><td colspan="7" class="p-4 text-center text-gray-400">None in this range.</td></tr>

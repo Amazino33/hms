@@ -182,7 +182,7 @@ class WaiterLedger extends Page implements HasTable
                         ->limit(100)
                         ->get()
                         ->mapWithKeys(fn (Shift $shift) => [
-                            $shift->id => ($shift->user->name ?? 'Unknown') . ' — ' . $shift->started_at->format('M j, g:i A'),
+                            $shift->id => ($shift->user->name ?? 'Unknown') . ' — ' . $shift->started_at->venueTime()->format('M j, g:i A'),
                         ]))
                     ->query(fn (Builder $query, array $data): Builder => isset($data['value']) && $data['value'] !== ''
                         ? $query->whereHas('order', fn ($q) => $q->where('shift_id', $data['value']))

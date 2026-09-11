@@ -198,6 +198,9 @@
                                                             @if($line->receivedBy)
                                                                 <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
                                                             @endif
+                                                            @if($line->received_at_label)
+                                                                <span class="text-gray-500 dark:text-gray-400">on {{ $line->received_at_label }}</span>
+                                                            @endif
                                                         @endif
                                                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full
                                                             @if($line->outcome === 'received_full') bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
@@ -223,6 +226,9 @@
                                                             <span class="text-gray-500 dark:text-gray-400">· received {{ rtrim(rtrim(number_format($line->received_quantity, 2), '0'), '.') }}</span>
                                                             @if($line->receivedBy)
                                                                 <span class="text-gray-500 dark:text-gray-400">by {{ $line->receivedBy->name }}</span>
+                                                            @endif
+                                                            @if($line->received_at_label)
+                                                                <span class="text-gray-500 dark:text-gray-400">on {{ $line->received_at_label }}</span>
                                                             @endif
                                                         @endif
                                                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full
@@ -256,7 +262,15 @@
                                             @endif">
                                             {{ str_replace('_', ' ', ucfirst($transfer->status ?? 'unknown')) }}
                                         </span>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">{{ $transfer->created_at->diffForHumans() }}</p>
+                                        {{-- Was a bare diffForHumans(). "3 days ago" is fine for
+                                             glancing at today's queue and useless for settling an
+                                             argument about a specific delivery, so this now matches
+                                             the absolute sent/received pair the bartender's history
+                                             shows — both screens quoting the same timestamps. --}}
+                                        <div class="flex flex-col items-start md:items-end">
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Sent: {{ $transfer->sent_at_label ?? '—' }}</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Received: {{ $transfer->received_at_label ?? '—' }}</p>
+                                        </div>
 
                                         @if(in_array($transfer->status, ['pending', 'sent'], true))
                                             @if($cancellingTransferId === $transfer->id)

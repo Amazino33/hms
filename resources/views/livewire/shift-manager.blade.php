@@ -122,11 +122,11 @@
                     <div class="space-y-2 text-xs">
                         <div class="flex justify-between">
                             <span class="text-green-700 dark:text-green-400">Started:</span>
-                            <span class="text-green-800 dark:text-green-300 font-medium">{{ $currentShift->started_at->format("g:i A") }}</span>
+                            <span class="text-green-800 dark:text-green-300 font-medium">{{ $currentShift->started_at->venueTime()->format("g:i A") }}</span>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-green-700 dark:text-green-400">Date:</span>
-                            <span class="text-green-800 dark:text-green-300 font-medium">{{ $currentShift->started_at->format("M j, Y") }}</span>
+                            <span class="text-green-800 dark:text-green-300 font-medium">{{ $currentShift->started_at->venueTime()->format("M j, Y") }}</span>
                         </div>
                     </div>
 

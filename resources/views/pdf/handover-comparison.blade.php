@@ -46,14 +46,14 @@
                 <div class="meta-label">Outgoing custodian</div>
                 {{ $session->outgoingUser?->name ?? '—' }}
                 @if ($session->confirmed_by_outgoing_at)
-                    <br><span style="font-size:9px;color:#9ca3af">Confirmed {{ $session->confirmed_by_outgoing_at->format('d M Y H:i') }}</span>
+                    <br><span style="font-size:9px;color:#9ca3af">Confirmed {{ $session->confirmed_by_outgoing_at->venueTime()->format('d M Y H:i') }}</span>
                 @endif
             </td>
             <td>
                 <div class="meta-label">Incoming custodian</div>
                 {{ $session->incomingUser?->name ?? '—' }}
                 @if ($session->confirmed_by_incoming_at)
-                    <br><span style="font-size:9px;color:#9ca3af">Confirmed {{ $session->confirmed_by_incoming_at->format('d M Y H:i') }}</span>
+                    <br><span style="font-size:9px;color:#9ca3af">Confirmed {{ $session->confirmed_by_incoming_at->venueTime()->format('d M Y H:i') }}</span>
                 @endif
             </td>
             @if ($session->witnessUser)
@@ -64,7 +64,7 @@
             @endif
             <td>
                 <div class="meta-label">Sealed</div>
-                {{ $session->reviewed_at?->format('d M Y H:i') ?? '—' }}
+                {{ $session->reviewed_at?->venueTime()->format('d M Y H:i') ?? '—' }}
             </td>
         </tr>
     </table>
@@ -126,7 +126,7 @@
     </table>
 
     <div class="footer">
-        Generated {{ now()->format('d M Y H:i') }} from the sealed record for session #{{ $session->id }}.
+        Generated {{ now()->venueTime()->format('d M Y H:i') }} from the sealed record for session #{{ $session->id }}.
         Figures are frozen at seal time and do not reflect any subsequent price changes. This is a system-generated report.
     </div>
 </body>

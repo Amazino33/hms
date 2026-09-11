@@ -907,7 +907,7 @@ new class extends Component {
             'tableName' => $tableName,
             'items' => array_values($allItems),
             'total' => $total,
-            'date' => now()->format('M j, Y g:i A'),
+            'date' => now()->venueTime()->format('M j, Y g:i A'),
             'cashier' => auth()->user()?->name,
             'company' => [
                 'name' => $company?->name,
@@ -1147,7 +1147,7 @@ new class extends Component {
                         <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                         <span class="text-sm font-medium text-green-700 dark:text-green-300">Shift Active</span>
                         <span class="text-xs text-gray-500 dark:text-gray-400">
-                            Started: {{ auth()->user()->currentShift()->started_at->format('g:i A') }}
+                            Started: {{ auth()->user()->currentShift()->started_at->venueTime()->format('g:i A') }}
                         </span>
                     </div>
                 @else
@@ -1181,7 +1181,7 @@ new class extends Component {
                     </button>
                 @endif
                 <div class="text-xs text-gray-500 dark:text-gray-400">
-                    {{ now()->format('M j, Y g:i A') }}
+                    {{ now()->venueTime()->format('M j, Y g:i A') }}
                 </div>
             </div>
         </div>

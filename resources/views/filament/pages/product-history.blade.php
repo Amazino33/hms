@@ -50,7 +50,7 @@
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             @forelse ($this->transactions as $txn)
                                 <tr>
-                                    <td class="px-4 py-2">{{ $txn->created_at?->format('M j, Y g:i A') }}</td>
+                                    <td class="px-4 py-2">{{ $txn->created_at?->venueTime()->format('M j, Y g:i A') }}</td>
                                     <td class="px-4 py-2"><span class="px-2 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700">{{ $txn->type }}</span></td>
                                     <td class="px-4 py-2">{{ $txn->warehouse?->name ?? '—' }}</td>
                                     <td class="px-4 py-2 text-right">{{ $txn->quantity }}</td>
@@ -76,7 +76,7 @@
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             @forelse ($this->countSessionItems as $item)
                                 <tr>
-                                    <td class="px-4 py-2">{{ $item->created_at?->format('M j, Y g:i A') }}</td>
+                                    <td class="px-4 py-2">{{ $item->created_at?->venueTime()->format('M j, Y g:i A') }}</td>
                                     <td class="px-4 py-2">{{ $item->session?->type ?? '—' }}</td>
                                     <td class="px-4 py-2">{{ $item->session?->warehouse?->name ?? '—' }}</td>
                                     <td class="px-4 py-2 text-right">{{ $item->expected_quantity_at_open }}</td>
@@ -100,7 +100,7 @@
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             @forelse ($this->stockAdjustments as $adj)
                                 <tr>
-                                    <td class="px-4 py-2">{{ $adj->created_at?->format('M j, Y g:i A') }}</td>
+                                    <td class="px-4 py-2">{{ $adj->created_at?->venueTime()->format('M j, Y g:i A') }}</td>
                                     <td class="px-4 py-2">{{ str($adj->reason)->replace('_', ' ')->title() }}</td>
                                     <td class="px-4 py-2 text-right {{ $adj->quantity_change >= 0 ? 'text-success-600' : 'text-danger-600' }}">{{ $adj->quantity_change }}</td>
                                     <td class="px-4 py-2">{{ $adj->status }}</td>
@@ -126,7 +126,7 @@
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             @forelse ($this->deletionRequests as $req)
                                 <tr>
-                                    <td class="px-4 py-2">{{ $req->created_at?->format('M j, Y g:i A') }}</td>
+                                    <td class="px-4 py-2">{{ $req->created_at?->venueTime()->format('M j, Y g:i A') }}</td>
                                     <td class="px-4 py-2">{{ $req->reason }}</td>
                                     <td class="px-4 py-2">{{ $req->status }}</td>
                                     <td class="px-4 py-2">{{ $req->requestedBy?->name ?? '—' }}</td>

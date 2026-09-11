@@ -147,7 +147,7 @@ class SalesTrace extends Page
                 'from' => CarbonImmutable::parse($window['from'] ?? $session->opened_at),
                 'to' => CarbonImmutable::parse($window['to']),
                 'label' => $window['from']
-                    ? 'Exact count window: '.CarbonImmutable::parse($window['from'])->format('M j, g:i A').' to '.CarbonImmutable::parse($window['to'])->format('M j, g:i A')
+                    ? 'Exact count window: '.CarbonImmutable::parse($window['from'])->venueTime()->format('M j, g:i A').' to '.CarbonImmutable::parse($window['to'])->venueTime()->format('M j, g:i A')
                     : 'No earlier reviewed count at this warehouse — falling back to this session\'s open time.',
                 'exact' => (bool) $window['from'],
             ];

@@ -41,7 +41,7 @@
                 <div class="text-sm text-gray-600 dark:text-gray-300">
                     Paid via {{ ucfirst($line->payment_method) }}
                     @if ($line->payment_reference) · Ref: {{ $line->payment_reference }} @endif
-                    on {{ $line->paid_at?->format('M j, Y g:i A') }}
+                    on {{ $line->paid_at?->venueTime()->format('M j, Y g:i A') }}
                 </div>
 
                 <div class="flex flex-wrap items-end gap-2 pt-2">
@@ -59,7 +59,7 @@
                 </div>
             @elseif ($line->status === 'acknowledged')
                 <div class="text-sm text-success-600 dark:text-success-400">
-                    You confirmed receipt on {{ $line->acknowledged_at?->format('M j, Y g:i A') }}.
+                    You confirmed receipt on {{ $line->acknowledged_at?->venueTime()->format('M j, Y g:i A') }}.
                 </div>
             @elseif ($line->status === 'disputed')
                 <div class="text-sm text-danger-600 dark:text-danger-400">

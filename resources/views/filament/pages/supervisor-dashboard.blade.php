@@ -61,7 +61,7 @@
             <h3 class="font-bold text-gray-900 dark:text-white mb-3">Cashier sessions awaiting close-out</h3>
             @forelse($pendingCashierSessions as $session)
                 <div class="flex justify-between items-center border-t border-gray-100 dark:border-gray-700 py-2">
-                    <div class="text-sm font-bold text-gray-900 dark:text-white">{{ $session->user?->name }} — declared at {{ $session->declared_at->format('g:ia') }}</div>
+                    <div class="text-sm font-bold text-gray-900 dark:text-white">{{ $session->user?->name }} — declared at {{ $session->declared_at->venueTime()->format('g:ia') }}</div>
                     <button type="button" wire:click="openSessionClose({{ $session->id }})" class="px-3 py-1 rounded-lg bg-red-600 text-white font-bold text-xs">Confirm Close</button>
                 </div>
             @empty

@@ -992,7 +992,7 @@
         @if($session->status === 'cancelled')
             <div class="max-w-md mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center">
                 <p class="text-gray-600 dark:text-gray-300">
-                    This session was cancelled{{ $session->cancelledBy ? ' by ' . $session->cancelledBy->name : '' }}{{ $session->cancelled_at ? ' on ' . $session->cancelled_at->format('d M Y H:i') : '' }}.
+                    This session was cancelled{{ $session->cancelledBy ? ' by ' . $session->cancelledBy->name : '' }}{{ $session->cancelled_at ? ' on ' . $session->cancelled_at->venueTime()->format('d M Y H:i') : '' }}.
                     @if($session->cancelled_reason)
                         <span class="block text-sm mt-2 italic">"{{ $session->cancelled_reason }}"</span>
                     @endif

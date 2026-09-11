@@ -11,7 +11,7 @@
                     <div class="text-sm text-gray-500 dark:text-gray-400">
                         Prepared by {{ $run->preparer?->name ?? '—' }}
                         @if ($run->sealed_at)
-                            · Sealed {{ $run->sealed_at->format('M j, Y g:i A') }}
+                            · Sealed {{ $run->sealed_at->venueTime()->format('M j, Y g:i A') }}
                         @endif
                     </div>
                 </div>
@@ -28,7 +28,7 @@
 
             @if ($run->status === 'voided')
                 <div class="rounded-lg bg-danger-50 p-3 text-sm text-danger-700 dark:bg-danger-500/10 dark:text-danger-300">
-                    Voided by {{ $run->voider?->name ?? '—' }} on {{ $run->voided_at?->format('M j, Y g:i A') }} — {{ $run->void_reason }}
+                    Voided by {{ $run->voider?->name ?? '—' }} on {{ $run->voided_at?->venueTime()->format('M j, Y g:i A') }} — {{ $run->void_reason }}
                     @if ($run->supersededBy)
                         <a href="/admin/payroll-run-detail?run_id={{ $run->supersededBy->id }}" class="ml-2 underline font-medium">View the reissued run →</a>
                     @endif

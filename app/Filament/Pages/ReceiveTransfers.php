@@ -35,27 +35,16 @@ class ReceiveTransfers extends Page
         $warehouseId = null;
         $warehouseName = null;
 
-        if ($user->hasRole('bartender')) {
-            // Find the bar warehouse (consumer type, typically the first consumer warehouse)
-            $barWarehouse = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->first();
-            if ($barWarehouse) {
-                $warehouseId = $barWarehouse->id;
-                $warehouseName = $barWarehouse->name;
-            }
-        }
+        // Resolved through StockTransferService (which defers to
+        // InventoryService) rather than re-deriving "first/second consumer
+        // warehouse" here — this page used to carry its own copy of that
+        // positional logic, free to drift away from the answer the rest of
+        // the app gets to the same question.
+        $custodianRole = StockTransferService::custodianRoleFor($user);
 
-        if ($user->hasRole('chef')) {
-            // Find the kitchen warehouse (consumer type, typically the second consumer warehouse)
-            $consumerWarehouses = \App\Models\WareHouse::where('type', 'consumer')->orderBy('id')->get();
-            if ($consumerWarehouses->count() > 1) {
-                $kitchenWarehouse = $consumerWarehouses[1]; // Second consumer warehouse
-                $warehouseId = $kitchenWarehouse->id;
-                $warehouseName = $kitchenWarehouse->name;
-            } elseif ($consumerWarehouses->count() == 1) {
-                // If only one consumer warehouse, use it for chef
-                $warehouseId = $consumerWarehouses[0]->id;
-                $warehouseName = $consumerWarehouses[0]->name;
-            }
+        if ($custodianRole) {
+            $warehouseId = StockTransferService::custodianWarehouseId($custodianRole);
+            $warehouseName = $warehouseId ? \App\Models\WareHouse::find($warehouseId)?->name : null;
         }
 
         if (! $this->ready) {
@@ -138,8 +127,9 @@ class ReceiveTransfers extends Page
     /**
      * Receive a single transfer line for a partial/line-by-line receipt —
      * the primary receive path now. The whole-transfer bulk-receive action
-     * (StockTransferController::bulkReceive, still calling the untouched
-     * all-or-nothing receiveTransfer()) stays available for full receipts.
+     * (StockTransferController::bulkReceive, calling the all-or-nothing
+     * receiveTransfer()) stays available for full receipts, and goes
+     * through the same custodian shift/warehouse gate.
      */
     public function receiveLine(int $itemId, string $type, mixed $receivedQty): void
     {
@@ -176,8 +166,30 @@ class ReceiveTransfers extends Page
         }
     }
 
+    /**
+     * Page permission decides whether the role may ever receive; the shift
+     * decides whether THIS person may right now. An off-shift bartender or
+     * chef is denied outright — not shown a read-only list — because
+     * receiving credits the warehouse the instant it happens, so anything
+     * they do here lands on the count of whoever is actually on duty. The
+     * page disappears from the sidebar with them.
+     *
+     * Storekeeper/super_admin (and any other role a manager grants this
+     * page to) hold no custodian shift and are unaffected.
+     */
     public static function canAccess(): bool
     {
-        return PermissionService::canAccessPage(self::class);
+        if (! PermissionService::canAccessPage(self::class)) {
+            return false;
+        }
+
+        $user = Auth::user();
+        $custodianRole = StockTransferService::custodianRoleFor($user);
+
+        if (! $custodianRole) {
+            return true;
+        }
+
+        return StockTransferService::activeCustodianShiftFor($user, $custodianRole) !== null;
     }
 }

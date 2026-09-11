@@ -5,6 +5,7 @@ use App\Models\Category;
 use App\Models\InventoryItem;
 use App\Models\PagePermission;
 use App\Models\Product;
+use App\Models\Shift;
 use App\Models\User;
 use App\Models\WareHouse;
 use App\Services\StockTransferService;
@@ -29,9 +30,25 @@ function grantReceiveTransfersAccess(User $user, string $role): void
     );
 }
 
+/**
+ * Bartenders and chefs now reach this page only while on duty, so every
+ * custodian fixture here has to put them on a shift first — the page
+ * grant alone stopped being enough.
+ */
+function putOnShiftForPastHistory(User $user, string $type): Shift
+{
+    return Shift::create([
+        'user_id' => $user->id,
+        'type' => $type,
+        'started_at' => now()->subHours(2),
+        'status' => 'active',
+    ]);
+}
+
 it('shows a bartender their own fully-received transfers in Past Transfers', function () {
     $bartender = User::factory()->create();
     grantReceiveTransfersAccess($bartender, 'bartender');
+    putOnShiftForPastHistory($bartender, 'bartender');
 
     $main = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
     $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);
@@ -61,6 +78,7 @@ it('shows a bartender their own fully-received transfers in Past Transfers', fun
 it('does not show a bartender a fully-received transfer that went to a different warehouse', function () {
     $bartender = User::factory()->create();
     grantReceiveTransfersAccess($bartender, 'bartender');
+    putOnShiftForPastHistory($bartender, 'bartender');
 
     $main = WareHouse::create(['name' => 'Main Store', 'type' => 'storage']);
     $bar = WareHouse::create(['name' => 'Bar', 'type' => 'consumer']);

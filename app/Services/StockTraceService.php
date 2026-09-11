@@ -493,7 +493,7 @@ class StockTraceService
 
         return [
             (float) $previousItem->counted_quantity,
-            "Counted in session #{$previous->id} on {$previous->reviewed_at?->format('M j, Y g:i A')}.",
+            "Counted in session #{$previous->id} on {$previous->reviewed_at?->venueTime()->format('M j, Y g:i A')}.",
         ];
     }
 

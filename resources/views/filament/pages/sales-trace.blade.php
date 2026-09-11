@@ -25,7 +25,7 @@
                     @foreach ($this->countSessions() as $session)
                         <option value="{{ $session->id }}">
                             #{{ $session->id }} · {{ $session->warehouse?->name ?? 'Unknown' }} ·
-                            {{ $session->opened_at?->format('M j, Y g:i A') }}
+                            {{ $session->opened_at?->venueTime()->format('M j, Y g:i A') }}
                         </option>
                     @endforeach
                 </select>
@@ -240,7 +240,7 @@
                                     <td class="px-4 py-2 pl-8 text-gray-600 dark:text-gray-300">
                                         {{ $movement['label'] }}
                                         <span class="text-xs text-gray-400">
-                                            · {{ $movement['at']?->format('M j, g:i A') }}{{ $movement['user_name'] ? ' · ' . $movement['user_name'] : '' }}
+                                            · {{ $movement['at']?->venueTime()->format('M j, g:i A') }}{{ $movement['user_name'] ? ' · ' . $movement['user_name'] : '' }}
                                         </span>
                                     </td>
                                     <td class="px-4 py-2 text-right {{ $movement['direction_known'] ? '' : 'text-warning-600 dark:text-warning-400' }}">

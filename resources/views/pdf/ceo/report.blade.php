@@ -24,7 +24,7 @@
         <div class="title">{{ $reportTitle }}</div>
         <div class="meta">
             {{ $filtersDescription }}<br>
-            Generated {{ $generatedAt->format('M j, Y g:ia') }} by {{ $generatedBy ?? 'System' }}
+            Generated {{ $generatedAt->venueTime()->format('M j, Y g:ia') }} by {{ $generatedBy ?? 'System' }}
         </div>
     </div>
 

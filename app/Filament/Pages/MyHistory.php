@@ -19,7 +19,9 @@ class MyHistory extends Page
         $user = Auth::user();
         $service = new StaffReportService();
 
-        // Last 30 days by default
+        // Last 30 business days by default — each row is one trading night
+        // (9am to 9am), so a sale taken at 1am stays with the shift that
+        // took it instead of jumping to the next morning's row.
         $history = $service->staffDailyHistory($user->id);
 
         return [

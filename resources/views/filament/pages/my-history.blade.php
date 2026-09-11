@@ -4,7 +4,14 @@
 @endphp
 
 <div class="p-6 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-    <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-white">My History — {{ $user->name }}</h2>
+    <h2 class="text-2xl font-bold mb-1 text-gray-900 dark:text-white">My History — {{ $user->name }}</h2>
+
+    {{-- Each row is a trading day, not a calendar day. Without saying so,
+         a sale taken at 1am looks like it has been filed under the wrong
+         date — it is under the night it was actually taken. --}}
+    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Each day below runs 9am to 9am, so anything sold after midnight stays with the night it was taken.
+    </p>
 
     @if(empty($history))
         <div class="text-gray-500 dark:text-gray-400">No history available for the selected period.</div>

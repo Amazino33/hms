@@ -100,7 +100,7 @@ class WaiterLedger extends Page
         return $this->csvResponse('waiter-ledger.csv', [
             'Date', 'Orders', 'Total Sales', 'Commission', 'Cash Declared', 'POS Total', 'Transfer Total', 'Shortfall', 'Shortfall Rate %', 'Running Debt Balance',
         ], $this->shiftRows()->map(fn ($r) => [
-            $r['date']->format('Y-m-d H:i'), $r['orders_count'], $r['total_sales'], $r['commission'], $r['cash_declared'],
+            $r['date']->venueTime()->format('Y-m-d H:i'), $r['orders_count'], $r['total_sales'], $r['commission'], $r['cash_declared'],
             $r['pos_total'], $r['transfer_total'], $r['shortfall'], $r['shortfall_rate_pct'], $r['running_debt_balance'],
         ]));
     }
@@ -130,7 +130,7 @@ class WaiterLedger extends Page
         ], [
             'Date', 'Orders', 'Total Sales', 'Commission', 'Cash Declared', 'POS Total', 'Transfer Total', 'Shortfall', 'Shortfall Rate %', 'Running Debt Balance',
         ], $this->shiftRows()->map(fn ($r) => [
-            $r['date']->format('Y-m-d H:i'), $r['orders_count'], number_format($r['total_sales'], 2), number_format($r['commission'], 2), number_format($r['cash_declared'], 2),
+            $r['date']->venueTime()->format('Y-m-d H:i'), $r['orders_count'], number_format($r['total_sales'], 2), number_format($r['commission'], 2), number_format($r['cash_declared'], 2),
             number_format($r['pos_total'], 2), number_format($r['transfer_total'], 2), number_format($r['shortfall'], 2),
             number_format($r['shortfall_rate_pct'], 2), number_format($r['running_debt_balance'], 2),
         ]));

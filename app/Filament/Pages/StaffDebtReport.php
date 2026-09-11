@@ -282,7 +282,7 @@ class StaffDebtReport extends Page
         $debts = $this->rows()->map(fn (array $r) => [
             'Debt',
             $r['business_day'],
-            $r['created_at']?->format('Y-m-d H:i'),
+            $r['created_at']?->venueTime()->format('Y-m-d H:i'),
             $r['staff_name'],
             $r['origin'] === 'handover' ? 'During handover' : 'Recorded by a person',
             $r['reason_label'],
@@ -301,7 +301,7 @@ class StaffDebtReport extends Page
         $shortages = $this->unresolvedShortages()->map(fn (array $r) => [
             'Unruled shortage',
             $r['business_day'],
-            $r['created_at']?->format('Y-m-d H:i'),
+            $r['created_at']?->venueTime()->format('Y-m-d H:i'),
             $r['staff_name'],
             'During handover',
             $r['item_name'],
@@ -452,7 +452,7 @@ class StaffDebtReport extends Page
             ],
             $this->unresolvedShortages()->map(fn (array $r) => [
                 $r['business_day'],
-                $r['created_at']?->format('Y-m-d H:i'),
+                $r['created_at']?->venueTime()->format('Y-m-d H:i'),
                 $r['staff_name'],
                 $r['warehouse'] ?? '',
                 $r['session_id'] ? '#'.$r['session_id'] : '',

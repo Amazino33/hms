@@ -440,7 +440,7 @@ class ReportExplorer extends Page
             ],
             'damages' => [
                 ['Item', 'Quantity', 'Cost', 'Warehouse', 'Reported By', 'Resolved By', 'Resolved At'],
-                $data['approved']->map(fn ($r) => [$r['report']->itemName(), $r['report']->quantity, $r['cost'], $r['report']->warehouse?->name, $r['report']->reportedBy?->name, $r['report']->resolvedBy?->name, $r['report']->resolved_at?->toDateTimeString()]),
+                $data['approved']->map(fn ($r) => [$r['report']->itemName(), $r['report']->quantity, $r['cost'], $r['report']->warehouse?->name, $r['report']->reportedBy?->name, $r['report']->resolvedBy?->name, $r['report']->resolved_at?->venueTime()->toDateTimeString()]),
             ],
             default => [[], collect()],
         };

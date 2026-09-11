@@ -13,7 +13,7 @@
                 @forelse($payments as $payment)
                     <tr class="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
                         <td class="px-4 py-2 text-gray-500">
-                            {{ $payment->paid_at ? \Carbon\Carbon::parse($payment->paid_at)->format('d M, h:i A') : 'N/A' }}
+                            {{ $payment->paid_at ? \Carbon\Carbon::parse($payment->paid_at)->venueTime()->format('d M, h:i A') : 'N/A' }}
                         </td>
                         <td class="px-4 py-2 font-medium">
                             {{ $payment->user->name ?? 'Unknown' }}

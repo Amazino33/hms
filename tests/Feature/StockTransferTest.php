@@ -26,6 +26,14 @@ it('allows storekeeper to create, send and allows recipient to receive transfer 
     $bartender = User::factory()->create();
     $bartender->assignRole('bartender');
 
+    // A bartender receives as the custodian on duty, so the shift is part
+    // of the fixture now, not an incidental detail: off shift, this same
+    // request is refused and the stock stays in transit.
+    \App\Models\Shift::create([
+        'user_id' => $bartender->id, 'type' => 'bartender',
+        'started_at' => now()->subHours(2), 'status' => 'active',
+    ]);
+
     // create warehouses
     WareHouse::create(['id' => 3, 'name' => 'Main', 'location' => 'Main', 'is_active' => 1]);
     WareHouse::create(['id' => 4, 'name' => 'Bar', 'location' => 'Bar', 'is_active' => 1]);

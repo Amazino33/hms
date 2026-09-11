@@ -13,7 +13,7 @@
     @elseif($shift->status === 'active')
         <div class="space-y-4 max-w-md">
             <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <div class="text-sm text-gray-500 dark:text-gray-400">Started {{ $shift->started_at->format('M j, g:ia') }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Started {{ $shift->started_at->venueTime()->format('M j, g:ia') }}</div>
                 <div class="text-sm text-gray-500 dark:text-gray-400">Starting float: ₦{{ number_format($shift->starting_float ?? 0, 2) }}</div>
                 <div class="mt-2 grid grid-cols-2 gap-3">
                     <div>

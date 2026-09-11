@@ -297,7 +297,7 @@
                                         tableName: '{{ addslashes($printTableName) }}',
                                         items: {{ json_encode($printItems) }},
                                         total: {{ $printTotal }},
-                                        date: '{{ now()->format('M j, Y g:i A') }}',
+                                        date: '{{ now()->venueTime()->format('M j, Y g:i A') }}',
                                         cashier: '{{ addslashes(auth()->user()->name) }}',
                                         company: {
                                             name: '{{ addslashes($printCompanyName) }}',

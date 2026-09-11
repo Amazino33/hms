@@ -63,7 +63,7 @@
                                 #{{ $t->order->order_number ?? 'Order' }}
                             </div>
                             <div class="text-xs text-gray-400">
-                                {{ $t->paid_at->format('h:i A') }} • {{ strtoupper($t->method) }}
+                                {{ $t->paid_at->venueTime()->format('h:i A') }} • {{ strtoupper($t->method) }}
                             </div>
                         </div>
                         <div class="font-mono font-bold {{ $t->method === 'cash' ? 'text-green-600' : 'text-blue-600' }}">
@@ -92,7 +92,7 @@
                                 #{{ $order->order_number }}
                             </div>
                             <div class="text-xs text-gray-400">
-                                {{ $order->created_at->format('h:i A') }} • {{ $order->guest ? $order->guest->name : 'Walk-in' }} • {{ ucfirst($order->status) }}
+                                {{ $order->created_at->venueTime()->format('h:i A') }} • {{ $order->guest ? $order->guest->name : 'Walk-in' }} • {{ ucfirst($order->status) }}
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
@@ -124,7 +124,7 @@
                                     {{ ucfirst(str_replace('_', ' ', $debt->reason)) }}
                                 </div>
                                 <div class="text-xs text-gray-400">
-                                    {{ $debt->created_at->format('M j, Y') }} • {{ ucfirst(str_replace('_', ' ', $debt->status)) }}
+                                    {{ $debt->created_at->venueTime()->format('M j, Y') }} • {{ ucfirst(str_replace('_', ' ', $debt->status)) }}
                                     • ₦{{ number_format((float) $debt->amount, 2) }} original
                                 </div>
                             </div>
@@ -136,7 +136,7 @@
                             <div class="mt-2 pl-2 border-l-2 border-amber-300 dark:border-amber-700 space-y-1">
                                 @foreach($debt->repayments as $repayment)
                                     <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                                        <span>{{ $repayment->created_at->format('M j, Y') }} — {{ ucfirst(str_replace('_', ' ', $repayment->method)) }} (by {{ $repayment->recordedBy->name ?? '—' }})</span>
+                                        <span>{{ $repayment->created_at->venueTime()->format('M j, Y') }} — {{ ucfirst(str_replace('_', ' ', $repayment->method)) }} (by {{ $repayment->recordedBy->name ?? '—' }})</span>
                                         <span class="font-mono text-green-600 dark:text-green-400">−₦{{ number_format((float) $repayment->amount, 2) }}</span>
                                     </div>
                                 @endforeach
@@ -165,7 +165,7 @@
                                     Shift #{{ $shift['id'] }}
                                 </div>
                                 <div class="text-xs text-gray-500 dark:text-gray-400">
-                                    {{ $shift['started_at']->format('M j, g:i A') }} - {{ $shift['ended_at']->format('g:i A') }} 
+                                    {{ $shift['started_at']->venueTime()->format('M j, g:i A') }} - {{ $shift['ended_at']->venueTime()->format('g:i A') }} 
                                     ({{ $shift['duration'] }} minutes)
                                 </div>
                             </div>

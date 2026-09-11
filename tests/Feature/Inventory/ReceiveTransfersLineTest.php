@@ -5,7 +5,6 @@ use App\Models\Category;
 use App\Models\InventoryItem;
 use App\Models\PagePermission;
 use App\Models\Product;
-use App\Models\StockTransfer;
 use App\Models\TransferDiscrepancy;
 use App\Models\User;
 use App\Models\WareHouse;
@@ -17,6 +16,10 @@ it('lets a bartender receive a transfer line through the page, short of the sent
     Role::firstOrCreate(['name' => 'storekeeper']);
     $bartender = User::factory()->create();
     $bartender->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+    \App\Models\Shift::create([
+        'user_id' => $bartender->id, 'type' => 'bartender',
+        'started_at' => now()->subHours(2), 'status' => 'active',
+    ]);
     PagePermission::firstOrCreate(
         ['page_class' => ReceiveTransfers::class, 'role_name' => 'bartender'],
         ['page_class' => ReceiveTransfers::class, 'page_name' => 'Receive Transfers', 'role_name' => 'bartender']

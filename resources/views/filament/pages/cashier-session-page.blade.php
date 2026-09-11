@@ -3,7 +3,7 @@
 
     <div class="space-y-6 max-w-2xl">
         <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <div class="text-sm text-gray-500 dark:text-gray-400">Opened {{ $session->opened_at->format('M j, g:ia') }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Opened {{ $session->opened_at->venueTime()->format('M j, g:ia') }}</div>
             <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">₦{{ number_format($this->accruedCash(), 2) }}</div>
             <div class="text-xs text-gray-500 dark:text-gray-400">Accrued cash (settlements confirmed + drops received, minus outflows)</div>
         </div>

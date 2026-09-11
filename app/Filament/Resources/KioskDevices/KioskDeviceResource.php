@@ -43,7 +43,7 @@ class KioskDeviceResource extends Resource
                 TextColumn::make('registered_at')->dateTime('M j, Y g:i A'),
                 TextColumn::make('last_seen_at')
                     ->label('Last Seen')
-                    ->formatStateUsing(fn (?string $state) => $state ? \Carbon\Carbon::parse($state)->format('M j, Y g:i A') : 'Never'),
+                    ->formatStateUsing(fn (?string $state) => $state ? \Carbon\Carbon::parse($state)->venueTime()->format('M j, Y g:i A') : 'Never'),
                 TextColumn::make('status')
                     ->state(fn (KioskDevice $record) => $record->isRevoked() ? 'Revoked' : 'Active')
                     ->badge()

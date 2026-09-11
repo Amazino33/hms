@@ -27,7 +27,7 @@
             <div class="text-sm text-gray-500 dark:text-gray-400">
                 Prepared by {{ $run->preparer?->name ?? '—' }}
                 @if ($run->sealed_at)
-                    · Sealed {{ $run->sealed_at->format('M j, Y g:i A') }}
+                    · Sealed {{ $run->sealed_at->venueTime()->format('M j, Y g:i A') }}
                 @endif
             </div>
         </div>

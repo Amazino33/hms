@@ -21,6 +21,13 @@ use Illuminate\Http\Request;
  * form hit this hardcoded list instead. It also meant super_admin was
  * missing from the receive list entirely, unless that account also held
  * one of the three named roles.
+ *
+ * The page grant is only the first of two gates on the receive actions.
+ * StockTransferService::resolveReceivingShiftId() then enforces the
+ * custodian rules — a bartender/chef must be on shift and may only
+ * receive into their own warehouse — inside the service, so this
+ * controller and the Livewire page cannot drift apart on it and no route
+ * is the loose one.
  */
 class StockTransferController extends Controller
 {
@@ -39,8 +46,11 @@ class StockTransferController extends Controller
         }
 
         $data = $request->validate([
-            'from_warehouse_id' => 'required|integer',
-            'to_warehouse_id' => 'required|integer',
+            // 'integer' alone let a transfer be created between warehouse
+            // ids that don't exist, or from a warehouse to itself — neither
+            // failed until something downstream tripped over it.
+            'from_warehouse_id' => 'required|integer|exists:warehouses,id',
+            'to_warehouse_id' => 'required|integer|exists:warehouses,id|different:from_warehouse_id',
             'items' => 'required_without:ingredient_items|array',
             'items.*.product_id' => 'required|integer',
             'items.*.quantity' => 'required_without:items.*.entered_qty|nullable|numeric|min:0.01',
@@ -137,8 +147,19 @@ class StockTransferController extends Controller
         ]);
     }
 
+    /**
+     * Feeds the transfer form's "how much is actually there" hint. It had
+     * no authorization of any kind — every authenticated user, waiter and
+     * receptionist included, could read the stock level of any product in
+     * any warehouse just by walking the ids. Gated on the same page grant
+     * as the form these numbers exist to fill in.
+     */
     public function productQuantity($warehouseId, $productId)
     {
+        if (! PermissionService::canAccessPage(StorekeeperTransfers::class)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $qty = \DB::table('inventory_items')
             ->where('warehouse_id', $warehouseId)
             ->where('product_id', $productId)
@@ -149,6 +170,10 @@ class StockTransferController extends Controller
 
     public function ingredientQuantity($warehouseId, $ingredientId)
     {
+        if (! PermissionService::canAccessPage(StorekeeperTransfers::class)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $qty = \DB::table('ingredient_inventory_items')
             ->where('warehouse_id', $warehouseId)
             ->where('ingredient_id', $ingredientId)

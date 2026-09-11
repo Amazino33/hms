@@ -38,10 +38,14 @@
                                     </span>
                                 @endif
                                 <span class="text-xs text-gray-500 dark:text-gray-400">
+                                    {{-- Log entries are written as preformatted UTC strings, not
+                                         Carbon instances, so they are parsed back here to be shown
+                                         in venue time — which also fixes every entry already in the
+                                         log, not just new ones. --}}
                                     @if (($entry['occurrences'] ?? 1) > 1)
-                                        {{ $entry['first_time'] ?? '—' }} – {{ $entry['last_time'] ?? '—' }}
+                                        {{ \App\Support\VenueTime::format(isset($entry['first_time']) ? \Carbon\CarbonImmutable::parse($entry['first_time'], 'UTC') : null) }} – {{ \App\Support\VenueTime::format(isset($entry['last_time']) ? \Carbon\CarbonImmutable::parse($entry['last_time'], 'UTC') : null) }}
                                     @else
-                                        {{ $entry['time'] ?? '—' }}
+                                        {{ \App\Support\VenueTime::format(isset($entry['time']) ? \Carbon\CarbonImmutable::parse($entry['time'], 'UTC') : null) }}
                                     @endif
                                 </span>
                                 @if (!empty($entry['url']))

@@ -6,7 +6,7 @@
             <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div class="font-bold text-lg text-gray-900 dark:text-white">{{ $shift->user?->name }} — {{ ucfirst($shift->type) }}</div>
                 <div class="text-sm text-gray-500 dark:text-gray-400">
-                    {{ $shift->started_at?->format('M j, g:ia') }} &rarr; {{ $shift->ended_at?->format('M j, g:ia') }}
+                    {{ $shift->started_at?->venueTime()->format('M j, g:ia') }} &rarr; {{ $shift->ended_at?->venueTime()->format('M j, g:ia') }}
                     · Status: <span class="font-semibold">{{ ucfirst(str_replace('_', ' ', $shift->status)) }}</span>
                 </div>
             </div>
@@ -19,7 +19,7 @@
                             <li class="text-sm text-amber-900 dark:text-amber-200">
                                 @if($note->amount) <span class="font-bold">₦{{ number_format($note->amount, 2) }}</span> — @endif
                                 {{ $note->description }}
-                                <span class="text-amber-700 dark:text-amber-400">({{ $note->created_at->format('g:ia') }})</span>
+                                <span class="text-amber-700 dark:text-amber-400">({{ $note->created_at->venueTime()->format('g:ia') }})</span>
                             </li>
                         @endforeach
                     </ul>
@@ -98,7 +98,7 @@
                                 @if($cashRow && $cashRow->confirmed_at)
                                     <div class="text-sm text-gray-700 dark:text-gray-300">
                                         Counted: <span class="font-bold">₦{{ number_format($cashRow->confirmed_amount, 2) }}</span>
-                                        by {{ $cashRow->confirmedBy?->name }} at {{ $cashRow->confirmed_at->format('g:ia') }}
+                                        by {{ $cashRow->confirmedBy?->name }} at {{ $cashRow->confirmed_at->venueTime()->format('g:ia') }}
                                     </div>
                                     <div class="text-sm text-gray-500">Expected: ₦{{ number_format($cashRow->expected_amount, 2) }}</div>
                                 @else
@@ -118,7 +118,7 @@
                                 @if($posRow && $posRow->confirmed_at)
                                     <div class="text-sm text-gray-700 dark:text-gray-300">
                                         Confirmed: <span class="font-bold">₦{{ number_format($posRow->confirmed_amount, 2) }}</span>
-                                        by {{ $posRow->confirmedBy?->name }} at {{ $posRow->confirmed_at->format('g:ia') }}
+                                        by {{ $posRow->confirmedBy?->name }} at {{ $posRow->confirmed_at->venueTime()->format('g:ia') }}
                                     </div>
                                     @if($posRow->flagged)
                                         <div class="text-sm text-amber-600 font-bold">Mismatch flagged — awaiting supervisor ruling.</div>
@@ -147,7 +147,7 @@
                         @if($shift->cash_confirmed_at)
                             <div class="text-sm text-gray-700 dark:text-gray-300">
                                 Cashier counted: <span class="font-bold">₦{{ number_format($shift->cashier_counted_cash, 2) }}</span>
-                                by {{ $shift->cashConfirmedBy?->name }} at {{ $shift->cash_confirmed_at->format('g:ia') }}
+                                by {{ $shift->cashConfirmedBy?->name }} at {{ $shift->cash_confirmed_at->venueTime()->format('g:ia') }}
                             </div>
                             <div class="text-sm text-gray-500">Staff declared: ₦{{ number_format($shift->declared_cash, 2) }}</div>
                             <div class="text-sm text-gray-500">Expected: ₦{{ number_format($this->expectedCash(), 2) }}</div>
@@ -171,7 +171,7 @@
                         @if($shift->pos_confirmed_at)
                             <div class="text-sm text-gray-700 dark:text-gray-300">
                                 Confirmed: <span class="font-bold">₦{{ number_format($shift->pos_machine_confirmed_amount, 2) }}</span>
-                                by {{ $shift->posConfirmedBy?->name }} at {{ $shift->pos_confirmed_at->format('g:ia') }}
+                                by {{ $shift->posConfirmedBy?->name }} at {{ $shift->pos_confirmed_at->venueTime()->format('g:ia') }}
                             </div>
                             @if($shift->pos_flagged)
                                 <div class="text-sm text-amber-600 font-bold">Mismatch flagged — awaiting supervisor ruling.</div>

@@ -175,7 +175,7 @@ class RoomOrder extends Page
                     'name' => $item->product_name,
                     'quantity' => $item->quantity,
                 ])->toArray(),
-                'date' => now()->format('M j, Y g:i A'),
+                'date' => now()->venueTime()->format('M j, Y g:i A'),
                 'staff' => auth()->user()?->name,
             ]);
         }

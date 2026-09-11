@@ -14,7 +14,7 @@
                 <h1 class="text-lg font-bold text-gray-900 dark:text-white">📊 Dashboard</h1>
                 <div class="flex items-center space-x-2">
                     <div class="text-sm text-gray-500 dark:text-gray-400">
-                        {{ now()->format('M j, Y') }}
+                        {{ now()->venueTime()->format('M j, Y') }}
                     </div>
                 </div>
             </div>

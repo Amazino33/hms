@@ -7,7 +7,7 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 use App\Services\StaffReportService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use Carbon\Carbon;
+use App\Support\BusinessDay;
 
 class StaffCashSummary extends StatsOverviewWidget
 {
@@ -35,13 +35,15 @@ class StaffCashSummary extends StatsOverviewWidget
         $service = new StaffReportService();
         $ttl = 60; // seconds
 
-        // Default date range: today
-        $from = Carbon::today();
-        $to = Carbon::today();
+        // "Today" here is the 9am-to-9am business day, not the calendar
+        // day — otherwise a bartender's 1am sales drop off the figure they
+        // are measured on, and the widget disagrees with every other report
+        // in the app about what "today" covered.
+        $businessDate = BusinessDay::today();
 
         // Bartender
         if ($user->hasRole('bartender')) {
-            $data = Cache::remember("staff_cash:bartender:{$user->id}", $ttl, fn () => $service->expectedCashByDestination('bar', $from, $to));
+            $data = Cache::remember("staff_cash:bartender:{$user->id}:{$businessDate}", $ttl, fn () => $service->expectedCashByDestination('bar', $businessDate, $businessDate));
             return [
                 Stat::make('Bar Expected', '₦' . number_format($data['expected']))
                     ->description('Due to Bar')
@@ -54,7 +56,7 @@ class StaffCashSummary extends StatsOverviewWidget
 
         // Chef
         if ($user->hasRole('chef')) {
-            $data = Cache::remember("staff_cash:chef:{$user->id}", $ttl, fn () => $service->expectedCashByDestination('kitchen', $from, $to));
+            $data = Cache::remember("staff_cash:chef:{$user->id}:{$businessDate}", $ttl, fn () => $service->expectedCashByDestination('kitchen', $businessDate, $businessDate));
             return [
                 Stat::make('Kitchen Expected', '₦' . number_format($data['expected']))
                     ->description('Due to Kitchen')
@@ -67,9 +69,8 @@ class StaffCashSummary extends StatsOverviewWidget
 
         // Waiter: show payments collected by this user today
         if ($user->hasRole(['waiter'])) {
-            $history = Cache::remember("staff_cash:waiter:{$user->id}", $ttl, fn () => $service->staffDailyHistory($user->id, $from, $to));
-            $todayKey = $from->format('Y-m-d');
-            $paymentsTotal = $history[$todayKey]['payments_total'] ?? 0;
+            $history = Cache::remember("staff_cash:waiter:{$user->id}:{$businessDate}", $ttl, fn () => $service->staffDailyHistory($user->id, $businessDate, $businessDate));
+            $paymentsTotal = $history[$businessDate]['payments_total'] ?? 0;
 
             return [
                 Stat::make('My Collected (Today)', '₦' . number_format($paymentsTotal))

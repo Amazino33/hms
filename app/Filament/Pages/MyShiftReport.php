@@ -118,7 +118,7 @@ class MyShiftReport extends Page
 
             $currentShiftData = [
                 'shift_active' => true,
-                'shift_start' => $currentShift->started_at->format('l, d M Y H:i'),
+                'shift_start' => $currentShift->started_at->venueTime()->format('l, d M Y H:i'),
                 'shift_duration' => $currentShift->started_at->diffForHumans(now(), true),
                 'cash_hand' => $cashHand,
                 'pos_total' => $posTotal,

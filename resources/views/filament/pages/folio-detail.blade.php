@@ -47,7 +47,7 @@
                                 <div class="min-w-0">
                                     <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ $line->description }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-400">
-                                        {{ ucfirst(str_replace('_', ' ', $line->type)) }} · {{ $line->created_at->format('M j, g:ia') }} · {{ $line->createdBy?->name ?? '—' }}
+                                        {{ ucfirst(str_replace('_', ' ', $line->type)) }} · {{ $line->created_at->venueTime()->format('M j, g:ia') }} · {{ $line->createdBy?->name ?? '—' }}
                                     </div>
                                     @if($line->reference)
                                         <div class="text-xs text-gray-400">{{ $line->reference }}</div>
@@ -83,7 +83,7 @@
                         <tbody>
                             @forelse($booking->folio?->lines ?? [] as $line)
                                 <tr class="border-t border-gray-100 dark:border-gray-700">
-                                    <td class="py-1 pr-4 text-gray-500">{{ $line->created_at->format('M j, g:ia') }}</td>
+                                    <td class="py-1 pr-4 text-gray-500">{{ $line->created_at->venueTime()->format('M j, g:ia') }}</td>
                                     <td class="py-1 pr-4 text-gray-700 dark:text-gray-300">{{ ucfirst(str_replace('_', ' ', $line->type)) }}</td>
                                     <td class="py-1 pr-4 text-gray-900 dark:text-white">
                                         {{ $line->description }}
@@ -145,7 +145,7 @@
 
             @if($booking->isCheckedOut())
                 <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700 text-sm text-gray-500">
-                    This folio is sealed — the guest checked out {{ $booking->checked_out_at->format('M j, Y g:ia') }}. No further charges or payments can be added.
+                    This folio is sealed — the guest checked out {{ $booking->checked_out_at->venueTime()->format('M j, Y g:ia') }}. No further charges or payments can be added.
                 </div>
             @else
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

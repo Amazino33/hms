@@ -32,7 +32,7 @@
 
                 <div class="text-right text-xs text-gray-500 dark:text-gray-400">
                     @if ($notice->published_at)
-                        <div>Posted {{ $notice->published_at->format('M j, Y g:ia') }}</div>
+                        <div>Posted {{ $notice->published_at->venueTime()->format('M j, Y g:ia') }}</div>
                     @endif
                     @if ($notice->creator)
                         <div>by {{ $notice->creator->name }}</div>
@@ -50,7 +50,7 @@
             <div class="border-t border-gray-100 pt-3 dark:border-gray-800">
                 @if ($signed)
                     <div class="text-xs font-medium text-green-700 dark:text-green-400">
-                        You marked this as read on {{ $signed->acknowledged_at->format('M j, Y \a\t g:ia') }}
+                        You marked this as read on {{ $signed->acknowledged_at->venueTime()->format('M j, Y \a\t g:ia') }}
                         ({{ $signed->context === 'kiosk' ? 'from the kiosk' : 'from the admin panel' }}).
                     </div>
                 @elseif ($isPending)

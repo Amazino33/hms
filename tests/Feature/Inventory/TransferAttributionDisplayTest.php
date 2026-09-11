@@ -26,6 +26,12 @@ function seedAttributionFixtures(): array
     $storekeeper->assignRole(Role::firstOrCreate(['name' => 'storekeeper']));
     $receiver = User::factory()->create(['name' => 'Bruno Bartender']);
     $receiver->assignRole(Role::firstOrCreate(['name' => 'bartender']));
+    // Receive Transfers is on-duty only now — without a shift Bruno can no
+    // longer open the page at all, let alone read his own name on it.
+    \App\Models\Shift::create([
+        'user_id' => $receiver->id, 'type' => 'bartender',
+        'started_at' => now()->subHours(2), 'status' => 'active',
+    ]);
 
     PagePermission::firstOrCreate(
         ['page_class' => StorekeeperTransfers::class, 'role_name' => 'storekeeper'],

@@ -37,7 +37,7 @@
             </td>
             <td>
                 <div class="meta-label">Receipt generated</div>
-                {{ \Carbon\Carbon::parse($snapshot['generated_at'])->format('M j, Y g:ia') }}
+                {{ \Carbon\Carbon::parse($snapshot['generated_at'])->venueTime()->format('M j, Y g:ia') }}
             </td>
         </tr>
     </table>
@@ -55,7 +55,7 @@
         <tbody>
             @foreach($snapshot['lines'] as $line)
                 <tr>
-                    <td>{{ \Carbon\Carbon::parse($line['date'])->format('M j, g:ia') }}</td>
+                    <td>{{ \Carbon\Carbon::parse($line['date'])->venueTime()->format('M j, g:ia') }}</td>
                     <td>{{ ucfirst(str_replace('_', ' ', $line['type'])) }}</td>
                     <td>{{ $line['description'] }}</td>
                     <td>{{ $line['created_by'] ?? '—' }}</td>

@@ -61,7 +61,7 @@ new class extends Component {
             'tableName' => $table->name,
             'items' => $items,
             'total' => $total,
-            'date' => now()->format('M j, Y g:i A'),
+            'date' => now()->venueTime()->format('M j, Y g:i A'),
             'cashier' => $orders->first()->user?->name ?? 'Kiosk',
             'company' => [
                 'name' => $company?->name,

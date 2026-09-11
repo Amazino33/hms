@@ -213,7 +213,7 @@
                                     <x-heroicon-o-map-pin class="w-3 h-3"/>
                                     {{ $order->origin_label }}
                                 </span>
-                                <span>{{ $order->created_at->format('H:i') }}</span>
+                                <span>{{ $order->created_at->venueTime()->format('H:i') }}</span>
                             </div>
                         </div>
                     @empty

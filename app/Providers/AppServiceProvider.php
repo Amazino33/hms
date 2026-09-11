@@ -12,7 +12,9 @@ use App\Observers\UserObserver;
 use App\Observers\RoleObserver;
 use App\Observers\PermissionObserver;
 use App\Observers\PagePermissionObserver;
+use App\Support\VenueTime;
 use Carbon\CarbonImmutable;
+use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -123,6 +125,19 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
+
+        // Timestamps are stored in UTC but staff read them in Lagos wall
+        // clock. Without these two lines every screen in the app renders an
+        // hour early, and anything logged in the first hour of a Lagos day
+        // shows under the previous date. Storage deliberately stays UTC —
+        // this is a display-layer conversion only. See App\Support\VenueTime.
+        VenueTime::registerMacros();
+
+        // Covers every Filament ->dateTime() column, infolist entry and
+        // date-time picker in both panels at once (they resolve their zone
+        // through this manager). Plain ->date() columns do NOT consult it —
+        // those pass the zone explicitly at the call site.
+        FilamentTimezone::set(VenueTime::TIMEZONE);
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),

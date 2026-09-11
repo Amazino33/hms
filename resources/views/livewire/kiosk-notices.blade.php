@@ -78,14 +78,14 @@ new class extends Component
                 <div class="mt-3 border-t border-gray-700 pt-2 text-xs">
                     @if ($signed)
                         <span class="font-medium text-green-400">
-                            You marked this as read on {{ $signed->acknowledged_at->format('M j, Y \a\t g:ia') }}.
+                            You marked this as read on {{ $signed->acknowledged_at->venueTime()->format('M j, Y \a\t g:ia') }}.
                         </span>
                     @else
                         <span class="italic text-gray-400">Not marked as read.</span>
                     @endif
 
                     @if ($notice->published_at)
-                        <span class="ml-2 text-gray-500">Posted {{ $notice->published_at->format('M j, Y') }}</span>
+                        <span class="ml-2 text-gray-500">Posted {{ $notice->published_at->venueTime()->format('M j, Y') }}</span>
                     @endif
                 </div>
             </div>

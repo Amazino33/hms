@@ -8,7 +8,7 @@
         <div class="flex justify-between items-center text-sm">
             <div>
                 <div class="text-gray-800 dark:text-gray-200">{{ ucfirst(str_replace('_', ' ', $repayment->method)) }}</div>
-                <div class="text-xs text-gray-400">{{ $repayment->created_at->format('d M Y H:i') }} — recorded by {{ $repayment->recordedBy->name ?? '—' }}</div>
+                <div class="text-xs text-gray-400">{{ $repayment->created_at->venueTime()->format('d M Y H:i') }} — recorded by {{ $repayment->recordedBy->name ?? '—' }}</div>
                 @if ($repayment->notes)
                     <div class="text-xs text-gray-400 italic">{{ $repayment->notes }}</div>
                 @endif

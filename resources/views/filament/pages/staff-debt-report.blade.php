@@ -349,7 +349,7 @@
                     @forelse ($rows as $row)
                         <tr class="text-gray-700 dark:text-gray-200 align-top">
                             <td class="px-4 py-2 whitespace-nowrap">{{ $row['business_day'] }}</td>
-                            <td class="px-4 py-2 whitespace-nowrap">{{ $row['created_at']?->format('M j, Y g:ia') }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap">{{ $row['created_at']?->venueTime()->format('M j, Y g:ia') }}</td>
                             <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ $row['staff_name'] }}</td>
                             <td class="px-4 py-2">
                                 <span @class([

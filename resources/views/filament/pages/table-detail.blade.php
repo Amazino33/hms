@@ -95,7 +95,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                     <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
                         <div class="text-sm text-gray-500 dark:text-gray-400">Order Time</div>
-                        <div class="text-base md:text-lg font-semibold text-gray-900 dark:text-white">{{ $order->created_at->format('M j, Y g:i A') }}</div>
+                        <div class="text-base md:text-lg font-semibold text-gray-900 dark:text-white">{{ $order->created_at->venueTime()->format('M j, Y g:i A') }}</div>
                         <div class="text-sm text-gray-500 dark:text-gray-400">Seated {{ $order->created_at->diffForHumans() }}</div>
                     </div>
 

@@ -103,7 +103,7 @@
                                     <tbody>
                                         @foreach($this->debtsFor($row['user_id']) as $debt)
                                             <tr>
-                                                <td class="p-1">{{ $debt->created_at->format('M j, Y') }}</td>
+                                                <td class="p-1">{{ $debt->created_at->venueTime()->format('M j, Y') }}</td>
                                                 <td class="p-1">{{ $debt->reason }}</td>
                                                 <td class="p-1 text-right">₦{{ number_format($debt->amount, 2) }}</td>
                                                 <td class="p-1 text-right">₦{{ number_format($debt->totalRepaid(), 2) }}</td>

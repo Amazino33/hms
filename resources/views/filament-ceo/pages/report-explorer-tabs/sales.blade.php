@@ -55,7 +55,7 @@
                     <td class="p-2 text-right">₦{{ number_format($row['revenue'], 2) }}</td>
                     <td class="p-2 text-right">₦{{ number_format($row['cost'], 2) }}{{ $row['cost_estimated'] ? ' *' : '' }}</td>
                     <td class="p-2 text-right">₦{{ number_format($row['margin'], 2) }}</td>
-                    <td class="p-2">{{ $row['date']?->format('M j, H:i') }}</td>
+                    <td class="p-2">{{ $row['date']?->venueTime()->format('M j, H:i') }}</td>
                 </tr>
             @empty
                 <tr><td colspan="9" class="p-4 text-center text-gray-400">No sales in this range.</td></tr>
