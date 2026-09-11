@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\AttendanceLog;
 use App\Models\User;
+use App\Services\AttendanceLinker;
 use Illuminate\Console\Command;
 
 /**
@@ -85,12 +86,8 @@ class LinkAttendanceLogs extends Command
 
         $linked = 0;
 
-        foreach ($staff as $biometricId => $name) {
-            $userId = User::where('biometric_id', $biometricId)->value('id');
-
-            $linked += AttendanceLog::whereNull('user_id')
-                ->where('biometric_id', $biometricId)
-                ->update(['user_id' => $userId]);
+        foreach (User::whereIn('biometric_id', $staff->keys())->get() as $user) {
+            $linked += AttendanceLinker::linkFor($user);
         }
 
         $this->info("Linked {$linked} attendance log(s) to staff.");
