@@ -83,6 +83,13 @@ class UserResource extends Resource
                                             'restaurant' => 'Restaurant',
                                             'kitchen' => 'Kitchen',
                                         ]),
+                                    \Filament\Forms\Components\TextInput::make('biometric_id')
+                                        ->label('Biometric Machine ID')
+                                        ->numeric()
+                                        ->placeholder('e.g. 1'),
+                                    \Filament\Forms\Components\TimePicker::make('shift_start_time')
+                                        ->label('Expected Resumption Time')
+                                        ->seconds(false),
                                 ]),
                             ]),
 

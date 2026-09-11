@@ -58,7 +58,9 @@ class User extends Authenticatable implements FilamentUser
         'account_number',
         'account_name',
         'next_of_kin_name',
-        'next_of_kin_phone'
+        'next_of_kin_phone',
+        'biometric_id',
+        'shift_start_time',
     ];
 
     /**

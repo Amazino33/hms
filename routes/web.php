@@ -1,6 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ZKTecoController;
+
+Route::get('/iclock/getrequest', [ZKTecoController::class, 'getRequest']);
+Route::post('/iclock/cdata', [ZKTecoController::class, 'receiveData'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 // PWA Manifest - must be publicly accessible
 // Serve PWA files without any auth middleware
