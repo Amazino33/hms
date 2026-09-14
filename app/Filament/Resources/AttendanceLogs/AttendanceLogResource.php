@@ -45,10 +45,12 @@ class AttendanceLogResource extends Resource
                 \Filament\Tables\Columns\TextColumn::make('first_punch')
                     ->label('First Punch (In)')
                     ->dateTime('h:i A')
+                    ->timezone(\App\Support\VenueTime::TIMEZONE)
                     ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('last_punch')
                     ->label('Last Punch (Out)')
                     ->dateTime('h:i A')
+                    ->timezone(\App\Support\VenueTime::TIMEZONE)
                     ->sortable(),
             ])
             ->defaultSort('date', 'desc')

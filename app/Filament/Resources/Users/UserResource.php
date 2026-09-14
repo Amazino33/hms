@@ -135,7 +135,8 @@ class UserResource extends Resource
                                         ->placeholder('e.g. 1'),
                                     \Filament\Forms\Components\TimePicker::make('shift_start_time')
                                         ->label('Expected Resumption Time')
-                                        ->seconds(false),
+                                        ->seconds(false)
+                                        ->timezone('UTC'),
                                 ]),
                             ]),
 
