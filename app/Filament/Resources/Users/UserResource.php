@@ -5,27 +5,27 @@ namespace App\Filament\Resources\Users;
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
+use App\Models\Commission;
 use App\Models\User;
+use App\Support\VenueTime;
 use BackedEnum;
-use UnitEnum;
 use Filament\Actions\Action;
-use Filament\Actions\BulkAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Repeater;
-use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Table;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
-use Filament\Infolists\Components\TextEntry;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\HtmlString;
+use UnitEnum;
 
 class UserResource extends Resource
 {
@@ -40,6 +40,52 @@ class UserResource extends Resource
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
         return parent::getEloquentQuery()->with(['roles', 'warehouse']);
+    }
+
+    /**
+     * A waiter accrues one commission row per paid order, so this history is
+     * unbounded. It used to be a Repeater with ->relationship(), which builds
+     * a whole form component tree per row — measured at roughly 0.8 MB each,
+     * so past about 650 orders it exhausted PHP's 512M limit and the edit
+     * page died with a blank 500. Staff with no commissions loaded fine,
+     * which is what made it look like an intermittent server fault rather
+     * than a data-shaped one.
+     *
+     * Nothing in that Repeater was ever editable — every field was disabled
+     * and add/delete/reorder were all off — so plain markup shows the same
+     * information at a fixed cost. The full history lives in Waiter Ledger.
+     */
+    protected static function recentCommissions(?User $record): HtmlString
+    {
+        $empty = '<p class="text-sm text-gray-500 dark:text-gray-400">No commissions yet.</p>';
+
+        if (! $record) {
+            return new HtmlString($empty);
+        }
+
+        $commissions = $record->commissions()
+            ->with('order:id,order_number')
+            ->latest('created_at')
+            ->latest('id') // Commissions batched from one settlement share a timestamp.
+            ->limit(10)
+            ->get();
+
+        if ($commissions->isEmpty()) {
+            return new HtmlString($empty);
+        }
+
+        $rows = $commissions->map(fn (Commission $commission) => sprintf(
+            '<tr><td class="py-1 pr-4">%s</td><td class="py-1 pr-4">&#8358;%s</td><td class="py-1 text-gray-500">%s</td></tr>',
+            e($commission->order?->order_number ?? '—'),
+            e(number_format((float) $commission->amount, 2)),
+            e(VenueTime::format($commission->created_at)),
+        ))->implode('');
+
+        return new HtmlString(
+            '<table class="w-full text-sm"><thead><tr class="text-left text-xs uppercase text-gray-500">'
+            .'<th class="pb-2 pr-4">Order #</th><th class="pb-2 pr-4">Earned</th><th class="pb-2">Date</th>'
+            .'</tr></thead><tbody>'.$rows.'</tbody></table>'
+        );
     }
 
     public static function form(Schema $schema): Schema
@@ -59,9 +105,9 @@ class UserResource extends Resource
                 // Password Field (Smart handling)
                 TextInput::make('password')
                     ->password()
-                    ->dehydrateStateUsing(fn($state) => Hash::make($state))
-                    ->dehydrated(fn($state) => filled($state)) // Only save if user typed something
-                    ->required(fn(string $operation): bool => $operation === 'create'), // Required only on create
+                    ->dehydrateStateUsing(fn ($state) => Hash::make($state))
+                    ->dehydrated(fn ($state) => filled($state)) // Only save if user typed something
+                    ->required(fn (string $operation): bool => $operation === 'create'), // Required only on create
 
                 Tabs::make('Staff Details')
                     ->tabs([
@@ -163,30 +209,14 @@ class UserResource extends Resource
                             ->schema([
                                 Placeholder::make('total_earned')
                                     ->label('Lifetime Earnings')
-                                    ->content(fn($record) => $record ? '₦' . number_format($record->commissions()->sum('amount'), 2) : '₦0.00'),
+                                    ->content(fn ($record) => $record ? '₦'.number_format($record->commissions()->sum('amount'), 2) : '₦0.00'),
 
                                 Section::make('Commission History')
-                                    ->description('Recent earnings from served orders')
+                                    ->description('The 10 most recent earnings from served orders')
                                     ->schema([
-                                        Repeater::make('commissions')
-                                            ->relationship() // Fetches from the commissions() relationship
-                                            ->schema([
-                                                Grid::make(3)->schema([
-                                                    TextInput::make('order_number')
-                                                        ->label('Order #')
-                                                        ->disabled(),
-                                                    TextInput::make('amount')
-                                                        ->label('Earned')
-                                                        ->prefix('₦')
-                                                        ->disabled(),
-                                                    TextInput::make('created_at')
-                                                        ->label('Date')
-                                                        ->disabled(),
-                                                ]),
-                                            ])
-                                            ->addable(false) // Commissions should be system-generated, not manual
-                                            ->deletable(false)
-                                            ->reorderable(false)
+                                        Placeholder::make('recent_commissions')
+                                            ->hiddenLabel()
+                                            ->content(fn ($record) => static::recentCommissions($record))
                                             ->columnSpanFull(),
                                     ])->collapsible(),
                             ]),
@@ -219,7 +249,7 @@ class UserResource extends Resource
                 Action::make('edit')
                     ->label('Edit')
                     ->icon(Heroicon::PencilSquare)
-                    ->url(fn(User $record): string => EditUser::getUrl(['record' => $record])),
+                    ->url(fn (User $record): string => EditUser::getUrl(['record' => $record])),
                 Action::make('forceResetPin')
                     ->label('Force Reset PIN')
                     ->icon('heroicon-o-key')
@@ -228,7 +258,7 @@ class UserResource extends Resource
                     ->modalDescription('Clears their kiosk PIN entirely — you never see or choose it, they must set a brand new one next time.')
                     ->action(function (User $record) {
                         try {
-                            (new \App\Services\PinAuthService())->forceReset($record, auth()->user());
+                            (new \App\Services\PinAuthService)->forceReset($record, auth()->user());
                             \App\Services\UserFeedback::succeeded('PIN reset', "{$record->name} must set a new PIN next time.");
                         } catch (\Throwable $e) {
                             report($e);
@@ -239,7 +269,7 @@ class UserResource extends Resource
                     ->label('Delete')
                     ->icon(Heroicon::Trash)
                     ->color('danger')
-                    ->url(fn(User $record): string => EditUser::getUrl(['record' => $record])),
+                    ->url(fn (User $record): string => EditUser::getUrl(['record' => $record])),
             ])
             ->toolbarActions([
                 Action::make('create')
