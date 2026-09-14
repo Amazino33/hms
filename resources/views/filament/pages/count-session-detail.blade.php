@@ -19,10 +19,14 @@
              redundant noise mid-count anyway (you already know who you are). --}}
         @unless($session->status === 'counting' && $this->iAmCounter())
         <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                 <div>
                     <div class="text-gray-500 dark:text-gray-400 uppercase text-xs font-bold">Warehouse</div>
                     <div class="font-semibold text-gray-900 dark:text-white">{{ $session->warehouse->name }}</div>
+                </div>
+                <div>
+                    <div class="text-gray-500 dark:text-gray-400 uppercase text-xs font-bold">Opened</div>
+                    <div class="font-semibold text-gray-900 dark:text-white">{{ $session->opened_at?->format('M j, Y g:i A') ?? $session->created_at->format('M j, Y g:i A') }}</div>
                 </div>
                 <div>
                     <div class="text-gray-500 dark:text-gray-400 uppercase text-xs font-bold">Status</div>
@@ -45,7 +49,7 @@
                     </div>
                 @endif
                 @if($session->notes)
-                    <div class="col-span-2 md:col-span-4 mt-2">
+                    <div class="col-span-2 md:col-span-5 mt-2">
                         <div class="text-gray-500 dark:text-gray-400 uppercase text-xs font-bold">Handover Note</div>
                         <div class="text-gray-900 dark:text-white text-sm bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700 italic">
                             {{ $session->notes }}

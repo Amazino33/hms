@@ -62,6 +62,11 @@ class IngredientResource extends Resource
                 ->numeric(),
             TextColumn::make('cost_per_unit')->money('NGN'),
         ])->actions([
+            \Filament\Tables\Actions\Action::make('view_history')
+                ->label('History')
+                ->color('gray')
+                ->icon('heroicon-o-clock')
+                ->url(fn ($record) => "/admin/ingredient-history?ingredient_id={$record->id}"),
             ViewAction::make(),
             EditAction::make(),
         ])->headerActions([
