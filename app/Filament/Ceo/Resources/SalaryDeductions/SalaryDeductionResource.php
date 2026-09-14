@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Filament\Resources\SalaryDeductions;
+namespace App\Filament\Ceo\Resources\SalaryDeductions;
 
-use App\Filament\Resources\SalaryDeductions\Pages\ManageSalaryDeductions;
+use App\Filament\Ceo\Resources\SalaryDeductions\Pages\ManageSalaryDeductions;
 use App\Models\SalaryDeduction;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
@@ -55,11 +55,11 @@ class SalaryDeductionResource extends Resource
                 //
             ])
             ->recordActions([
-                DeleteAction::make(),
+                
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    
                 ]),
             ]);
     }
