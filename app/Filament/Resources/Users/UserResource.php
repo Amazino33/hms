@@ -61,7 +61,7 @@ class UserResource extends Resource
                     ->password()
                     ->dehydrateStateUsing(fn($state) => Hash::make($state))
                     ->dehydrated(fn($state) => filled($state)) // Only save if user typed something
-                    ->required(fn(string $context): bool => $context === 'create'), // Required only on create
+                    ->required(fn(string $operation): bool => $operation === 'create'), // Required only on create
 
                 Tabs::make('Staff Details')
                     ->tabs([
