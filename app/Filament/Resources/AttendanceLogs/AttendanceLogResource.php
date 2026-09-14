@@ -8,6 +8,9 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Filament\Tables\Filters\Filter;
+use Filament\Forms\Components\DatePicker;
+use Illuminate\Database\Eloquent\Builder;
 
 class AttendanceLogResource extends Resource
 {
@@ -50,7 +53,24 @@ class AttendanceLogResource extends Resource
             ])
             ->defaultSort('date', 'desc')
             ->filters([
-                //
+                Filter::make('date')
+                    ->form([
+                        DatePicker::make('from')
+                            ->label('From Date'),
+                        DatePicker::make('until')
+                            ->label('To Date'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('date', '>=', $date),
+                            )
+                            ->when(
+                                $data['until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('date', '<=', $date),
+                            );
+                    })
             ])
             ->recordActions([])
             ->toolbarActions([]);
