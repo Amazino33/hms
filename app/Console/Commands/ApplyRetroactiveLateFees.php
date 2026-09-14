@@ -41,7 +41,8 @@ class ApplyRetroactiveLateFees extends Command
             }
 
             $punchLocal = Carbon::parse($att->first_punch)->timezone(VenueTime::TIMEZONE);
-            $shiftStart = Carbon::createFromFormat('Y-m-d H:i:s', $att->date . ' ' . $att->user->shift_start_time, VenueTime::TIMEZONE);
+            $dateStr = $att->date instanceof \Carbon\Carbon ? $att->date->toDateString() : \Carbon\Carbon::parse($att->date)->toDateString();
+            $shiftStart = Carbon::parse($dateStr . ' ' . $att->user->shift_start_time, VenueTime::TIMEZONE);
 
             if ($punchLocal->greaterThan($shiftStart)) {
                 $alreadyDeducted = SalaryDeduction::where('user_id', $att->user_id)

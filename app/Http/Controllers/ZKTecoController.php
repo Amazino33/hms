@@ -240,11 +240,7 @@ class ZKTecoController extends Controller
             return;
         }
 
-        $shiftStart = Carbon::createFromFormat(
-            'Y-m-d H:i:s',
-            $localDate.' '.$user->shift_start_time,
-            VenueTime::TIMEZONE
-        );
+        $shiftStart = Carbon::parse($localDate.' '.$user->shift_start_time, VenueTime::TIMEZONE);
 
         if ($punchLocal->lessThanOrEqualTo($shiftStart)) {
             return;

@@ -44,7 +44,8 @@ class AttendanceLogResource extends Resource
                     ->getStateUsing(function (DailyAttendance $record) {
                         if (!$record->user || !$record->user->shift_start_time) return 'No Shift Time';
                         $firstPunch = \Carbon\Carbon::parse($record->first_punch)->timezone(\App\Support\VenueTime::TIMEZONE);
-                        $shiftStart = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $record->date . ' ' . $record->user->shift_start_time, \App\Support\VenueTime::TIMEZONE);
+                        $dateStr = $record->date instanceof \Carbon\Carbon ? $record->date->toDateString() : \Carbon\Carbon::parse($record->date)->toDateString();
+                        $shiftStart = \Carbon\Carbon::parse($dateStr . ' ' . $record->user->shift_start_time, \App\Support\VenueTime::TIMEZONE);
                         return $firstPunch->greaterThan($shiftStart) ? 'Late' : 'On Time';
                     })
                     ->badge()
