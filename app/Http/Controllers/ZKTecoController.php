@@ -230,7 +230,10 @@ class ZKTecoController extends Controller
         // One penalty per person per day, however many times they punch.
         $alreadyDeducted = SalaryDeduction::where('user_id', $user->id)
             ->where('date', $localDate)
-            ->where('reason', 'like', 'Late arrival%')
+            ->where(function($q) {
+                $q->where('reason', 'like', 'Late arrival%')
+                  ->orWhere('reason', 'like', 'Lateness fee%');
+            })
             ->exists();
 
         if ($alreadyDeducted) {
@@ -251,7 +254,7 @@ class ZKTecoController extends Controller
             'user_id' => $user->id,
             'amount' => self::LATE_PENALTY,
             'date' => $localDate,
-            'reason' => 'Late arrival. Expected: '.$shiftStart->format('H:i').', Arrived: '.$punchLocal->format('H:i'),
+            'reason' => 'Lateness fee. Expected: '.$shiftStart->format('H:i').', Arrived: '.$punchLocal->format('H:i'),
         ]);
     }
 

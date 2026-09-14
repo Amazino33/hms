@@ -39,6 +39,20 @@ class AttendanceLogResource extends Resource
                     ->label('Staff Member')
                     ->searchable()
                     ->sortable(),
+                \Filament\Tables\Columns\TextColumn::make('status')
+                    ->label('Status')
+                    ->getStateUsing(function (DailyAttendance $record) {
+                        if (!$record->user || !$record->user->shift_start_time) return 'No Shift Time';
+                        $firstPunch = \Carbon\Carbon::parse($record->first_punch)->timezone(\App\Support\VenueTime::TIMEZONE);
+                        $shiftStart = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $record->date . ' ' . $record->user->shift_start_time, \App\Support\VenueTime::TIMEZONE);
+                        return $firstPunch->greaterThan($shiftStart) ? 'Late' : 'On Time';
+                    })
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'Late' => 'danger',
+                        'On Time' => 'success',
+                        default => 'gray',
+                    }),
                 \Filament\Tables\Columns\TextColumn::make('biometric_id')
                     ->label('Machine ID')
                     ->searchable(),
