@@ -189,7 +189,10 @@ class DailyMetricsService
             ->get(['amount', 'payment_method', 'verified']);
 
         foreach ($folioPayments as $line) {
-            $amount = abs((float) $line->amount);
+            // Negated rather than abs()'d: a payment credit is stored
+            // negative, but a void reversal of one is stored positive, and
+            // it has to subtract here instead of adding a second time.
+            $amount = -1 * (float) $line->amount;
 
             match (true) {
                 $line->payment_method === 'transfer' => $line->verified ? $transfersVerified += $amount : $transfersUnverified += $amount,

@@ -273,8 +273,10 @@ class RevenueReportService
             'date' => $l->created_at->toDateString(),
             'method' => $this->normalizeMethod($l->payment_method),
             // FolioLine payment amounts are stored negative (credits) —
-            // the mix chart wants the magnitude actually collected.
-            'amount' => abs((float) $l->amount),
+            // the mix chart wants the magnitude actually collected, so
+            // negate rather than abs(): a void reversal is stored positive
+            // and has to subtract from the day's mix, not add to it.
+            'amount' => -1 * (float) $l->amount,
         ]));
 
         return collect($range->eachDate())->map(function ($date) use ($normalized) {

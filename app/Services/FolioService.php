@@ -101,6 +101,86 @@ class FolioService
         ]);
     }
 
+    /**
+     * The receptionist's "edit" for a payment or a discount: void the line
+     * and post the corrected one. Lines stay immutable, so this appends an
+     * equal-and-opposite line of the SAME type rather than touching the
+     * original — same type matters because the shift/CEO sums that read
+     * folio payments filter on type, and a reversal has to land in the
+     * same bucket it is cancelling out or the books stop netting.
+     *
+     * Only allowed before checkout (the folio seal) and only while the
+     * payment's own shift is still open — reversing a payment out of an
+     * already-closed shift would move that shift's expected cash after it
+     * had been counted, which is a manager adjustment, not a self-service
+     * correction.
+     */
+    public function voidLine(FolioLine $line, string $reason, int $userId): FolioLine
+    {
+        return DB::transaction(function () use ($line, $reason, $userId) {
+            $line = FolioLine::where('id', $line->id)->lockForUpdate()->firstOrFail();
+
+            $folio = $line->folio;
+
+            $this->assertNotSealed($folio);
+
+            if (! in_array($line->type, ['payment', 'discount'], true)) {
+                throw new \Exception('Only a payment or a discount can be voided.');
+            }
+
+            if (trim($reason) === '') {
+                throw new \Exception('A reason is required to void this line.');
+            }
+
+            if ($line->isReversal()) {
+                throw new \Exception('This line is itself a void — there is nothing left to reverse.');
+            }
+
+            if ($line->reversal()->exists()) {
+                throw new \Exception('This line has already been voided.');
+            }
+
+            if ($line->type === 'payment' && $line->shift_id && ! $line->shift?->isActive()) {
+                throw new \Exception('That payment belongs to a shift that has already been closed — a manager has to post an adjustment instead.');
+            }
+
+            $reversal = FolioLine::create([
+                'folio_id' => $line->folio_id,
+                'type' => $line->type,
+                'amount' => -1 * (float) $line->amount,
+                'description' => 'Voided: '.$line->description.' — '.$reason,
+                'created_by' => $userId,
+                'shift_id' => $line->shift_id,
+                'payment_method' => $line->payment_method,
+                // Nothing to verify about a reversal: it cancels a figure
+                // rather than claiming money arrived.
+                'verified' => true,
+                'reversal_of_line_id' => $line->id,
+            ]);
+
+            // A voided transfer must also leave the verification queue, or
+            // it blocks the shift's transfer channel forever waiting on a
+            // manager to rule on money that is no longer claimed. Same
+            // narrow exception to immutability that rejectTransfer takes.
+            if ($line->type === 'payment' && $line->payment_method === 'transfer' && ! $line->verified) {
+                $line->update([
+                    'verified' => true,
+                    'verified_by' => $userId,
+                    'verified_at' => now(),
+                    'reference' => 'Voided: '.$reason,
+                ]);
+            }
+
+            activity('folio_line')
+                ->performedOn($line)
+                ->causedBy(User::find($userId))
+                ->withProperties(['reason' => $reason, 'reversal_line_id' => $reversal->id])
+                ->log(ucfirst($line->type).' voided');
+
+            return $reversal;
+        });
+    }
+
     public function verifyTransfer(FolioLine $line, int $managerId): FolioLine
     {
         return DB::transaction(function () use ($line, $managerId) {

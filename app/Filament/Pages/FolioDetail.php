@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Booking;
+use App\Models\FolioLine;
 use App\Models\IncidentalPriceListItem;
 use App\Models\Room;
 use App\Models\RoomSupply;
@@ -56,6 +57,10 @@ class FolioDetail extends Page
 
     public ?float $roomSupplyQuantity = null;
 
+    public ?int $voidingLineId = null;
+
+    public string $voidReason = '';
+
     public ?int $extendNights = null;
 
     public ?int $newRoomId = null;
@@ -81,7 +86,14 @@ class FolioDetail extends Page
 
     protected function loadBooking($bookingId): void
     {
-        $this->booking = Booking::with(['guest', 'room', 'folio.lines.createdBy', 'folio.lines.verifiedBy'])->find($bookingId);
+        $this->booking = Booking::with([
+            'guest',
+            'room',
+            'folio.lines.createdBy',
+            'folio.lines.verifiedBy',
+            'folio.lines.reversal',
+            'folio.lines.shift',
+        ])->find($bookingId);
     }
 
     public function priceListItems()
@@ -170,6 +182,64 @@ class FolioDetail extends Page
         }
     }
 
+    /**
+     * A receptionist correcting a payment or a discount voids the wrong
+     * line and re-enters the right one — folio lines stay immutable, so
+     * "edit" is always void-then-repost. Only offered before checkout.
+     */
+    public function canVoid(FolioLine $line): bool
+    {
+        if ($this->booking->isCheckedOut()) {
+            return false;
+        }
+
+        if (! in_array($line->type, ['payment', 'discount'], true)) {
+            return false;
+        }
+
+        if ($line->isReversal() || $line->isVoided()) {
+            return false;
+        }
+
+        return ! ($line->type === 'payment' && $line->shift_id && ! $line->shift?->isActive());
+    }
+
+    public function openVoid(int $lineId): void
+    {
+        $this->voidingLineId = $lineId;
+        $this->voidReason = '';
+    }
+
+    public function closeVoid(): void
+    {
+        $this->voidingLineId = null;
+        $this->voidReason = '';
+    }
+
+    public function voidLine(): void
+    {
+        if (! $this->voidingLineId || trim($this->voidReason) === '') {
+            Notification::make()->title('A reason is required to void this line')->warning()->send();
+
+            return;
+        }
+
+        try {
+            (new FolioService)->voidLine(
+                FolioLine::findOrFail($this->voidingLineId),
+                $this->voidReason,
+                auth()->id(),
+            );
+
+            $this->closeVoid();
+            $this->loadBooking($this->booking->id);
+
+            Notification::make()->title('Line voided — re-enter the correct figure')->success()->send();
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not void')->body($e->getMessage())->danger()->persistent()->send();
+        }
+    }
+
     public function roomSupplies()
     {
         return RoomSupply::where('is_active', true)->orderBy('name')->get();
@@ -182,7 +252,7 @@ class FolioDetail extends Page
 
     public function roomProfit(): array
     {
-        return (new RoomProfitService())->forBooking($this->booking);
+        return (new RoomProfitService)->forBooking($this->booking);
     }
 
     public function recordRoomSupplyUsage(): void

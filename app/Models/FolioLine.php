@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Immutable — a folio line is never updated once created. Corrections are
@@ -50,5 +50,29 @@ class FolioLine extends Model
     public function verifiedBy()
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    /** The line that voided this one, if a receptionist reversed it. */
+    public function reversal()
+    {
+        return $this->hasOne(FolioLine::class, 'reversal_of_line_id');
+    }
+
+    /** The line this one was posted to void, if it is itself a reversal. */
+    public function reversalOf()
+    {
+        return $this->belongsTo(FolioLine::class, 'reversal_of_line_id');
+    }
+
+    public function isReversal(): bool
+    {
+        return $this->reversal_of_line_id !== null;
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->relationLoaded('reversal')
+            ? $this->reversal !== null
+            : $this->reversal()->exists();
     }
 }

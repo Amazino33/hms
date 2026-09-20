@@ -42,10 +42,10 @@
                      still present, just stacked instead of columned. --}}
                 <div class="md:hidden space-y-2">
                     @forelse($booking->folio?->lines ?? [] as $line)
-                        <div class="rounded-lg border border-gray-100 dark:border-gray-700 p-3">
+                        <div class="rounded-lg border border-gray-100 dark:border-gray-700 p-3 {{ $line->isVoided() ? 'opacity-60' : '' }}">
                             <div class="flex items-start justify-between gap-2">
                                 <div class="min-w-0">
-                                    <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ $line->description }}</div>
+                                    <div class="text-sm font-semibold text-gray-900 dark:text-white truncate {{ $line->isVoided() ? 'line-through' : '' }}">{{ $line->description }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-400">
                                         {{ ucfirst(str_replace('_', ' ', $line->type)) }} · {{ $line->created_at->venueTime()->format('M j, g:ia') }} · {{ $line->createdBy?->name ?? '—' }}
                                     </div>
@@ -58,8 +58,18 @@
                                         </div>
                                     @endif
                                 </div>
-                                <div class="shrink-0 text-right font-bold {{ $line->amount >= 0 ? 'text-red-600' : 'text-emerald-600' }}">
-                                    {{ $line->amount >= 0 ? '+' : '' }}{{ number_format($line->amount, 2) }}
+                                <div class="shrink-0 text-right">
+                                    <div class="font-bold {{ $line->amount >= 0 ? 'text-red-600' : 'text-emerald-600' }} {{ $line->isVoided() ? 'line-through' : '' }}">
+                                        {{ $line->amount >= 0 ? '+' : '' }}{{ number_format($line->amount, 2) }}
+                                    </div>
+                                    @if($this->canVoid($line))
+                                        <button type="button" wire:click="openVoid({{ $line->id }})"
+                                            class="mt-1 px-3 py-1 rounded-lg border border-red-300 text-red-600 dark:border-red-700 dark:text-red-400 font-bold text-xs touch-manipulation">
+                                            Void
+                                        </button>
+                                    @elseif($line->isVoided())
+                                        <div class="mt-1 text-xs font-bold text-gray-400">Voided</div>
+                                    @endif
                                 </div>
                             </div>
                         </div>
@@ -78,21 +88,22 @@
                                 <th class="py-1 pr-4">By</th>
                                 <th class="py-1 pr-4 text-right">Amount</th>
                                 <th class="py-1 pr-4">Verified</th>
+                                <th class="py-1 pr-4"></th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($booking->folio?->lines ?? [] as $line)
-                                <tr class="border-t border-gray-100 dark:border-gray-700">
+                                <tr class="border-t border-gray-100 dark:border-gray-700 {{ $line->isVoided() ? 'opacity-60' : '' }}">
                                     <td class="py-1 pr-4 text-gray-500">{{ $line->created_at->venueTime()->format('M j, g:ia') }}</td>
                                     <td class="py-1 pr-4 text-gray-700 dark:text-gray-300">{{ ucfirst(str_replace('_', ' ', $line->type)) }}</td>
-                                    <td class="py-1 pr-4 text-gray-900 dark:text-white">
+                                    <td class="py-1 pr-4 text-gray-900 dark:text-white {{ $line->isVoided() ? 'line-through' : '' }}">
                                         {{ $line->description }}
                                         @if($line->reference)
                                             <div class="text-xs text-gray-400">{{ $line->reference }}</div>
                                         @endif
                                     </td>
                                     <td class="py-1 pr-4 text-gray-500">{{ $line->createdBy?->name ?? '—' }}</td>
-                                    <td class="py-1 pr-4 text-right font-bold {{ $line->amount >= 0 ? 'text-red-600' : 'text-emerald-600' }}">
+                                    <td class="py-1 pr-4 text-right font-bold {{ $line->amount >= 0 ? 'text-red-600' : 'text-emerald-600' }} {{ $line->isVoided() ? 'line-through' : '' }}">
                                         {{ $line->amount >= 0 ? '+' : '' }}{{ number_format($line->amount, 2) }}
                                     </td>
                                     <td class="py-1 pr-4">
@@ -106,9 +117,19 @@
                                             —
                                         @endif
                                     </td>
+                                    <td class="py-1 pr-4 text-right">
+                                        @if($this->canVoid($line))
+                                            <button type="button" wire:click="openVoid({{ $line->id }})"
+                                                class="px-3 py-1 rounded-lg border border-red-300 text-red-600 dark:border-red-700 dark:text-red-400 font-bold text-xs">
+                                                Void
+                                            </button>
+                                        @elseif($line->isVoided())
+                                            <span class="text-xs font-bold text-gray-400">Voided</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="6" class="py-3 text-gray-400">No charges or payments yet.</td></tr>
+                                <tr><td colspan="7" class="py-3 text-gray-400">No charges or payments yet.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -282,6 +303,30 @@
                 </div>
             </div>
             @endif
+        </div>
+    @endif
+
+    {{-- Voiding is how a payment or a discount gets "edited" before
+         checkout: the wrong line is reversed (never rewritten) and the
+         receptionist re-enters the correct figure underneath it. --}}
+    @if($voidingLineId)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" wire:click.self="closeVoid">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md space-y-4">
+                <h3 class="font-bold text-lg text-gray-900 dark:text-white">Void this line</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    The original stays on the ledger with a reversal against it, then you can enter the correct figure.
+                </p>
+                <textarea wire:model="voidReason" rows="3" placeholder="Reason (e.g. wrong amount keyed)"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"></textarea>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="closeVoid" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-bold">
+                        Cancel
+                    </button>
+                    <button type="button" wire:click="voidLine" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold">
+                        Void line
+                    </button>
+                </div>
+            </div>
         </div>
     @endif
 </x-filament-panels::page>
