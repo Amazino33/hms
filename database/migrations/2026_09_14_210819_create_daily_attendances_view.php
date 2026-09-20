@@ -11,8 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Dropped-then-created rather than CREATE OR REPLACE: sqlite (what
+        // the test suite runs on) has no OR REPLACE for views, and this
+        // pair is equivalent on MySQL.
+        DB::statement('DROP VIEW IF EXISTS daily_attendances');
+
         DB::statement("
-            CREATE OR REPLACE VIEW daily_attendances AS
+            CREATE VIEW daily_attendances AS
             SELECT 
                 MIN(id) as id,
                 user_id,
