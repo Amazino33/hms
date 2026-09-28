@@ -29,6 +29,8 @@ it('renders index and create pages for resources touched during the audit', func
     '/admin/rooms/create',
     '/admin/bookings',
     '/admin/bookings/create',
+    '/admin/ingredients',
+    '/admin/ingredients/create',
 ]);
 
 it('no longer exposes a manual order-create page', function () {

@@ -9,13 +9,12 @@ use App\Filament\Resources\Ingredients\Pages\ViewIngredient;
 use App\Filament\Resources\Ingredients\Schemas\IngredientInfolist;
 use App\Models\Ingredient;
 use BackedEnum;
-use Filament\Actions\CreateAction;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use UnitEnum;
@@ -27,6 +26,7 @@ class IngredientResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-beaker';
 
     protected static string|UnitEnum|null $navigationGroup = 'Menu Management';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Schema $schema): Schema
@@ -61,16 +61,14 @@ class IngredientResource extends Resource
                 ->label('Current Stock')
                 ->numeric(),
             TextColumn::make('cost_per_unit')->money('NGN'),
-        ])->actions([
-            \Filament\Tables\Actions\Action::make('view_history')
+        ])->recordActions([
+            Action::make('view_history')
                 ->label('History')
                 ->color('gray')
                 ->icon('heroicon-o-clock')
                 ->url(fn ($record) => "/admin/ingredient-history?ingredient_id={$record->id}"),
             ViewAction::make(),
             EditAction::make(),
-        ])->headerActions([
-            CreateAction::make()->modalHeading('Add Kitchen Ingredient'),
         ]);
     }
 
