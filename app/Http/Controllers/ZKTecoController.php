@@ -7,6 +7,7 @@ use App\Models\BiometricEnrollment;
 use App\Models\SalaryDeduction;
 use App\Models\User;
 use App\Models\ZktecoCommand;
+use App\Models\ZktecoDevice;
 use App\Support\VenueTime;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -53,6 +54,7 @@ class ZKTecoController extends Controller
         $serial = $request->query('SN', 'UNKNOWN');
 
         Log::info('ZKTeco handshake from SN: '.$serial);
+        ZktecoDevice::touchContact($serial, 'last_handshake_at');
 
         // TimeZone=1 tells the terminal our clock is UTC+1, matching Lagos,
         // so the timestamps it stamps on punches line up with what
@@ -93,6 +95,8 @@ class ZKTecoController extends Controller
     {
         $serial = $request->query('SN');
 
+        ZktecoDevice::touchContact($serial, 'last_poll_at');
+
         $pending = ZktecoCommand::whereNull('sent_at')
             ->where(fn ($q) => $q->whereNull('serial')->orWhere('serial', $serial))
             ->orderBy('id')
@@ -130,6 +134,7 @@ class ZKTecoController extends Controller
         $body = $request->getContent();
 
         Log::info('ZKTeco push', ['table' => $table, 'sn' => $request->query('SN'), 'body' => $body]);
+        ZktecoDevice::touchContact($request->query('SN'), 'last_push_at');
 
         if ($table !== 'ATTLOG') {
             // Not punch data, but not worthless either: USERINFO records —
@@ -153,6 +158,12 @@ class ZKTecoController extends Controller
             if ($this->storePunch($line)) {
                 $saved++;
             }
+        }
+
+        if ($saved > 0) {
+            ZktecoDevice::touchContact($request->query('SN'), 'last_punch_at', [
+                'punches_received' => ZktecoDevice::where('serial', $request->query('SN') ?: 'UNKNOWN')->value('punches_received') + $saved,
+            ]);
         }
 
         // The firmware expects the accepted-record count; without it the
