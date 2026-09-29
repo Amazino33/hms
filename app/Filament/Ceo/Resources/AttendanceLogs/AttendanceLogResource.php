@@ -2,6 +2,7 @@
 
 namespace App\Filament\Ceo\Resources\AttendanceLogs;
 
+use App\Filament\Ceo\Concerns\CeoReadOnlyResource;
 use App\Filament\Ceo\Resources\AttendanceLogs\Pages\ManageAttendanceLogs;
 use App\Models\DailyAttendance;
 use BackedEnum;
@@ -14,6 +15,12 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AttendanceLogResource extends Resource
 {
+    // DailyAttendancePolicy gates the same model in the admin panel, and
+    // Laravel resolves policies by model class rather than by panel — so
+    // without this a ceo-role user, who correctly holds no admin Shield
+    // permissions, would be denied their own attendance page.
+    use CeoReadOnlyResource;
+
     protected static ?string $model = DailyAttendance::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clock';
@@ -37,6 +44,15 @@ class AttendanceLogResource extends Resource
                     ->searchable(),
                 \Filament\Tables\Columns\TextColumn::make('user.name')
                     ->label('Staff Member')
+                    ->searchable()
+                    ->sortable(),
+                // The name typed into the terminal at enrolment. Shown
+                // alongside Staff Member rather than instead of it: this is
+                // the device's record, and for a badge nobody has paired to a
+                // profile yet it is the only name there is.
+                \Filament\Tables\Columns\TextColumn::make('enrollment.name')
+                    ->label('Name on Machine')
+                    ->placeholder('—')
                     ->searchable()
                     ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('status')

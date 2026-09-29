@@ -16,7 +16,7 @@ beforeEach(function () {
 
 dataset('payroll resource urls', [
     'attendance logs' => '/admin/attendance-logs',
-    'salary deductions' => '/admin/salary-deductions',
+    'surcharges' => '/admin/surcharges',
 ]);
 
 dataset('unprivileged roles', ['receptionist', 'waiter', 'bartender', 'chef', 'storekeeper', 'cashier', 'porter']);
@@ -39,3 +39,30 @@ it('allows super_admin to view payroll resources', function (string $url) {
         ->get($url)
         ->assertStatus(200);
 })->with('payroll resource urls');
+
+/**
+ * The gate moved once already without anyone noticing: switching the Daily
+ * Attendance resource's model from AttendanceLog to the DailyAttendance
+ * database view took it out from behind AttendanceLogPolicy, because Laravel
+ * resolves policies by model class — and a resource with no policy is wide
+ * open. That silently undid this whole file for /admin/attendance-logs.
+ */
+it('gates the attendance page on the model the resource actually points at', function () {
+    $model = \App\Filament\Resources\AttendanceLogs\AttendanceLogResource::getModel();
+
+    expect(\Illuminate\Support\Facades\Gate::getPolicyFor($model))->not->toBeNull(
+        "{$model} has no policy, so the attendance page is open to every panel user"
+    );
+});
+
+it('still lets a ceo-role user reach their own attendance page', function () {
+    // The admin panel's policy resolves by model class, so it reaches into
+    // the ceo panel too; CeoReadOnlyResource is what stops it denying a user
+    // who correctly holds no admin Shield permissions.
+    $ceo = User::factory()->create();
+    $ceo->assignRole('ceo');
+
+    $this->actingAs($ceo)
+        ->get('/ceo/attendance-logs')
+        ->assertStatus(200);
+});
