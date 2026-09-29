@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\AttendanceLog;
+use App\Models\BiometricEnrollment;
 use App\Models\SalaryDeduction;
 use App\Models\User;
+use App\Models\ZktecoCommand;
 use App\Support\VenueTime;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -33,6 +35,13 @@ class ZKTecoController extends Controller
      * The late-arrival penalty, in Naira.
      */
     private const LATE_PENALTY = 500.00;
+
+    /**
+     * How many queued commands to hand the device in a single poll. It runs
+     * them one at a time and acknowledges each separately, so a long queue
+     * simply drains over several polls rather than arriving all at once.
+     */
+    private const COMMANDS_PER_POLL = 10;
 
     /**
      * Step 1 — handshake. The device asks for its orders before it will talk
@@ -72,13 +81,38 @@ class ZKTecoController extends Controller
     }
 
     /**
-     * Step 2 — command poll. We queue nothing at the terminal today, so a
-     * bare OK is the correct "nothing for you" answer. Anything else here
-     * would be read as a command and fail to parse.
+     * Step 2 — command poll, and our only chance to ask the device for
+     * anything: it sits behind the venue's router and never accepts an
+     * inbound connection, so work waits in zkteco_commands until it calls.
+     *
+     * The reply is one "C:<id>:<command>" line per command, and a bare OK
+     * when nothing is queued. Anything else is read as a command and fails
+     * to parse.
      */
     public function getRequest(Request $request): Response
     {
-        return $this->plainText('OK');
+        $serial = $request->query('SN');
+
+        $pending = ZktecoCommand::whereNull('sent_at')
+            ->where(fn ($q) => $q->whereNull('serial')->orWhere('serial', $serial))
+            ->orderBy('id')
+            ->limit(self::COMMANDS_PER_POLL)
+            ->get();
+
+        if ($pending->isEmpty()) {
+            return $this->plainText('OK');
+        }
+
+        $lines = $pending->map(fn (ZktecoCommand $command) => 'C:'.$command->id.':'.$command->command);
+
+        // Stamped as sent even though we cannot know the device acted on it.
+        // Re-issuing the same query every ten seconds forever would be worse
+        // than losing one — hms:sync-attendance-names can always queue again.
+        ZktecoCommand::whereIn('id', $pending->pluck('id'))->update(['sent_at' => now()]);
+
+        Log::info('ZKTeco commands issued', ['sn' => $serial, 'commands' => $lines->all()]);
+
+        return $this->plainText($lines->implode("\r\n")."\r\n");
     }
 
     /**
@@ -98,8 +132,14 @@ class ZKTecoController extends Controller
         Log::info('ZKTeco push', ['table' => $table, 'sn' => $request->query('SN'), 'body' => $body]);
 
         if ($table !== 'ATTLOG') {
-            // Acknowledged and deliberately discarded — the device retries
-            // anything it does not see accepted.
+            // Not punch data, but not worthless either: USERINFO records —
+            // which also turn up inside OPERLOG on some firmware — carry the
+            // name typed into the terminal at enrolment, and that is the only
+            // place a name for an unpaired badge exists. Everything else here
+            // is acknowledged and dropped; the device retries anything it
+            // does not see accepted.
+            $this->storeEnrollments($body);
+
             return $this->plainText('OK');
         }
 
@@ -121,13 +161,29 @@ class ZKTecoController extends Controller
     }
 
     /**
-     * Step 4 — the device reporting the result of a command it ran. Nothing
-     * to act on yet, but the endpoint must exist and return OK or the
-     * terminal logs a transport error and backs off.
+     * Step 4 — the device reporting how a command it was handed turned out.
+     * Must return OK regardless, or the terminal logs a transport error and
+     * backs off.
      */
     public function deviceCommand(Request $request): Response
     {
-        Log::info('ZKTeco devicecmd', ['sn' => $request->query('SN'), 'body' => $request->getContent()]);
+        $body = $request->getContent();
+
+        Log::info('ZKTeco devicecmd', ['sn' => $request->query('SN'), 'body' => $body]);
+
+        // "ID=12&Return=0&CMD=DATA QUERY USERINFO". Return=0 is success;
+        // anything else means the firmware would not run it, which is worth
+        // keeping because it is the only evidence a query was rejected.
+        parse_str(preg_replace('/\r\n|\r|\n/', '&', trim($body)) ?? '', $fields);
+
+        $id = $fields['ID'] ?? null;
+
+        if ($id !== null && ctype_digit((string) $id)) {
+            ZktecoCommand::where('id', (int) $id)->update([
+                'return_code' => $fields['Return'] ?? null,
+                'responded_at' => now(),
+            ]);
+        }
 
         return $this->plainText('OK');
     }
@@ -230,9 +286,9 @@ class ZKTecoController extends Controller
         // One penalty per person per day, however many times they punch.
         $alreadyDeducted = SalaryDeduction::where('user_id', $user->id)
             ->where('date', $localDate)
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->where('reason', 'like', 'Late arrival%')
-                  ->orWhere('reason', 'like', 'Lateness fee%');
+                    ->orWhere('reason', 'like', 'Lateness fee%');
             })
             ->exists();
 
@@ -252,6 +308,82 @@ class ZKTecoController extends Controller
             'date' => $localDate,
             'reason' => 'Lateness fee. Expected: '.$shiftStart->format('H:i').', Arrived: '.$punchLocal->format('H:i'),
         ]);
+    }
+
+    /**
+     * Pull every USERINFO record out of a non-ATTLOG push and remember the
+     * name the terminal holds for that badge.
+     *
+     * Records look like:
+     *
+     *   USER PIN=7<TAB>Name=Mary Clement<TAB>Pri=0<TAB>Card=0<TAB>Grp=1<TAB>...
+     *
+     * and arrive either as a whole USERINFO table or mixed into OPERLOG,
+     * depending on firmware — so we go by the line prefix rather than by the
+     * table parameter, and simply ignore anything that is not a USER line.
+     */
+    private function storeEnrollments(string $body): int
+    {
+        $stored = 0;
+
+        foreach (preg_split('/\r\n|\r|\n/', trim($body)) as $line) {
+            $line = trim($line);
+
+            if (! str_starts_with(strtoupper($line), 'USER ')) {
+                continue;
+            }
+
+            $fields = $this->parseFields($line);
+            $pin = $fields['PIN'] ?? null;
+
+            if ($pin === null || $pin === '') {
+                continue;
+            }
+
+            $name = trim($fields['NAME'] ?? '');
+
+            BiometricEnrollment::updateOrCreate(
+                ['biometric_id' => $pin],
+                array_filter([
+                    // A blank name is the device saying "enrolled, never
+                    // named" — keep any name we already hold rather than
+                    // wiping it, but still record that we heard from it.
+                    'name' => $name !== '' ? $name : null,
+                    'privilege' => $fields['PRI'] ?? null,
+                    'card' => $fields['CARD'] ?? null,
+                ], fn ($value) => $value !== null && $value !== '') + ['last_seen_at' => now()]
+            );
+
+            $stored++;
+        }
+
+        if ($stored > 0) {
+            Log::info('ZKTeco stored '.$stored.' enrolment record(s)');
+        }
+
+        return $stored;
+    }
+
+    /**
+     * Split a "KEY=value" record into an upper-cased map.
+     *
+     * Deliberately not a whitespace split: names have spaces in them
+     * ("Ndifreke Usungurua Offot"), so each value is taken as everything up
+     * to the next KEY= token instead of up to the next space.
+     *
+     * @return array<string, string>
+     */
+    private function parseFields(string $line): array
+    {
+        preg_match_all('/(\w+)=(.*?)(?=\s+\w+=|$)/', $line, $matches, PREG_SET_ORDER);
+
+        $fields = [];
+
+        foreach ($matches as $match) {
+            $fields[strtoupper($match[1])] = trim($match[2]);
+        }
+
+        return $fields;
     }
 
     private function plainText(string $body): Response

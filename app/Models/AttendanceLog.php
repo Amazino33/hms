@@ -26,4 +26,15 @@ class AttendanceLog extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * The terminal's own record for this badge — where the name typed into
+     * the machine lives. Joined on the machine ID rather than a foreign key
+     * because the badge, not the staff profile, is what both sides share;
+     * rows with no paired user still resolve.
+     */
+    public function enrollment(): BelongsTo
+    {
+        return $this->belongsTo(BiometricEnrollment::class, 'biometric_id', 'biometric_id');
+    }
 }

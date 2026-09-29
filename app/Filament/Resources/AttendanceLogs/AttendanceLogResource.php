@@ -39,6 +39,15 @@ class AttendanceLogResource extends Resource
                     ->label('Staff Member')
                     ->searchable()
                     ->sortable(),
+                // The name typed into the terminal at enrolment. Shown
+                // alongside Staff Member rather than instead of it: this is
+                // the device's record, and for a badge nobody has paired to a
+                // profile yet it is the only name there is.
+                \Filament\Tables\Columns\TextColumn::make('enrollment.name')
+                    ->label('Name on Machine')
+                    ->placeholder('—')
+                    ->searchable()
+                    ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->getStateUsing(function (DailyAttendance $record) {
