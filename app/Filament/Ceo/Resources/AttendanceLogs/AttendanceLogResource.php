@@ -4,13 +4,14 @@ namespace App\Filament\Ceo\Resources\AttendanceLogs;
 
 use App\Filament\Ceo\Concerns\CeoReadOnlyResource;
 use App\Filament\Ceo\Resources\AttendanceLogs\Pages\ManageAttendanceLogs;
+use App\Filament\Concerns\ExportsDailyAttendance;
 use App\Models\DailyAttendance;
 use BackedEnum;
+use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Tables\Table;
 use Filament\Tables\Filters\Filter;
-use Filament\Forms\Components\DatePicker;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 class AttendanceLogResource extends Resource
@@ -21,11 +22,14 @@ class AttendanceLogResource extends Resource
     // permissions, would be denied their own attendance page.
     use CeoReadOnlyResource;
 
+    use ExportsDailyAttendance;
+
     protected static ?string $model = DailyAttendance::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clock';
 
     protected static ?string $navigationLabel = 'Daily Attendance';
+
     protected static ?string $pluralModelLabel = 'Daily Attendance Records';
 
     public static function form(Schema $schema): Schema
@@ -57,13 +61,7 @@ class AttendanceLogResource extends Resource
                     ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('status')
                     ->label('Status')
-                    ->getStateUsing(function (DailyAttendance $record) {
-                        if (!$record->user || !$record->user->shift_start_time) return 'No Shift Time';
-                        $firstPunch = \Carbon\Carbon::parse($record->first_punch)->timezone(\App\Support\VenueTime::TIMEZONE);
-                        $dateStr = $record->date instanceof \Carbon\Carbon ? $record->date->toDateString() : \Carbon\Carbon::parse($record->date)->toDateString();
-                        $shiftStart = \Carbon\Carbon::parse($dateStr . ' ' . $record->user->shift_start_time, \App\Support\VenueTime::TIMEZONE);
-                        return $firstPunch->greaterThan($shiftStart) ? 'Late' : 'On Time';
-                    })
+                    ->getStateUsing(fn (DailyAttendance $record): string => $record->status())
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'Late' => 'danger',
@@ -103,10 +101,12 @@ class AttendanceLogResource extends Resource
                                 $data['until'],
                                 fn (Builder $query, $date): Builder => $query->whereDate('date', '<=', $date),
                             );
-                    })
+                    }),
             ])
             ->recordActions([])
-            ->toolbarActions([]);
+            ->toolbarActions([
+                static::exportAction(),
+            ]);
     }
 
     public static function getPages(): array
