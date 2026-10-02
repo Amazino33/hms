@@ -14,7 +14,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="robots" content="noindex, nofollow">
     <meta name="theme-color" content="#121214">
     <title>{{ $boot['place'] ? $boot['place'].' · ' : '' }}{{ $venue }}</title>
@@ -199,7 +199,7 @@
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1.5-3 4-3 7h3"/></svg>
                     Food
                 </button>
-                <button type="button" :class="{ on: sheet === 'search' }" @click="openSheet('search')">
+                <button type="button" :class="{ on: sheet === 'search' }" @click="openSearch()">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
                     Search
                 </button>
@@ -278,16 +278,31 @@
         </template>
     </div>
 
-    {{-- ===================== Search ===================== --}}
-    <div class="sheet" data-sheet="search" role="dialog" aria-modal="true" aria-label="Search" tabindex="-1"
-        x-show="sheet === 'search'" x-transition:enter-start="sheet-enter" x-transition:leave-end="sheet-enter">
-        <div class="grab-zone" @touchstart="dragStart($event)" @touchmove="dragMove($event)" @touchend="dragEnd()"><div class="grab"></div></div>
-        <div class="scroll">
+    {{-- ===================== Search =====================
+         Full-screen, input pinned at the TOP, so the phone keyboard can never
+         cover it (it overlays fixed bottom sheets since Chrome 108, and on
+         iOS). Kept in the page (hidden with visibility, not display:none) so
+         the Search tap can focus the input synchronously — iOS only opens
+         the keyboard for a focus inside the user's own tap. --}}
+    <div class="search-panel" data-sheet="search" role="dialog" aria-modal="true" aria-label="Search the menu"
+        :class="{ open: sheet === 'search' }" :aria-hidden="sheet !== 'search'" x-ref="searchPanel">
+        <div class="search-top">
+            <button type="button" class="search-back" aria-label="Close search" @click="closeSheet()">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
             <label class="search-box">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                <input type="search" class="search-input" x-ref="searchInput" x-model="search" placeholder="Search the menu" autocomplete="off" aria-label="Search the menu" data-autofocus>
+                <input type="search" class="search-input" x-ref="searchInput" x-model="search" placeholder="Search the menu" autocomplete="off" enterkeyhint="search" aria-label="Search the menu">
+                <button type="button" class="search-clear" x-show="search.length" aria-label="Clear search" @click="search = ''; $refs.searchInput.focus({ preventScroll: true })">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
             </label>
-            <template x-for="item in searchResults" :key="'s-' + item.key">
+        </div>
+        <div class="search-results">
+            <template x-if="search.trim().length < 2 && popular.length">
+                <p class="eyebrow" style="margin-left:0">Popular tonight</p>
+            </template>
+            <template x-for="item in (search.trim().length >= 2 ? searchResults : popular)" :key="'s-' + item.key">
                 <div class="item">
                     <button type="button" class="body" style="text-align:left" @click="open(item)">
                         <div class="name" x-text="item.name"></div>
@@ -310,7 +325,7 @@
                 </div>
             </template>
             <p class="muted center" x-show="search.trim().length >= 2 && !searchResults.length">No matches</p>
-            <p class="muted center small" x-show="search.trim().length < 2">Type at least two letters.</p>
+            <p class="muted center small" x-show="search.trim().length < 2 && !popular.length">Type at least two letters.</p>
         </div>
     </div>
 

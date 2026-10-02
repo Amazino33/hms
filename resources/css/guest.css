@@ -88,6 +88,7 @@ img { display: block; }
     .splash.leaving { transform: none; opacity: 0; }
     .splash .medallion, .splash .welcome, .splash .name, .splash .rule, .splash .pill { animation: splash-fade 200ms linear both; }
     .splash .loader span { animation: none; width: 96px; opacity: .6; }
+    .search-panel, .search-panel.open { transform: none; }
     .sheet, .scrim, .cart-bar { transition-duration: 1ms !important; }
 }
 @keyframes splash-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -163,7 +164,7 @@ img.tile.loaded { opacity: 1; }
 
 /* ------------------------------------------------------------ Sheets (one component) */
 .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .6); transition: opacity 240ms ease; }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 88vh; display: flex; flex-direction: column; background: var(--sheet); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; box-shadow: 0 -12px 40px rgba(0, 0, 0, .45); padding-bottom: env(safe-area-inset-bottom); transition: transform 240ms var(--ease), opacity 240ms ease; outline: none; max-width: 640px; margin: 0 auto; }
+.sheet { position: fixed; left: 0; right: 0; bottom: var(--kb, 0px); z-index: 50; max-height: calc(88vh - var(--kb, 0px)); max-height: calc(88dvh - var(--kb, 0px)); display: flex; flex-direction: column; background: var(--sheet); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; box-shadow: 0 -12px 40px rgba(0, 0, 0, .45); padding-bottom: env(safe-area-inset-bottom); transition: transform 240ms var(--ease), opacity 240ms ease; outline: none; max-width: 640px; margin: 0 auto; }
 .sheet-enter { transform: translateY(40px); opacity: 0; }
 .sheet .grab-zone { padding: 10px 0 6px; touch-action: none; cursor: grab; flex-shrink: 0; }
 .sheet .grab { width: 40px; height: 5px; border-radius: var(--pill); background: var(--line-3); margin: 0 auto; }
@@ -254,8 +255,23 @@ img.tile.loaded { opacity: 1; }
 /* Search */
 .search-input { width: 100%; height: 48px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--raised-2); padding: 0 14px 0 42px; outline: none; }
 .search-box { position: relative; margin: 4px 0 6px; }
-.search-box svg { position: absolute; left: 14px; top: 14px; color: var(--muted); }
+.search-box > svg { position: absolute; left: 14px; top: 15px; color: var(--muted); pointer-events: none; }
 .sheet .item { padding-left: 0; padding-right: 0; }
+
+/* Search: full screen, box pinned at the top (keyboard-safe) */
+.search-panel { position: fixed; inset: 0; z-index: 55; height: 100vh; height: 100dvh; background: var(--bg); display: flex; flex-direction: column; visibility: hidden; opacity: 0; transform: translateY(12px); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 180ms; }
+.search-panel.open { visibility: visible; opacity: 1; transform: none; pointer-events: auto; transition: opacity 180ms ease, transform 180ms ease, visibility 0s; }
+.search-top { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.search-back { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; color: var(--text); }
+.search-top .search-box { flex: 1; min-width: 0; margin: 0; }
+.search-top .search-input { padding-right: 44px; }
+.search-clear { position: absolute; right: 2px; top: 2px; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); }
+.search-results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 20px calc(24px + env(safe-area-inset-bottom)); }
+.search-results .item { padding-left: 0; padding-right: 0; }
+.search-input::-webkit-search-cancel-button { display: none; }
+
+/* While the keyboard is up, the bottom stack steps aside */
+html.kb-open .bottom { display: none; }
 
 /* Call */
 .call-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

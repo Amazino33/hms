@@ -91,6 +91,53 @@ Alpine.data('guestMenu', () => ({
             this.watchSections();
             this.announceReady();
         });
+
+        this.watchKeyboard();
+    },
+
+    // ---- Keyboard (iOS + older Android) ------------------------------------
+    // The keyboard overlays fixed elements instead of shrinking the page.
+    // --kb is how much of the screen it covers, so sheets can ride above it;
+    // html.kb-open hides the bottom nav and cart bar while it is up.
+    watchKeyboard() {
+        const root = document.documentElement;
+        const vv = window.visualViewport;
+        let tallest = window.innerHeight;
+        const typing = () => {
+            const el = document.activeElement;
+            return !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(el.type)));
+        };
+        const update = () => {
+            tallest = Math.max(tallest, window.innerHeight);
+            const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+            root.style.setProperty('--kb', kb + 'px');
+            // Android with interactive-widget=resizes-content shrinks the
+            // page instead — a much shorter window while typing is the keyboard.
+            root.classList.toggle('kb-open', kb > 80 || (typing() && tallest - window.innerHeight > 150));
+        };
+        if (vv) {
+            vv.addEventListener('resize', update);
+            vv.addEventListener('scroll', update);
+        }
+        window.addEventListener('resize', update);
+        document.addEventListener('focusin', (e) => {
+            update();
+            // Never leave the field being typed in under the keyboard.
+            if (e.target.closest && e.target.closest('.sheet') && typing()) {
+                setTimeout(() => e.target.scrollIntoView({ block: 'center' }), 100);
+            }
+        });
+        document.addEventListener('focusout', () => setTimeout(update, 50));
+        update();
+    },
+
+    // Search opens AND focuses inside the user's own tap — iOS only raises
+    // the keyboard for a focus that happens synchronously in the tap.
+    openSearch() {
+        const panel = this.$refs.searchPanel;
+        panel.classList.add('open');
+        this.$refs.searchInput.focus({ preventScroll: true });
+        this.openSheet('search');
     },
 
     get canOrder() { return this.boot.mode === 'order'; },
@@ -124,6 +171,7 @@ Alpine.data('guestMenu', () => ({
             }
         } catch (e) { /* old browser */ }
         this.sheet = name;
+        if (name === 'search') return; // focused already, in the tap
         this.$nextTick(() => {
             const el = document.querySelector(`[data-sheet="${name}"]`);
             if (!el) return;
@@ -135,6 +183,7 @@ Alpine.data('guestMenu', () => ({
 
     closeSheet() {
         if (!this.sheet) return;
+        if (this.sheet === 'search') document.activeElement?.blur(); // drop the keyboard
         if (history.state && history.state.sheet) {
             history.back(); // popstate clears the sheet
         } else {
