@@ -24,12 +24,49 @@ class FolioLine extends Model
         'verified_at' => 'datetime',
     ];
 
+    /**
+     * The only fields that ever change after a line is written: a manager
+     * resolving a transfer PAYMENT (FolioService::verifyTransfer(),
+     * rejectTransfer(), and voidLine()'s transfer branch). Everything else
+     * on every line — and anything at all on a charge — is fixed for good.
+     */
+    public const PAYMENT_RESOLUTION_FIELDS = ['verified', 'verified_by', 'verified_at', 'reference', 'updated_at'];
+
+    /**
+     * Enforced here rather than trusted to every caller: a folio is the
+     * guest's bill, and a quietly edited or deleted charge is
+     * indistinguishable from fraud after the fact. Corrections go through
+     * a reversal line (FolioService).
+     */
+    protected static function booted(): void
+    {
+        static::updating(function (FolioLine $line) {
+            $changed = array_keys($line->getDirty());
+            $resolvesAPayment = $line->getOriginal('type') === 'payment'
+                && array_diff($changed, self::PAYMENT_RESOLUTION_FIELDS) === [];
+
+            if (! $resolvesAPayment) {
+                throw new \LogicException('Folio lines are immutable — post a reversal line instead of editing this one.');
+            }
+        });
+
+        static::deleting(function () {
+            throw new \LogicException('Folio lines are never deleted — post a reversal line instead.');
+        });
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()
             ->useLogName('folio_line')
             ->dontLogEmptyChanges();
+    }
+
+    /** The room order this charge (or its reversal) is for — null on lines posted before Phase 0C. */
+    public function order()
+    {
+        return $this->belongsTo(Order::class);
     }
 
     public function folio()

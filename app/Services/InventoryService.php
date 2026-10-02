@@ -162,15 +162,25 @@ class InventoryService
      * Deduct inventory items when an order is created
      * (This is the reverse of returnInventoryForCancelledOrder)
      *
+     * $allowShortfall is for Mark Ready only: the dish is already cooked,
+     * so refusing to record it helps nobody — stock is allowed to go
+     * negative instead, and every line that did is returned so the caller
+     * can log it. Order creation never passes it, so a shortage there
+     * still refuses the sale exactly as before.
+     *
+     * @return array<int, array{item: string, stock: string, available: float, required: float}> lines that went short
+     *
      * @throws \Exception
      */
-    public static function deductInventoryForOrderItems(Order $order): void
+    public static function deductInventoryForOrderItems(Order $order, bool $allowShortfall = false): array
     {
+        $shortfalls = [];
+
         foreach ($order->items as $item) {
             if ($item->item_type === 'product') {
-                self::deductProductInventory($item, $order);
+                array_push($shortfalls, ...self::deductProductInventory($item, $order, $allowShortfall));
             } elseif ($item->item_type === 'menu_item') {
-                self::deductMenuItemIngredients($item, $order);
+                array_push($shortfalls, ...self::deductMenuItemIngredients($item, $order, $allowShortfall));
             }
         }
 
@@ -186,19 +196,22 @@ class InventoryService
         // transaction as the deduction, and touching status here would
         // re-enter OrderObserver. Only this one column is written.
         $order->forceFill(['stock_deducted_at' => now()])->saveQuietly();
+
+        return $shortfalls;
     }
 
     /**
      * Deduct product inventory, logging the movement as an InventoryTransaction.
      */
-    private static function deductProductInventory($item, Order $order): void
+    private static function deductProductInventory($item, Order $order, bool $allowShortfall = false): array
     {
         $productId = $item->product_id;
         $product = Product::with('category')->find($productId);
 
         $warehouseId = self::getWarehouseForProduct($product);
+        $shortfalls = [];
 
-        DB::transaction(function () use ($item, $productId, $product, $warehouseId, $order) {
+        DB::transaction(function () use ($item, $productId, $product, $warehouseId, $order, $allowShortfall, &$shortfalls) {
             $inventory = InventoryItem::query()
                 ->where('product_id', $productId)
                 ->where('warehouse_id', $warehouseId)
@@ -208,7 +221,22 @@ class InventoryService
             $currentStock = $inventory->quantity ?? 0;
 
             if ($currentStock < $item->quantity) {
-                throw new \Exception("Out of Stock: Only {$currentStock} left of {$item->product_name}");
+                if (! $allowShortfall) {
+                    throw new \Exception("Out of Stock: Only {$currentStock} left of {$item->product_name}");
+                }
+
+                $shortfalls[] = [
+                    'item' => $item->product_name,
+                    'stock' => $item->product_name,
+                    'available' => (float) $currentStock,
+                    'required' => (float) $item->quantity,
+                ];
+
+                $inventory ??= InventoryItem::create([
+                    'product_id' => $productId,
+                    'warehouse_id' => $warehouseId,
+                    'quantity' => 0,
+                ]);
             }
 
             $inventory->decrement('quantity', $item->quantity);
@@ -229,13 +257,15 @@ class InventoryService
                 'unit_cost_at_sale' => $product?->last_cost_price,
             ]);
         });
+
+        return $shortfalls;
     }
 
     /**
      * Deduct ingredients for menu item (kitchen warehouse), logging each
      * movement as an IngredientTransaction.
      */
-    private static function deductMenuItemIngredients($item, Order $order): void
+    private static function deductMenuItemIngredients($item, Order $order, bool $allowShortfall = false): array
     {
         $menuItem = \App\Models\MenuItem::with('recipes.ingredient')->find($item->menu_item_id);
 
@@ -244,11 +274,12 @@ class InventoryService
         }
 
         $warehouseId = self::getKitchenWarehouseId();
+        $shortfalls = [];
 
         foreach ($menuItem->recipes as $recipe) {
             $requiredQuantity = $recipe->quantity_needed * $item->quantity;
 
-            DB::transaction(function () use ($recipe, $requiredQuantity, $warehouseId, $order) {
+            DB::transaction(function () use ($recipe, $requiredQuantity, $warehouseId, $order, $item, $allowShortfall, &$shortfalls) {
                 $inventory = IngredientInventoryItem::query()
                     ->where('ingredient_id', $recipe->ingredient_id)
                     ->where('warehouse_id', $warehouseId)
@@ -258,7 +289,16 @@ class InventoryService
                 $currentStock = $inventory->quantity ?? 0;
 
                 if ($currentStock < $requiredQuantity && self::enforceIngredientStock()) {
-                    throw new \Exception("Insufficient ingredients: Only {$currentStock} {$recipe->ingredient->unit_name} of {$recipe->ingredient->name} available, need {$requiredQuantity}");
+                    if (! $allowShortfall) {
+                        throw new \Exception("Insufficient ingredients: Only {$currentStock} {$recipe->ingredient->unit_name} of {$recipe->ingredient->name} available, need {$requiredQuantity}");
+                    }
+
+                    $shortfalls[] = [
+                        'item' => $item->product_name,
+                        'stock' => $recipe->ingredient->name,
+                        'available' => (float) $currentStock,
+                        'required' => (float) $requiredQuantity,
+                    ];
                 }
 
                 // Enforcement off (or stock genuinely sufficient): still
@@ -290,6 +330,8 @@ class InventoryService
                 ]);
             });
         }
+
+        return $shortfalls;
     }
 
     /**

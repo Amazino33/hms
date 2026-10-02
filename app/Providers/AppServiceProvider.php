@@ -56,6 +56,9 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->registerObservers();
 
+        $this->registerGuestRateLimiters();
+        $this->forgetGuestMenuCacheOnMenuChanges();
+
         // Listen to spatie permission attach/detach events and invalidate sidebar cache accordingly
         Event::listen([RoleAttached::class, RoleDetached::class], function ($event) {
             if ($event->model instanceof User) {
@@ -173,12 +176,88 @@ class AppServiceProvider extends ServiceProvider
         })->all();
     }
 
+    /**
+     * Guest QR pages (D10). Keyed by the phone's `selum_gd` device cookie,
+     * with a generous per-IP ceiling on top, because every guest on the
+     * venue Wi-Fi shares one public IP. A first visit (no cookie yet) is
+     * keyed by IP. Each limiter's IP ceiling is counted separately.
+     */
+    protected function registerGuestRateLimiters(): void
+    {
+        $device = function (\Illuminate\Http\Request $request): string {
+            $cookie = (string) $request->cookies->get(\App\Http\Middleware\EnsureGuestDevice::COOKIE, '');
+
+            return preg_match('/^[A-Za-z0-9]{32}$/', $cookie) ? 'dev:'.$cookie : 'ip:'.$request->ip();
+        };
+
+        $limit = \Illuminate\Cache\RateLimiting\Limit::class;
+
+        \Illuminate\Support\Facades\RateLimiter::for('guest-page', fn ($request) => [
+            $limit::perMinute(60)->by('page:'.$device($request)),
+            $limit::perMinute(1200)->by('page-ip:'.$request->ip()),
+        ]);
+
+        \Illuminate\Support\Facades\RateLimiter::for('guest-poll', fn ($request) => [
+            $limit::perMinute(30)->by('poll:'.$device($request)),
+            $limit::perMinute(3000)->by('poll-ip:'.$request->ip()),
+        ]);
+
+        \Illuminate\Support\Facades\RateLimiter::for('guest-submit', fn ($request) => [
+            $limit::perMinutes(10, 6)->by('submit:'.$device($request)),
+            // A room's sticker: 20 an hour (Phase 5); a table's: 40.
+            $limit::perHour(\App\Services\Guest\QrTokens::resolve((string) $request->route('token')) instanceof \App\Models\Room ? 20 : 40)
+                ->by('submit-token:'.$request->route('token')),
+            $limit::perMinute(300)->by('submit-ip:'.$request->ip()),
+        ]);
+
+        \Illuminate\Support\Facades\RateLimiter::for('guest-cancel', fn ($request) => [
+            $limit::perMinute(20)->by('cancel:'.$device($request)),
+            $limit::perMinute(600)->by('cancel-ip:'.$request->ip()),
+        ]);
+
+        // Phase 4: "I've paid" claims, and Call waiter (on top of the
+        // service's own one-call-per-2-minutes rule).
+        \Illuminate\Support\Facades\RateLimiter::for('guest-claim', fn ($request) => [
+            $limit::perMinutes(10, 5)->by('claim:'.$device($request)),
+            $limit::perMinute(300)->by('claim-ip:'.$request->ip()),
+        ]);
+
+        \Illuminate\Support\Facades\RateLimiter::for('guest-call', fn ($request) => [
+            $limit::perHour(6)->by('call:'.$device($request)),
+            $limit::perMinute(300)->by('call-ip:'.$request->ip()),
+        ]);
+    }
+
+    /**
+     * D11: the guest menu's structure is cached 5 minutes and dropped the
+     * moment anything on it changes. Sold-out flips drop the 30-second
+     * availability cache too, so the kitchen's toggle shows straight away.
+     */
+    protected function forgetGuestMenuCacheOnMenuChanges(): void
+    {
+        $forget = function () {
+            \App\Services\Guest\GuestMenuService::forgetMenuCache();
+            \Illuminate\Support\Facades\Cache::forget(\App\Services\Guest\GuestMenuService::UNAVAILABLE_CACHE_KEY);
+        };
+
+        foreach ([\App\Models\MenuItem::class, \App\Models\Product::class, \App\Models\Category::class, \App\Models\ChipGroup::class, \App\Models\ChipOption::class] as $model) {
+            $model::saved($forget);
+            $model::deleted($forget);
+        }
+    }
+
     protected function registerObservers(): void
     {
         Order::observe(OrderObserver::class);
         User::observe(UserObserver::class);
         PagePermission::observe(PagePermissionObserver::class);
         StaffDebt::observe(StaffDebtObserver::class);
+
+        // Guest room ordering (Phase 5): listen, never edit — kitchen Mark
+        // Ready queues room food for a porter; checkout cancels requests
+        // that never became orders.
+        Order::observe(\App\Observers\GuestRoomOrderObserver::class);
+        \App\Models\Booking::observe(\App\Observers\GuestStayObserver::class);
 
         // Spatie models
         Role::observe(RoleObserver::class);

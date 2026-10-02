@@ -27,6 +27,9 @@ use Livewire\Livewire;
 function seedKdsKitchenOrder(string $productName = 'Jollof Rice'): array
 {
     $table = TableModel::create(['name' => 'Table '.uniqid(), 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    // Mark Ready deducts every kitchen ticket's stock since Phase 0D, so
+    // the kitchen it deducts from has to exist.
+    WareHouse::firstOrCreate(['name' => 'Kitchen'], ['type' => 'consumer']);
     $category = Category::create(['name' => 'Food', 'type' => 'food']);
     $product = Product::create(['name' => $productName, 'price' => 1500, 'category_id' => $category->id, 'is_active' => true]);
 

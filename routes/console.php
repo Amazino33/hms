@@ -26,6 +26,14 @@ Schedule::command('hms:auto-release-reservations')->hourly();
 // cron entry exists before relying on this in production.
 Schedule::command('hms:compute-daily-snapshot')->dailyAt('08:15');
 
+// Guest QR ordering (D14): pending requests expire after 3 hours, idle
+// table sessions close. Same cron caveat as above.
+Schedule::command('guest:expire-stale')->everyTenMinutes()->withoutOverlapping();
+
+// Guest drinks waiting with no bartender shift, or two bartender shifts
+// open at once (Phase 3) — one /admin alert per occurrence.
+Schedule::command('guest:bar-monitor')->everyMinute()->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

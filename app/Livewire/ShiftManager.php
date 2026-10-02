@@ -31,6 +31,16 @@ class ShiftManager extends Component
 
     public $ownerTakeDescription = '';
 
+    /**
+     * D3: guest tables blocking this waiter's end of shift — each still has
+     * guest drinks waiting at the bar. [['session_id' => int, 'table' => string]]
+     */
+    public array $guestHandoverTables = [];
+
+    public ?int $handoverSessionId = null;
+
+    public ?int $handoverToUserId = null;
+
     protected $listeners = [
         'open-shift-modal' => 'openModal',
         'close-modal-safely' => 'closeModalSafely',
@@ -239,10 +249,80 @@ class ShiftManager extends Component
             $this->declaredPos = 0;
 
         } catch (\Exception $e) {
+            $this->loadGuestHandoverTables();
             Notification::make()->title('Error ending shift: '.$e->getMessage())->danger()->persistent()->send();
         } finally {
             $this->isProcessing = false;
         }
+    }
+
+    public function loadGuestHandoverTables(): void
+    {
+        $this->guestHandoverTables = auth()->user()
+            ? \App\Services\Guest\GuestSessionHandoverService::blockingSessions(auth()->user())
+                ->map(fn ($s) => ['session_id' => $s->id, 'table' => $s->table?->name ?? 'Table'])
+                ->values()->all()
+            : [];
+    }
+
+    /** Waiters who could take a table over: on an active waiter shift, not me. */
+    public function handoverCandidates(): array
+    {
+        return Shift::query()->activeNonStale('waiter')->with('user:id,name')
+            ->where('user_id', '!=', auth()->id())
+            ->get()
+            ->pluck('user.name', 'user.id')
+            ->all();
+    }
+
+    public function closeGuestHandover(): void
+    {
+        $this->guestHandoverTables = [];
+        $this->handoverSessionId = null;
+        $this->handoverToUserId = null;
+    }
+
+    /**
+     * Hands one guest table to another on-shift waiter, who confirms with
+     * their own PIN — the PIN must be the chosen waiter's.
+     */
+    public function handoverGuestTable(?string $pin = null): void
+    {
+        $session = \App\Models\GuestTableSession::find($this->handoverSessionId);
+        $to = $this->handoverToUserId ? \App\Models\User::find($this->handoverToUserId) : null;
+
+        if (! $session || ! $to) {
+            \App\Services\UserFeedback::blocked('Pick a table and a waiter', 'Choose which table to hand over and who is taking it.');
+
+            return;
+        }
+
+        try {
+            $pinOwner = (new \App\Services\PinAuthService)->attempt((string) $pin, 'handover:'.auth()->id());
+        } catch (\App\Exceptions\PinLockedException $e) {
+            \App\Services\UserFeedback::blocked('Too many wrong PINs', $e->getMessage());
+
+            return;
+        }
+
+        if (! $pinOwner || $pinOwner->id !== $to->id) {
+            \App\Services\UserFeedback::blocked('Wrong PIN', "{$to->name} must enter their own PIN to take the table.");
+
+            return;
+        }
+
+        try {
+            (new \App\Services\Guest\GuestSessionHandoverService)->handover($session, auth()->user(), $to);
+        } catch (\Exception $e) {
+            \App\Services\UserFeedback::blocked('Table not handed over', $e->getMessage());
+
+            return;
+        }
+
+        \App\Services\UserFeedback::succeeded("Handed to {$to->name}", 'Their guest drinks are now theirs to deliver.');
+        $this->handoverSessionId = null;
+        $this->handoverToUserId = null;
+        $this->loadGuestHandoverTables();
     }
 
     public function openModal()

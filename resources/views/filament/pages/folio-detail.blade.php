@@ -136,6 +136,36 @@
                 </div>
             </div>
 
+            @php $roomOrders = $this->roomOrders(); @endphp
+            @if($roomOrders->isNotEmpty())
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <h3 class="font-bold text-gray-900 dark:text-white mb-2">Room orders</h3>
+                    <div class="space-y-2">
+                        @foreach($roomOrders as $roomOrder)
+                            <div wire:key="room-order-{{ $roomOrder->id }}" class="rounded-lg border border-gray-100 dark:border-gray-700 p-3 flex items-center justify-between gap-3 {{ $roomOrder->status === 'cancelled' ? 'opacity-60' : '' }}">
+                                <div class="min-w-0">
+                                    <div class="text-sm font-semibold text-gray-900 dark:text-white {{ $roomOrder->status === 'cancelled' ? 'line-through' : '' }}">
+                                        #{{ $roomOrder->order_number }} · {{ ucfirst($roomOrder->destination) }} · ₦{{ number_format((float) $roomOrder->total_amount, 2) }}
+                                    </div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                        {{ $roomOrder->items->map(fn ($i) => $i->quantity.'× '.$i->product_name)->join(', ') }}
+                                    </div>
+                                    <div class="text-xs mt-0.5 {{ $roomOrder->status === 'cancelled' ? 'text-red-600' : 'text-gray-500 dark:text-gray-400' }}">
+                                        {{ ucfirst($roomOrder->status) }}@if($roomOrder->status === 'cancelled' && $roomOrder->cancellation_reason) — {{ $roomOrder->cancellation_reason }}@endif
+                                    </div>
+                                </div>
+                                @if($this->canCancelRoomOrder($roomOrder))
+                                    <button type="button" wire:click="openCancelRoomOrder({{ $roomOrder->id }})"
+                                        class="shrink-0 px-3 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/20">
+                                        Cancel room order
+                                    </button>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             @php $profit = $this->roomProfit(); @endphp
             <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                 <h3 class="font-bold text-gray-900 dark:text-white mb-2">Room Profit ({{ $profit['nights'] }} night{{ $profit['nights'] === 1 ? '' : 's' }})</h3>
@@ -324,6 +354,30 @@
                     </button>
                     <button type="button" wire:click="voidLine" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold">
                         Void line
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Cancelling a room order takes its charge back off the folio with a
+         reversal line (the original charge stays on the ledger). Cooked food
+         is recorded as kitchen waste, never restocked. --}}
+    @if($cancellingOrderId)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" wire:click.self="closeCancelRoomOrder">
+            <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md space-y-4">
+                <h3 class="font-bold text-lg text-gray-900 dark:text-white">Cancel this room order</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    The charge comes off the guest's folio as a reversal line. If the food was already cooked it is recorded as kitchen waste.
+                </p>
+                <textarea wire:model="cancelOrderReason" rows="3" placeholder="Reason (required, e.g. guest changed their mind)"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"></textarea>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="closeCancelRoomOrder" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-bold">
+                        Keep order
+                    </button>
+                    <button type="button" wire:click="cancelRoomOrder" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold">
+                        Cancel room order
                     </button>
                 </div>
             </div>

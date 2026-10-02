@@ -9,6 +9,14 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // Guest QR pages (Phase 2): deliberately NOT in the 'web' group —
+        // no session, no CSRF, no cookie encryption (D9).
+        then: function () {
+            \Illuminate\Support\Facades\Route::middleware([
+                \App\Http\Middleware\EnsureGuestDevice::class,
+                \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            ])->group(__DIR__.'/../routes/guest.php');
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Add performance headers middleware

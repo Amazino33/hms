@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guest ordering — Golden rules</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+
+.golden ol { padding-left: 12mm; }
+.golden li { font-size: 18pt; line-height: 1.2; margin: 3mm 0; font-weight: 700; }
+.golden p { font-size: 14pt; }
+</style>
+</head>
+<body>
+<div class="sheet golden">
+<div class="role"><span class="name">All staff</span><span class="tag">Guest ordering</span></div>
+<h1>Guest ordering — Golden rules</h1>
+<p>For every staff member. Read it. Keep it.</p>
+<ol start="1">
+<li>Guests ask. Staff confirm. Nothing happens until you accept it.</li>
+</ol>
+<ol start="2">
+<li>The screen is the order. Not WhatsApp. Not a promise at the table.</li>
+</ol>
+<ol start="3">
+<li>"I've paid" is only a claim. Check the money first. Then mark paid.</li>
+</ol>
+<ol start="4">
+<li>Accept a table, own its money. A walk-out is your shortfall.</li>
+</ol>
+<ol start="5">
+<li>Never give guests your personal number. They use Call waiter.</li>
+</ol>
+<ol start="6">
+<li>Start your shift on time. Guests can see when the bar is late.</li>
+</ol>
+<ol start="7">
+<li>Guests pay the price they saw. Even if the price changes later.</li>
+</ol>
+<ol start="8">
+<li>Turn sounds on every morning. Tap the sound bar on every screen.</li>
+</ol>
+<ol start="9">
+<li>Change an order only in the system. Always give a reason.</li>
+</ol>
+<ol start="10">
+<li>Refused drinks go back to the bar at once.</li>
+</ol>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

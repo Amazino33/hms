@@ -5,6 +5,7 @@ use App\Filament\Resources\Products\Pages\CreateProduct;
 use App\Filament\Resources\Products\Pages\EditProduct;
 use App\Filament\Resources\Products\Pages\ListProducts;
 use App\Filament\Resources\Products\Tables\ProductsTable;
+use App\Filament\Support\MenuContentFields;
 use App\Models\Product;
 use BackedEnum;
 use UnitEnum;
@@ -58,6 +59,13 @@ class ProductResource extends Resource
                     ->default(0),
                 Toggle::make('is_active')->default(true),
             ])->columns(2),
+
+            Section::make('Guest menu')
+                ->description('What guests see when they scan a QR code: a photo and one short line.')
+                ->schema([
+                    MenuContentFields::photo(),
+                    MenuContentFields::description(),
+                ])->columns(2),
 
             Section::make('Fridge Restock Alert')
                 ->description('Optional — leave blank if this product isn\'t bar-fridge stock.')

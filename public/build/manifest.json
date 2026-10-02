@@ -1,6 +1,6 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-vAsv4zXD.css",
+    "file": "assets/app-BJjXMKL5.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -9,11 +9,11 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-Dj3Mijlm.css",
+    "file": "assets/theme-BudcWpZS.css",
     "src": "resources/css/filament/admin/theme.css"
   },
   "resources/css/filament/ceo/theme.css": {
-    "file": "assets/theme-C639M5kP.css",
+    "file": "assets/theme-DmnMDt3F.css",
     "src": "resources/css/filament/ceo/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -21,10 +21,33 @@
       "theme.css"
     ]
   },
+  "resources/css/guest.css": {
+    "file": "assets/guest-r-PckSo3.css",
+    "src": "resources/css/guest.css",
+    "isEntry": true,
+    "name": "guest",
+    "names": [
+      "guest.css"
+    ]
+  },
+  "resources/fonts/cormorant-garamond-latin-600-normal.woff2": {
+    "file": "assets/cormorant-garamond-latin-600-normal-Co1r35X9.woff2",
+    "src": "resources/fonts/cormorant-garamond-latin-600-normal.woff2"
+  },
+  "resources/fonts/manrope-latin-wght-normal.woff2": {
+    "file": "assets/manrope-latin-wght-normal-DHIcAJRg.woff2",
+    "src": "resources/fonts/manrope-latin-wght-normal.woff2"
+  },
   "resources/js/app.js": {
     "file": "assets/app-DK-jyFsO.js",
     "name": "app",
     "src": "resources/js/app.js",
+    "isEntry": true
+  },
+  "resources/js/guest.js": {
+    "file": "assets/guest-SA3SdcXS.js",
+    "name": "guest",
+    "src": "resources/js/guest.js",
     "isEntry": true
   }
 }

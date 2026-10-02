@@ -16,6 +16,11 @@ use Illuminate\Support\Facades\DB;
  * matching current reality (there is no per-item readiness anywhere in this
  * app). Deliberately kitchen-only: BarDisplay keeps its own separate
  * markAsReady() untouched.
+ *
+ * Since Phase 0D this is also THE moment kitchen food leaves the shelf, for
+ * every kitchen ticket — dine-in and room alike. There is no second
+ * deduction routine: anything headed for the kitchen screen is created
+ * without deducting (OrderSplitter), and this is the one place it happens.
  */
 class KitchenOrderService
 {
@@ -29,9 +34,9 @@ class KitchenOrderService
         // from more than one surface now, and without this guard, calling
         // markReady() on an already-ready/served/paid order (or a BAR-
         // destination one) would silently flip its status back and re-fire
-        // the "Ready!" notification. Row-locked inside a transaction because
-        // a room order's stock deduction happens right here — two
-        // concurrent clicks (from either surface) must not deduct twice.
+        // the "Ready!" notification. Row-locked inside a transaction
+        // because the stock deduction happens right here — two concurrent
+        // clicks (from either surface) must not deduct twice.
         $order = DB::transaction(function () use ($orderId, $actorUserId) {
             $order = Order::with(['items.product', 'items.menuItem.recipes.ingredient', 'table', 'booking.room'])
                 ->where('status', 'pending')
@@ -44,11 +49,24 @@ class KitchenOrderService
                 'processed_by_user_id' => $actorUserId,
             ]);
 
-            // Every other destination already deducted stock at order
-            // creation (OrderSplitter::handle()); a room order deferred it
-            // until now, this exact transition.
-            if ($order->booking_id) {
-                InventoryService::deductInventoryForOrderItems($order);
+            // stock_deducted_at is the single record of whether this
+            // ticket's stock has left the shelf: null for anything created
+            // since Phase 0D (and every room order, always), set for an
+            // older dine-in ticket that already deducted at creation —
+            // which must not be charged a second time here. Read from the
+            // row just locked above, so it's never a stale copy.
+            if (is_null($order->stock_deducted_at)) {
+                // The dish is already cooked: a shortage is recorded, never
+                // a reason to refuse marking it ready.
+                $shortfalls = InventoryService::deductInventoryForOrderItems($order, allowShortfall: true);
+
+                if (! empty($shortfalls)) {
+                    activity('inventory')
+                        ->performedOn($order)
+                        ->causedBy(User::find($actorUserId))
+                        ->withProperties(['shortfalls' => $shortfalls])
+                        ->log('Kitchen stock went short at Mark Ready');
+                }
             }
 
             return $order;

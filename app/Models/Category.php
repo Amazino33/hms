@@ -36,4 +36,10 @@ class Category extends Model
     {
         return $this->hasMany(MenuItem::class);
     }
+
+    /** Quick-choice chips offered on this category's items (Phase 1A). */
+    public function chipGroups()
+    {
+        return $this->belongsToMany(ChipGroup::class);
+    }
 }

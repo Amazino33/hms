@@ -1,0 +1,372 @@
+{
+    "table.submit": {
+        "ok": "bool",
+        "request": {
+            "lines": [
+                {
+                    "chips": [
+                        "string"
+                    ],
+                    "final": "bool",
+                    "name": "string",
+                    "note": "string",
+                    "price": "int",
+                    "qty": "int",
+                    "qty_requested": "int",
+                    "status": "string",
+                    "status_label": "string"
+                }
+            ],
+            "live": "bool",
+            "pending": "bool",
+            "ref": "string",
+            "status": "string",
+            "status_label": "string",
+            "submitted_at": "string",
+            "total": "int"
+        },
+        "whatsapp_url": "null"
+    },
+    "table.requests": {
+        "ok": "bool",
+        "requests": [
+            {
+                "lines": [
+                    {
+                        "chips": [
+                            "string"
+                        ],
+                        "final": "bool",
+                        "name": "string",
+                        "note": "string",
+                        "price": "int",
+                        "qty": "int",
+                        "qty_requested": "int",
+                        "status": "string",
+                        "status_label": "string"
+                    }
+                ],
+                "live": "bool",
+                "pending": "bool",
+                "ref": "string",
+                "status": "string",
+                "status_label": "string",
+                "submitted_at": "string",
+                "total": "int"
+            }
+        ]
+    },
+    "table.cancel": {
+        "ok": "bool",
+        "request": {
+            "lines": [
+                {
+                    "chips": [
+                        "string"
+                    ],
+                    "final": "bool",
+                    "name": "string",
+                    "note": "string",
+                    "price": "int",
+                    "qty": "int",
+                    "qty_requested": "int",
+                    "status": "string",
+                    "status_label": "string"
+                }
+            ],
+            "live": "bool",
+            "pending": "bool",
+            "ref": "string",
+            "status": "string",
+            "status_label": "string",
+            "submitted_at": "string",
+            "total": "int"
+        }
+    },
+    "table.availability": {
+        "ok": "bool",
+        "unavailable": "[]"
+    },
+    "table.bill": {
+        "bill": {
+            "call": "null",
+            "claims": "[]",
+            "live": "bool",
+            "sections": {
+                "on_bill": [
+                    {
+                        "chips": [
+                            "string"
+                        ],
+                        "name": "string",
+                        "note": "string",
+                        "price": "int",
+                        "qty": "int",
+                        "status_label": "string",
+                        "total": "int"
+                    }
+                ],
+                "paid": "[]",
+                "unavailable": "[]",
+                "waiting": "[]"
+            },
+            "totals": {
+                "bill": "int",
+                "claimed": "int",
+                "paid": "int",
+                "remaining": "int"
+            },
+            "tracker": {
+                "drinks": "int",
+                "food": "null",
+                "ref": "string",
+                "steps": [
+                    "string"
+                ]
+            }
+        },
+        "message": "null",
+        "ok": "bool",
+        "table": {
+            "state": "string"
+        }
+    },
+    "table.claim": {
+        "claim": {
+            "id": "int",
+            "status": "string"
+        },
+        "ok": "bool"
+    },
+    "table.withdraw": {
+        "claim": {
+            "id": "int",
+            "status": "string"
+        },
+        "ok": "bool"
+    },
+    "table.call": {
+        "call": {
+            "reason": "string",
+            "status": "string"
+        },
+        "ok": "bool"
+    },
+    "table.round": {
+        "lines": [
+            {
+                "chips": [
+                    "string"
+                ],
+                "id": "int",
+                "key": "string",
+                "name": "string",
+                "note": "string",
+                "price": "int",
+                "qty": "int",
+                "type": "string"
+            }
+        ],
+        "ok": "bool",
+        "skipped": "[]"
+    },
+    "table.accounts": {
+        "accounts": [
+            {
+                "bank": "string",
+                "id": "int",
+                "name": "string",
+                "number": "string"
+            }
+        ],
+        "ok": "bool"
+    },
+    "table.bill.after_claim_and_call": {
+        "bill": {
+            "call": {
+                "reason": "string",
+                "recent": "bool",
+                "status": "string"
+            },
+            "claims": [
+                {
+                    "account": "null",
+                    "amount": "int",
+                    "id": "int",
+                    "payer_name": "string",
+                    "status": "string",
+                    "status_label": "string"
+                }
+            ],
+            "live": "bool",
+            "sections": {
+                "on_bill": [
+                    {
+                        "chips": [
+                            "string"
+                        ],
+                        "name": "string",
+                        "note": "string",
+                        "price": "int",
+                        "qty": "int",
+                        "status_label": "string",
+                        "total": "int"
+                    }
+                ],
+                "paid": "[]",
+                "unavailable": "[]",
+                "waiting": "[]"
+            },
+            "totals": {
+                "bill": "int",
+                "claimed": "int",
+                "paid": "int",
+                "remaining": "int"
+            },
+            "tracker": {
+                "drinks": "int",
+                "food": "null",
+                "ref": "string",
+                "steps": [
+                    "string"
+                ]
+            }
+        },
+        "message": "null",
+        "ok": "bool",
+        "table": {
+            "state": "string"
+        }
+    },
+    "room.submit": {
+        "ok": "bool",
+        "request": {
+            "lines": [
+                {
+                    "chips": [
+                        "string"
+                    ],
+                    "final": "bool",
+                    "name": "string",
+                    "note": "string",
+                    "price": "int",
+                    "qty": "int",
+                    "qty_requested": "int",
+                    "status": "string",
+                    "status_label": "string"
+                }
+            ],
+            "live": "bool",
+            "pending": "bool",
+            "ref": "string",
+            "status": "string",
+            "status_label": "string",
+            "submitted_at": "string",
+            "total": "int"
+        },
+        "whatsapp_url": "string"
+    },
+    "room.bill.untrusted": {
+        "bill": "null",
+        "message": "string",
+        "ok": "bool",
+        "table": {
+            "state": "string",
+            "trusted": "bool"
+        }
+    },
+    "room.bill.trusted": {
+        "bill": {
+            "call": "null",
+            "claims": "[]",
+            "live": "bool",
+            "sections": {
+                "on_bill": [
+                    {
+                        "chips": "[]",
+                        "name": "string",
+                        "note": "null",
+                        "price": "int",
+                        "qty": "int",
+                        "status_label": "string",
+                        "total": "int"
+                    }
+                ],
+                "paid": "[]",
+                "unavailable": "[]",
+                "waiting": [
+                    {
+                        "chips": [
+                            "string"
+                        ],
+                        "name": "string",
+                        "note": "string",
+                        "price": "int",
+                        "qty": "int",
+                        "status_label": "string",
+                        "total": "int"
+                    }
+                ]
+            },
+            "totals": {
+                "bill": "int",
+                "claimed": "int",
+                "paid": "int",
+                "remaining": "int"
+            },
+            "tracker": {
+                "drinks": "int",
+                "food": "null",
+                "ref": "string",
+                "steps": [
+                    "string"
+                ]
+            }
+        },
+        "message": "null",
+        "ok": "bool",
+        "table": {
+            "state": "string",
+            "trusted": "bool"
+        }
+    },
+    "room.requests": {
+        "ok": "bool",
+        "requests": [
+            {
+                "lines": [
+                    {
+                        "chips": [
+                            "string"
+                        ],
+                        "final": "bool",
+                        "name": "string",
+                        "note": "string",
+                        "price": "int",
+                        "qty": "int",
+                        "qty_requested": "int",
+                        "status": "string",
+                        "status_label": "string"
+                    }
+                ],
+                "live": "bool",
+                "pending": "bool",
+                "ref": "string",
+                "status": "string",
+                "status_label": "string",
+                "submitted_at": "string",
+                "total": "int"
+            }
+        ]
+    },
+    "error.invalid_code": {
+        "code": "string",
+        "message": "string",
+        "ok": "bool"
+    },
+    "error.validation": {
+        "code": "string",
+        "message": "string",
+        "ok": "bool"
+    }
+}

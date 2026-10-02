@@ -1,7 +1,10 @@
 <?php
 
 use Livewire\Volt\Component;
+use App\Models\MenuItem;
 use App\Models\Order;
+use App\Services\MenuAvailabilityService;
+use App\Services\UserFeedback;
 use App\Services\KitchenOrderService;
 use App\Services\PinAuthService;
 use App\Services\SettingsService;
@@ -25,6 +28,8 @@ new class extends Component {
     public ?string $errorMessage = null;
 
     public ?int $lockedUntilTimestamp = null;
+
+    public bool $showSoldOutPanel = false;
 
     /**
      * Every request (including wire:poll's own AJAX call) must re-assert
@@ -134,6 +139,82 @@ new class extends Component {
         }
     }
 
+    public function openSoldOutPanel(): void
+    {
+        $this->showSoldOutPanel = true;
+        $this->errorMessage = null;
+    }
+
+    public function closeSoldOutPanel(): void
+    {
+        $this->showSoldOutPanel = false;
+    }
+
+    /**
+     * The KDS quick sold-out switch (Phase 1A) — writes the same
+     * menu_items.available_for_sale the admin form does, through
+     * MenuAvailabilityService, and only for the signed-in active cook.
+     */
+    public function setAvailability(int $menuItemId, bool $available): void
+    {
+        $cook = $this->requireActiveCook();
+
+        if (! $cook) {
+            return;
+        }
+
+        $item = MenuItem::find($menuItemId);
+
+        if (! $item) {
+            $this->errorMessage = 'That menu item no longer exists.';
+            return;
+        }
+
+        try {
+            (new MenuAvailabilityService())->set($item, $available, $cook);
+        } catch (\Exception $e) {
+            UserFeedback::blocked('Not allowed', $e->getMessage());
+        }
+    }
+
+    public function resetAllAvailable(): void
+    {
+        $cook = $this->requireActiveCook();
+
+        if (! $cook) {
+            return;
+        }
+
+        try {
+            (new MenuAvailabilityService())->resetAllToAvailable($cook);
+        } catch (\Exception $e) {
+            UserFeedback::blocked('Not allowed', $e->getMessage());
+        }
+    }
+
+    /**
+     * Every menu item grouped by category name for the sold-out panel —
+     * only built while the panel is open, so the normal poll stays cheap.
+     */
+    private function soldOutGroups(): array
+    {
+        if (! $this->showSoldOutPanel) {
+            return [];
+        }
+
+        return MenuItem::with('category:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'category_id', 'available_for_sale'])
+            ->groupBy(fn ($item) => $item->category?->name ?? 'Other')
+            ->sortKeys()
+            ->map(fn ($items) => $items->map(fn ($item) => [
+                'id' => $item->id,
+                'name' => $item->name,
+                'available' => (bool) $item->available_for_sale,
+            ])->values()->all())
+            ->all();
+    }
+
     public function markPickedUp(int $orderId): void
     {
         $cook = $this->requireActiveCook();
@@ -196,6 +277,8 @@ new class extends Component {
                 'items' => $order->items->map(fn ($i) => [
                     'name' => $i->product_name,
                     'qty' => $i->quantity,
+                    'chips' => array_values($i->chips ?? []),
+                    'note' => $i->note,
                 ])->all(),
                 'is_ready' => $order->status === 'ready',
                 // (int) abs(...): Carbon's diffInSeconds returns a float
@@ -237,6 +320,7 @@ new class extends Component {
     {
         return array_merge($this->computeBoardData(), [
             'activeCook' => Auth::guard('staff_pin')->user(),
+            'soldOutGroups' => $this->soldOutGroups(),
         ]);
     }
 }; ?>
@@ -261,6 +345,9 @@ new class extends Component {
         </h1>
 
         <div class="flex items-center gap-3">
+            <button wire:click="openSoldOutPanel" class="px-4 py-2 rounded-lg bg-red-700 font-bold kiosk-tap">
+                Sold out
+            </button>
             @if($activeCook)
                 <div class="flex items-center gap-2 bg-emerald-900/60 border border-emerald-600 rounded-lg px-3 py-2">
                     <span class="text-xs text-emerald-300">Active cook</span>
@@ -311,9 +398,17 @@ new class extends Component {
 
                     <div class="mt-2 flex-1 overflow-y-auto space-y-1" style="font-size: {{ max(11, 16 - count($ticket['items'])) }}px;">
                         @foreach($ticket['items'] as $item)
-                            <div class="flex items-center gap-2">
-                                <span class="w-5 h-5 rounded border border-white/40 flex items-center justify-center text-[10px]">{{ $item['qty'] }}</span>
-                                <span class="truncate">{{ $item['name'] }}</span>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-5 h-5 rounded border border-white/40 flex items-center justify-center text-[10px]">{{ $item['qty'] }}</span>
+                                    <span class="truncate">{{ $item['name'] }}</span>
+                                </div>
+                                @if(! empty($item['chips']) || filled($item['note'] ?? null))
+                                    <div class="ml-7 font-extrabold text-yellow-300 leading-tight">
+                                        @if(! empty($item['chips'])){{ implode(' · ', $item['chips']) }}@endif
+                                        @if(filled($item['note'] ?? null))<div>“{{ $item['note'] }}”</div>@endif
+                                    </div>
+                                @endif
                             </div>
                         @endforeach
                     </div>
@@ -337,6 +432,51 @@ new class extends Component {
                     </div>
                 </div>
             @endforeach
+        </div>
+    @endif
+
+    {{-- Sold-out panel (Phase 1A). Writes menu_items.available_for_sale —
+         the same switch as the admin menu-item form — only for the signed-in
+         active cook; every flip is logged. --}}
+    @if($showSoldOutPanel)
+        <div class="fixed inset-0 bg-black/80 z-40 flex items-start justify-center p-4 overflow-y-auto">
+            <div class="bg-gray-900 rounded-2xl p-5 w-full max-w-3xl space-y-4">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <h2 class="text-xl font-bold">Sold out?</h2>
+                    <div class="flex items-center gap-2">
+                        <button wire:click="resetAllAvailable" @disabled(!$activeCook)
+                            class="min-h-[56px] px-4 rounded-lg bg-emerald-700 font-bold disabled:opacity-40 kiosk-tap">
+                            Reset all to available
+                        </button>
+                        <button wire:click="closeSoldOutPanel" class="min-h-[56px] px-4 rounded-lg bg-gray-700 font-bold kiosk-tap">Done</button>
+                    </div>
+                </div>
+
+                @unless($activeCook)
+                    <div class="bg-amber-900/60 border border-amber-600 rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-3">
+                        <span>Sign in as the active cook with your PIN to change what is available.</span>
+                        <button wire:click="openPinPad" class="px-3 py-2 rounded-lg bg-primary-600 font-bold kiosk-tap">Sign in</button>
+                    </div>
+                @endunless
+
+                @foreach($soldOutGroups as $categoryName => $items)
+                    <div wire:key="soldout-cat-{{ md5($categoryName) }}">
+                        <h3 class="text-sm font-bold uppercase text-gray-400 mb-2">{{ $categoryName }}</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            @foreach($items as $menuItem)
+                                <div wire:key="soldout-item-{{ $menuItem['id'] }}" class="flex items-center justify-between gap-3 bg-gray-800 rounded-lg px-3 py-2">
+                                    <span class="font-semibold truncate">{{ $menuItem['name'] }}</span>
+                                    <button wire:click="setAvailability({{ $menuItem['id'] }}, {{ $menuItem['available'] ? 'false' : 'true' }})"
+                                        @disabled(!$activeCook)
+                                        class="shrink-0 min-h-[56px] min-w-[132px] px-4 rounded-lg font-bold disabled:opacity-40 kiosk-tap {{ $menuItem['available'] ? 'bg-emerald-600' : 'bg-red-600' }}">
+                                        {{ $menuItem['available'] ? 'Available' : 'Sold out' }}
+                                    </button>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </div>
         </div>
     @endif
 

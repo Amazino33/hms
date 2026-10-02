@@ -29,17 +29,23 @@ class PorterDeliveries extends Page
 
     public function getViewData(): array
     {
+        // Guest room orders (Phase 5) are delivered from reception's Room
+        // Orders page instead — one delivery flow each, never both.
+        $fromGuests = \App\Models\GuestRequestItem::query()->whereNotNull('order_id')->select('order_id');
+
         return [
             'readyForPickup' => Order::with(['items', 'booking.room', 'booking.guest'])
                 ->where('status', 'ready')
                 ->whereNotNull('booking_id')
                 ->whereNull('picked_up_at')
+                ->whereNotIn('id', $fromGuests)
                 ->oldest()
                 ->get(),
             'inTransit' => Order::with(['items', 'booking.room', 'booking.guest', 'pickedUpBy'])
                 ->where('status', 'ready')
                 ->whereNotNull('booking_id')
                 ->whereNotNull('picked_up_at')
+                ->whereNotIn('id', $fromGuests)
                 ->oldest()
                 ->get(),
         ];
@@ -48,7 +54,7 @@ class PorterDeliveries extends Page
     public function pickUp(int $orderId): void
     {
         try {
-            (new PorterDeliveryService())->pickUp(Order::findOrFail($orderId), auth()->user());
+            (new PorterDeliveryService)->pickUp(Order::findOrFail($orderId), auth()->user());
 
             Notification::make()->title('Order picked up')->success()->send();
         } catch (\Exception $e) {
@@ -59,7 +65,7 @@ class PorterDeliveries extends Page
     public function confirmDelivered(int $orderId): void
     {
         try {
-            (new PorterDeliveryService())->confirmDelivered(Order::findOrFail($orderId), auth()->user());
+            (new PorterDeliveryService)->confirmDelivered(Order::findOrFail($orderId), auth()->user());
 
             Notification::make()->title('Delivery confirmed')->success()->send();
         } catch (\Exception $e) {

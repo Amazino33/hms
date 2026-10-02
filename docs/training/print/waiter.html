@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Waiter — Guest QR orders</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+</style>
+</head>
+<body>
+<div class="sheet roles">
+<div class="role"><span class="name">Waiter</span><span class="tag">Guest ordering</span></div>
+<h1>Waiter — Guest QR orders</h1>
+<p>Text in bold is copied exactly from the screen.</p>
+<h2>1. Your job in guest ordering</h2>
+<p>Guests order from their phones. You confirm, serve and collect the money.</p>
+<h2>2. Start of shift</h2>
+<ol start="1">
+<li>Start your shift on time.</li>
+<li>Look at the <strong class="label">Guest orders</strong> box on the kiosk.</li>
+<li>Tap <strong class="label">Tap to enable order sounds</strong>.</li>
+<li>Check that <strong class="label">Sound off</strong> has gone away.</li>
+<li>Do this every morning, on every kiosk.</li>
+</ol>
+<div class="photo">Photo: waiter kiosk with the "Guest orders" box and the sound bar</div>
+<h2>3. When this happens → do this</h2><div class="cols">
+<h4>A new guest order card appears (it beeps)</h4>
+<ol start="1">
+<li>Read the table, the items and the notes in yellow.</li>
+<li>Tap <strong class="label">Accept</strong>.</li>
+<li>Enter your PIN.</li>
+<li>Food goes to the kitchen. Drinks go to the bar.</li>
+<li>This table is now yours. Its money is yours too.</li>
+</ol>
+<h4>The screen asks "Same guests?"</h4>
+<ul>
+<li class="">It means the table already has an unpaid bill.</li>
+<li class="">Tap <strong class="label">Yes, same guests</strong> if it is the same group.</li>
+<li class="">Their old bill joins the new one.</li>
+<li class="">Tap <strong class="label">No, different</strong> if these are new guests.</li>
+<li class="">The old bill stays separate. Settle it on its own.</li>
+<li class="">Not sure? Ask the guests before you tap.</li>
+</ul>
+<h4>A card is grey</h4>
+<ul>
+<li class="">It belongs to another waiter. Example: "Emeka's table".</li>
+<li class="">Leave it for them.</li>
+</ul>
+<h4>A red card says Returned from bar</h4>
+<ul>
+<li class="">That table's waiter has gone off shift.</li>
+<li class="">Tap <strong class="label">Take this table</strong>, then your PIN.</li>
+<li class="">The table and its money are now yours.</li>
+</ul>
+<h4>A blue card appears (Call waiter)</h4>
+<ol start="1">
+<li>Read it. Example: "Table 5 · Ice".</li>
+<li>Tap <strong class="label">On my way</strong>. No PIN is needed.</li>
+<li>Go to the table now.</li>
+</ol>
+<h4>A purple card says a guest paid</h4>
+<ul>
+<li class="">Example: "Table 5 · Ada says they paid ₦8,000 by transfer".</li>
+<li class="">This is only what the guest SAYS.</li>
+<li class="">Check the money really arrived before you mark paid.</li>
+</ul>
+<h4>Taking payment (cash and transfer together)</h4>
+<ol start="1">
+<li>Open the table on the kiosk.</li>
+<li>Confirm every ready order with <strong class="label">Confirm Served</strong>.</li>
+<li>Tap <strong class="label">Split by method (e.g. part cash, part transfer)</strong>.</li>
+<li>Guest claims are filled in for you. Check them.</li>
+<li>Change any amount if needed.</li>
+<li>Tap <strong class="label">Confirm · settle</strong> when Remaining shows ₦0.</li>
+</ol>
+<ul>
+<li class="">One method only? Tap <strong class="label">Cash</strong>, <strong class="label">POS</strong> or <strong class="label">Transfer</strong>.</li>
+<li class="">An amber warning means a claim has no transfer line. Fix it, or tap <strong class="label">Continue</strong>.</li>
+<li class="">The full payment screen will not work for guest tables.</li>
+<li class="">You will see "Guest QR table — use Mark Paid."</li>
+</ul>
+<h4>Guests want another table</h4>
+<ol start="1">
+<li>Find the table under <strong class="label">Guest tables</strong>.</li>
+<li>Tap <strong class="label">Move table</strong>.</li>
+<li>Pick a free table.</li>
+<li>Enter your PIN.</li>
+<li>Tell the guests to scan the new table's code.</li>
+</ol>
+<h4>Guests are leaving</h4>
+<ol start="1">
+<li>Make sure everything is paid.</li>
+<li>Tap <strong class="label">Close table</strong>, then your PIN.</li>
+<li>If it refuses, read the list. Settle those first.</li>
+</ol>
+<ul>
+<li class="">Only close when the guests have really left.</li>
+</ul>
+<h4>You want to end your shift</h4>
+<ul>
+<li class="">You cannot end it while drinks wait at the bar.</li>
+</ul>
+<ol start="1">
+<li>Tap <strong class="label">End Shift</strong>. The screen shows <strong class="label">Hand over your guest tables first</strong>.</li>
+<li>Pick the table.</li>
+<li>Choose a waiter in <strong class="label">Hand to…</strong>.</li>
+<li>They type their own PIN.</li>
+<li>Tap <strong class="label">Hand over</strong>.</li>
+</ol>
+</div><h2 class="never">4. Never do this</h2>
+<ul>
+<li class="">Never give a guest your personal phone number.</li>
+<li class="">Never mark paid before checking a transfer arrived.</li>
+<li class="">Never accept a table you will not serve.</li>
+<li class="">Never close a table while guests are still sitting.</li>
+<li class="">Never use another waiter's PIN.</li>
+</ul>
+<h2>5. If something goes wrong</h2>
+<table><thead><tr><th>Problem</th><th>What to do / who to call</th></tr></thead><tbody>
+<tr><td>No sound from the kiosk</td><td>Tap <strong class="label">Tap to enable order sounds</strong>.</td></tr>
+<tr><td><strong class="label">Bar shift not started</strong> shows</td><td>Tell the manager. Drinks cannot leave the bar.</td></tr>
+<tr><td>Guest says they paid, no money seen</td><td>Do not mark paid. Call the manager.</td></tr>
+<tr><td><strong class="label">Close table</strong> refuses</td><td>Read the list. Pay or clear those items first.</td></tr>
+<tr><td>Wrong items accepted</td><td>Call the manager. Do not guess.</td></tr>
+<tr><td>Guests walked out unpaid</td><td>Tell the manager at once. It is your shortfall.</td></tr>
+</tbody></table>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

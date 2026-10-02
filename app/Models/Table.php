@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasQrToken;
 use Illuminate\Database\Eloquent\Model;
 
 class Table extends Model
 {
+    use HasQrToken;
+
     protected $guarded = [];
 
     public function orders()

@@ -173,6 +173,11 @@ it('rejects a return without touching the bill or stock, and closes the ticket',
 
     $order->refresh();
     expect((float) $order->total_amount)->toEqual(2000.0);
+
+    // Phase 0F: the title always promised this; a rejected ticket used to
+    // restock the drink that never came back.
+    expect((int) InventoryItem::where('product_id', $product->id)->value('quantity'))->toBe(10);
+    expect(\App\Models\InventoryTransaction::where('type', 'return')->exists())->toBeFalse();
 });
 
 it('blocks shift end while a return is still pending confirmation', function () {

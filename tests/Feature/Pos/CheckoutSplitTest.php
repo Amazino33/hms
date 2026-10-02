@@ -57,10 +57,15 @@ it('creates separate kitchen and bar orders from a mixed cart', function () {
     expect($barOrder->items()->count())->toBe(1);
     expect($kitchenOrder->items()->count())->toBe(1);
 
-    // Inventory should be decremented
+    // The bar decrements at creation; kitchen food waits for Mark Ready
+    // (Phase 0D — tests/Feature/Kitchen/FoodDeductsAtMarkReadyTest.php).
     $beerStock = DB::table('inventory_items')->where('product_id', $beer->id)->where('warehouse_id', 4)->value('quantity');
     $riceStock = DB::table('inventory_items')->where('product_id', $rice->id)->where('warehouse_id', 5)->value('quantity');
 
     expect($beerStock)->toBe(8);
-    expect($riceStock)->toBe(9);
+    expect($riceStock)->toBe(10);
+
+    (new \App\Services\KitchenOrderService)->markReady($kitchenOrder->id, $user->id);
+
+    expect(DB::table('inventory_items')->where('product_id', $rice->id)->where('warehouse_id', 5)->value('quantity'))->toBe(9);
 });

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\KitchenWasteLog;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Shift;
@@ -50,11 +51,16 @@ class ReturnConfirmationService
             $returnTicket = Order::query()->lockForUpdate()->findOrFail($returnTicket->id);
             $this->assertPendingReturnTicket($returnTicket);
 
-            $this->reduceOriginalOrder($returnTicket);
+            $reductions = $this->reduceOriginalOrder($returnTicket);
+
+            if ($returnTicket->destination === 'kitchen') {
+                $this->recordCookedReturnsAsWaste($returnTicket, $reductions, $confirmingUser);
+            }
 
             // Flipping to 'returned' triggers OrderObserver's centralized
-            // restock (InventoryTransaction/IngredientTransaction) — no
-            // separate stock mutation path here.
+            // restock (InventoryTransaction/IngredientTransaction) for a bar
+            // return — no separate stock mutation path here. A kitchen
+            // return restocks nothing (see recordCookedReturnsAsWaste()).
             $returnTicket->update([
                 'status' => 'returned',
                 'processed_by_user_id' => $confirmingUser->id,
@@ -99,16 +105,54 @@ class ReturnConfirmationService
     }
 
     /**
+     * Cooked food is never restocked (Phase 0F): a confirmed KITCHEN return
+     * moves no stock at all (OrderObserver skips kitchen return tickets).
+     * The portion that came off an order whose stock had already left the
+     * shelf — it was cooked — is recorded as kitchen waste instead; a
+     * portion taken off a not-yet-made order needs nothing, since nothing
+     * was ever deducted for it and Mark Ready will only take what's left.
+     *
+     * @param  array<int, array{order: Order, item: OrderItem, qty: int}>  $reductions
+     */
+    private function recordCookedReturnsAsWaste(Order $returnTicket, array $reductions, User $confirmingUser): void
+    {
+        $reason = 'Returned: '.($returnTicket->items->first()?->return_reason ?? 'no reason given');
+
+        foreach ($reductions as ['order' => $order, 'item' => $item, 'qty' => $qty]) {
+            if (is_null($order->stock_deducted_at)) {
+                continue;
+            }
+
+            KitchenWasteLog::create([
+                'order_id' => $order->id,
+                'order_item_id' => OrderItem::whereKey($item->id)->exists() ? $item->id : null,
+                'item_type' => $item->item_type,
+                'product_id' => $item->product_id,
+                'menu_item_id' => $item->menu_item_id,
+                'item_name' => $item->product_name,
+                'quantity' => $qty,
+                'sale_value' => round((float) $item->unit_price * $qty, 2),
+                'order_status_before' => $order->status,
+                'reason' => $reason,
+                'recorded_by' => $confirmingUser->id,
+            ]);
+        }
+    }
+
+    /**
      * Same matching/reduction logic the old immediate-effect flow used —
      * just deferred to run here, at confirmation time, instead of at the
      * moment the waiter asked for the return.
+     *
+     * @return array<int, array{order: Order, item: OrderItem, qty: int}> which original lines were reduced, and by how much
      */
-    private function reduceOriginalOrder(Order $returnTicket): void
+    private function reduceOriginalOrder(Order $returnTicket): array
     {
         $returnItem = $returnTicket->items->first();
+        $reductions = [];
 
         if (!$returnItem) {
-            return;
+            return $reductions;
         }
 
         $qtyToReturn = $returnItem->quantity;
@@ -145,6 +189,7 @@ class ReturnConfirmationService
 
                 $qtyToReturn -= $deductAmount;
                 $touchedOrderIds[$activeOrder->id] = true;
+                $reductions[] = ['order' => $activeOrder, 'item' => $orderItem, 'qty' => $deductAmount];
             }
         }
 
@@ -152,5 +197,7 @@ class ReturnConfirmationService
             $newTotal = OrderItem::where('order_id', $orderId)->sum('subtotal');
             Order::where('id', $orderId)->update(['total_amount' => $newTotal]);
         }
+
+        return $reductions;
     }
 }

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guest ordering — 90-minute dry run</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+
+@page { size: A4 landscape; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+.sheet { max-width: 269mm; }
+@media screen { .sheet, footer { max-width: 297mm; } }
+td, th { font-size: 12pt; }
+</style>
+</head>
+<body>
+<div class="sheet">
+<div class="role"><span class="name">Dry run</span><span class="tag">Guest ordering</span></div>
+<h1>Guest ordering — 90-minute dry run</h1>
+<p>Staff play the guests, using their own phones.</p>
+<p>Text in bold is copied exactly from the screen.</p>
+<h2>Before you start (10 minutes)</h2>
+<ul>
+<li class="">One manager runs the list. One person writes the results.</li>
+<li class="">Use Table 1, Table 2 and one checked-in test room (Room 7 below).</li>
+<li class="">Print the QR card for each one. Scan each once.</li>
+<li class="">Waiter (Emeka), second waiter (Udeme), bartender (Blessing), chef, receptionist (Ada) and a porter are on shift.</li>
+<li class="">Menu items used: Jollof Rice, Egusi Soup, Fried Rice, Coke, Beer.</li>
+<li class="">Every kiosk and display: tap <strong class="label">Tap to enable order sounds</strong>.</li>
+</ul>
+<h2>Scenarios</h2>
+<table><thead><tr><th>#</th><th>Scenario</th><th>Who plays guest</th><th>Steps</th><th>Expected result</th><th>Who checks</th><th>✅/❌</th><th>Notes</th></tr></thead><tbody>
+<tr><td>1</td><td>Table order, full loop</td><td>Udeme</td><td>Scan Table 1. Order 1 Jollof Rice and 2 Coke. Tap <strong class="label">Send to waiter</strong>. Emeka taps <strong class="label">Accept</strong> + PIN. Chef cooks. Blessing taps <strong class="label">MARK READY</strong> on the guest card.</td><td>Kitchen ticket appears. Coke card (red GUEST strip) in the bar queue. After <strong class="label">MARK READY</strong>, guest <strong class="label">Bill</strong> shows both items.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>2</td><td>Two phones, one bill</td><td>Udeme + Ada</td><td>Both scan Table 1. Each orders one item. Emeka accepts both.</td><td>Both phones show the same bill and total.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>3a</td><td>Guest cancels early</td><td>Udeme</td><td>Order a Coke. Tap <strong class="label">Cancel request</strong> before anyone accepts.</td><td>Card disappears from the kiosk. Nothing on the bill.</td><td>Emeka</td><td></td><td></td></tr>
+<tr><td>3b</td><td>Staff cancels a drink</td><td>Udeme</td><td>Order a Beer. Emeka accepts. Before the bar marks it ready, Emeka taps <strong class="label">Cancel these drinks</strong>, types a reason, PIN.</td><td>Drink leaves the bar screen. Not on the bill.</td><td>Blessing</td><td></td><td></td></tr>
+<tr><td>4</td><td>Bar gives fewer</td><td>Udeme</td><td>Order 3 Beer. Accept. Blessing taps <strong class="label">−</strong>, sets 1, picks <strong class="label">Out of stock</strong>, <strong class="label">Confirm</strong>, then <strong class="label">MARK READY</strong>.</td><td>Guest sees 1 Beer and "Out of stock". Bill shows 1 Beer.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>5</td><td>No bartender on shift</td><td>Udeme</td><td>Blessing's shift is NOT started. Order a Coke. Emeka accepts. Wait 5 minutes. Then Blessing starts the shift and taps <strong class="label">MARK READY</strong>.</td><td>Red banner on the bar screen. <strong class="label">Bar shift not started</strong> on the kiosk. Manager gets an alert at 5 minutes. <strong class="label">MARK READY</strong> works after the shift starts.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>6</td><td>Two bartender shifts</td><td>—</td><td>Leave an old bartender shift open. Start a second one. Tap <strong class="label">MARK READY</strong> on a guest card.</td><td>Amber banner. <strong class="label">Who is marking this ready?</strong> with both names. Manager alert.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>7</td><td>Ending a shift with drinks waiting</td><td>Udeme</td><td>Order a Beer. Emeka accepts. Do not mark it ready. Emeka taps <strong class="label">End Shift</strong>.</td><td>Blocked. <strong class="label">Hand over your guest tables first</strong> appears. Udeme takes it with <strong class="label">Hand over</strong> + their PIN.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>8</td><td>"Same guests?"</td><td>Udeme</td><td>Put an unpaid staff order on Table 2. Scan Table 2 and order. Emeka taps <strong class="label">Accept</strong>. Try <strong class="label">Yes, same guests</strong>. Repeat on a fresh table with <strong class="label">No, different</strong>.</td><td>Yes: the old items join the guest bill. No: they stay off it.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>9</td><td>Split, claim, pay</td><td>Udeme</td><td>Open <strong class="label">Bill</strong>. Tap <strong class="label">Split the bill</strong>: try <strong class="label">Equal</strong> and <strong class="label">By items</strong>. Tap <strong class="label">Pay this amount</strong>, then <strong class="label">I've paid</strong> with a name. Emeka opens the table, <strong class="label">Split by method (e.g. part cash, part transfer)</strong>.</td><td>Transfer line is pre-filled with the claim and name. Cash fills the rest. <strong class="label">Confirm · settle</strong> pays the table.</td><td>Cashier</td><td></td><td></td></tr>
+<tr><td>10</td><td>Full payment screen refused</td><td>—</td><td>Emeka opens a guest table and tries the full payment screen.</td><td>"Guest QR table — use Mark Paid." Nothing is paid.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>11</td><td>Move table</td><td>Udeme</td><td>Emeka taps <strong class="label">Move table</strong>, picks Table 2, PIN. Udeme refreshes the Table 1 page.</td><td>Bill moves to Table 2. Old page says "Your table moved to Table 2".</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>12</td><td>Close table</td><td>Udeme</td><td>With money unpaid, tap <strong class="label">Close table</strong>. Then pay. Tap <strong class="label">Close table</strong> again. Udeme orders again.</td><td>First close refused with the list. Second close works. New order starts a new bill.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>13</td><td>Another round</td><td>Udeme</td><td>After a Beer is marked ready, tap <strong class="label">Another round</strong>.</td><td>Beer goes into the cart. Nothing is sent until <strong class="label">Send to waiter</strong>.</td><td>Emeka</td><td></td><td></td></tr>
+<tr><td>14</td><td>Call waiter</td><td>Udeme</td><td>Tap <strong class="label">Call waiter</strong>, then Ice. Emeka taps <strong class="label">On my way</strong>.</td><td>Blue card on the kiosk. Guest sees "Waiter is on the way 🚶".</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>15</td><td>Price lock</td><td>Udeme</td><td>Order Jollof Rice. Manager changes its price. Emeka accepts.</td><td>Bill shows the OLD price.</td><td>Cashier</td><td></td><td></td></tr>
+<tr><td>16</td><td>Sold out</td><td>Udeme</td><td>Chef taps <strong class="label">Sold out</strong>, signs in, marks Egusi Soup. Then a waiter tries with their PIN.</td><td>Egusi Soup leaves the guest menu within about 1½ minutes. Waiter PIN gets "Not allowed".</td><td>Chef</td><td></td><td></td></tr>
+<tr><td>17</td><td>Room order on WhatsApp</td><td>Ada (as guest)</td><td>Scan Room 7. Order 1 Fried Rice, 2 Coke. Tap <strong class="label">Send order on WhatsApp</strong>. Receptionist matches the Ref, taps <strong class="label">Approve</strong>, adds the phone, ticks <strong class="label">Agreed to receive specials</strong>. Chef cooks, Blessing taps <strong class="label">MARK READY</strong>. Receptionist <strong class="label">Send with…</strong> the porter, then <strong class="label">Delivered</strong>.</td><td>WhatsApp opens with the order and Ref. Guest sees "On the way with …", then "Delivered". Room bill shows both items.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>18</td><td>Room order without WhatsApp</td><td>Ada</td><td>Tap <strong class="label">Order without WhatsApp</strong>.</td><td>Card shows <strong class="label">No WhatsApp — call the room</strong>. Receptionist calls, then approves.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>19</td><td>Refused drinks</td><td>Ada</td><td>Blessing marks Coke for Room 7 ready. Dispatch. Receptionist taps <strong class="label">Refused</strong> with a reason. Bring bottles to the bar. Blessing taps <strong class="label">Returned ✓</strong>. Manager approves in <strong class="label">Delivery Refusals</strong>.</td><td>Guest sees "Refused — being reviewed". After approval the room bill drops. Coke back in stock.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>20</td><td>Refused food</td><td>Ada</td><td>Deliver Fried Rice. <strong class="label">Refused</strong>. Manager taps <strong class="label">Approve — reverse the charge</strong>.</td><td>Room bill drops. Food recorded as waste. No ingredients go back.</td><td>Storekeeper</td><td></td><td></td></tr>
+<tr><td>21</td><td>Stranger's phone</td><td>Udeme</td><td>Scan Room 7 on a phone that never ordered. Open <strong class="label">Bill</strong>.</td><td>"Your bill appears after your first order is approved." No amounts shown.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>22</td><td>Checkout with a pending order</td><td>Ada</td><td>Order on Room 7. Do not approve. Settle the room bill. Check out.</td><td>The pending order is cancelled automatically.</td><td>Receptionist</td><td></td><td></td></tr>
+<tr><td>23</td><td>Regenerate a QR</td><td>—</td><td>Manager taps <strong class="label">Regenerate</strong> on Table 2, types a reason, <strong class="label">Replace QR code</strong>. Scan the old card.</td><td>Old card shows "no longer valid". New card works.</td><td>Manager</td><td></td><td></td></tr>
+<tr><td>24</td><td>Sounds blocked</td><td>—</td><td>Reload the waiter kiosk. Do not tap anything.</td><td><strong class="label">Sound off</strong> shows. Tap <strong class="label">Tap to enable order sounds</strong> and it goes.</td><td>Emeka</td><td></td><td></td></tr>
+</tbody></table>
+<h2>How to record problems</h2>
+<p>For every ❌, write down:</p>
+<ol start="1">
+<li>The scenario number.</li>
+<li>A screenshot from the phone or screen.</li>
+<li>Who saw it.</li>
+<li>The time it happened.</li>
+</ol>
+<p>Send the list to the owner the same day.</p>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

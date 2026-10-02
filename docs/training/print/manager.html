@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manager / Supervisor — Guest QR orders</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+</style>
+</head>
+<body>
+<div class="sheet roles">
+<div class="role"><span class="name">Manager / Supervisor</span><span class="tag">Guest ordering</span></div>
+<h1>Manager / Supervisor — Guest QR orders</h1>
+<p>Text in bold is copied exactly from the screen.</p>
+<h2>1. Your job in guest ordering</h2>
+<p>You watch the alerts, decide refusals and look after the QR codes.</p>
+<h2>2. Start of shift</h2>
+<ol start="1">
+<li>Check the bell in the admin panel for alerts.</li>
+<li>Walk past every kiosk and bar screen.</li>
+<li>Make sure <strong class="label">Sound off</strong> is not showing anywhere.</li>
+<li>Check the kitchen tapped <strong class="label">Reset all to available</strong>.</li>
+</ol>
+<h2>3. When this happens → do this</h2><div class="cols">
+<h4>Alert: … no bartender shift started</h4>
+<ul>
+<li class="">Guests waited 5 minutes. Start a bartender shift now.</li>
+</ul>
+<h4>Alert: … end the old one</h4>
+<ul>
+<li class="">Two bartender shifts are open. End the old one.</li>
+</ul>
+<h4>Alert: Room delivery refused</h4>
+<ol start="1">
+<li>Open <strong class="label">Delivery Refusals</strong>.</li>
+<li>Drinks show <strong class="label">Waiting for the bar</strong> until the bottles return.</li>
+<li>When it shows <strong class="label">Waiting for a manager</strong>, decide.</li>
+<li>Tap <strong class="label">Approve — reverse the charge</strong> if the refusal is fair.</li>
+<li>Tap <strong class="label">Reject — charge stands</strong> if the guest must pay.</li>
+<li>Add a short note. Confirm.</li>
+</ol>
+<ul>
+<li class="">Approved: drinks go back to stock; food becomes waste.</li>
+</ul>
+<h4>You need the guest marketing list</h4>
+<ol start="1">
+<li>Open <strong class="label">Guest Contacts</strong>.</li>
+<li>Tap <strong class="label">Export opted-in (CSV)</strong>.</li>
+</ol>
+<ul>
+<li class="">Only guests who agreed are in the file.</li>
+<li class="">A guest agrees later? Tap <strong class="label">Agreed to specials</strong> on their row.</li>
+</ul>
+<h4>A QR code is lost or misused</h4>
+<ol start="1">
+<li>Open <strong class="label">QR Codes</strong>.</li>
+<li>Find the table or room.</li>
+<li>Tap <strong class="label">Regenerate</strong>.</li>
+<li>Type the reason. Example: "Card stolen".</li>
+<li>Tap <strong class="label">Replace QR code</strong>. Print and place the new code.</li>
+</ol>
+<ul>
+<li class="">The old code now shows "no longer valid".</li>
+</ul>
+<h4>Every night (first two weeks)</h4>
+<ol start="1">
+<li>Check <strong class="label">Delivery Refusals</strong> for anything waiting.</li>
+<li>Ask reception about claims marked <strong class="label">Not received</strong>.</li>
+<li>Late bar starts: no screen yet. Ask the developer.</li>
+</ol>
+</div><h2 class="never">4. Never do this</h2>
+<ul>
+<li class="">Never approve a refusal before the bar confirms the bottles.</li>
+<li class="">Never export contacts who did not agree.</li>
+<li class="">Never regenerate a code without printing the new one.</li>
+</ul>
+<h2>5. If something goes wrong</h2>
+<table><thead><tr><th>Problem</th><th>What to do / who to call</th></tr></thead><tbody>
+<tr><td><strong class="label">Regenerate</strong> done by mistake</td><td>Print the new code. The old one cannot return.</td></tr>
+<tr><td>Refusal shows <strong class="label">Waiting for the bar</strong> for long</td><td>Ask the bartender to check the bottles.</td></tr>
+<tr><td>Supervisor cannot decide a refusal</td><td>Only a manager can (see <code>discrepancies.md</code>).</td></tr>
+</tbody></table>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

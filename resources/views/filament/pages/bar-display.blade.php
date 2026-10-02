@@ -7,6 +7,33 @@
         </a>
     </div>
 
+    {{-- Guest QR drinks sit IN the one queue below (Phase 7B, D33); their
+         sound bar, banners, returns strip and sheets come from this partial. --}}
+    <div class="w-full"
+        x-data="{
+            sound: false,
+            known: [],
+            chooserFor: null,
+            edit: null, mode: 'remove', qty: 1, reason: 'Out of stock', other: '',
+            init() {
+                this.sound = window.hmsChime.enabled();
+                setInterval(() => this.sound = window.hmsChime.enabled(), 2000);
+            },
+            enableSound() { this.sound = window.hmsChime.enable(); setTimeout(() => this.sound = window.hmsChime.enabled(), 300); },
+            sync(ids) {
+                if (this.primed && ids.some(id => !this.known.includes(id))) window.hmsChime.play(false);
+                this.known = ids;
+                this.primed = true;
+            },
+            openEdit(lineId, mode, maxQty) { this.edit = lineId; this.mode = mode; this.qty = Math.max(1, maxQty - 1); this.reason = 'Out of stock'; this.other = ''; },
+            submitEdit() {
+                const other = this.reason === 'Other' ? this.other : null;
+                this.mode === 'reduce' ? $wire.reduceGuestLine(this.edit, this.qty, this.reason, other) : $wire.removeGuestLine(this.edit, this.reason, other);
+                this.edit = null;
+            },
+        }">
+    @include('filament.pages.partials.bar-guest-extras')
+    <div class="min-w-0">
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
         <div class="lg:col-span-3 w-full">
             <div class="flex items-center justify-between mb-4">
@@ -17,7 +44,8 @@
             </div>
             
             <div wire:poll.5s class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 w-full">
-                @forelse($orders as $order)
+                @forelse($queue as $entry)
+                        @php $order = $entry['order'] ?? null; @endphp
                         {{-- Every order here already matched
                              destination='bar' + status='pending' in the
                              query itself — there is deliberately no further
@@ -36,7 +64,9 @@
                         {{-- ========================================== --}}
                         {{-- 🛑 RETURN TICKET STATE                     --}}
                         {{-- ========================================== --}}
-                        @if($order->is_return)
+                        @if($entry['type'] === 'guest')
+                            @include('filament.pages.partials.bar-guest-card', ['request' => $entry['request']])
+                        @elseif($order->is_return)
                             <div class="bg-white dark:bg-gray-800 border-2 border-red-500 rounded-xl overflow-hidden shadow-lg shadow-red-500/10 flex flex-col relative">
                                 <div class="absolute top-0 left-0 w-full h-1 bg-red-500 animate-pulse"></div>
 
@@ -127,6 +157,12 @@
                                                 </span>
                                                 <span class="text-gray-700 dark:text-gray-300 font-bold flex-1 leading-tight">
                                                     {{ $item->product_name }}
+                                                    @if($item->hasGuestInstructions())
+                                                        <span class="block mt-0.5 font-extrabold text-red-700 dark:text-yellow-300">
+                                                            @if(! empty($item->chips)){{ implode(' · ', $item->chips) }}@endif
+                                                            @if(filled($item->note))<span class="block">“{{ $item->note }}”</span>@endif
+                                                        </span>
+                                                    @endif
                                                 </span>
                                             </div>
                                         @empty
@@ -245,5 +281,7 @@
                 </div>
             </div>
         </div>
+    </div>
+    </div>
     </div>
 </x-filament-panels::page>

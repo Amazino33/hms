@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kitchen / Chef — Guest QR orders</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+</style>
+</head>
+<body>
+<div class="sheet roles">
+<div class="role"><span class="name">Kitchen / Chef</span><span class="tag">Guest ordering</span></div>
+<h1>Kitchen / Chef — Guest QR orders</h1>
+<p>Text in bold is copied exactly from the screen.</p>
+<h2>1. Your job in guest ordering</h2>
+<p>You cook guest orders and keep the sold-out list correct.</p>
+<h2>2. Start of shift</h2>
+<ol start="1">
+<li>Start your chef shift on time.</li>
+<li>Open the kitchen screen.</li>
+<li>Tap <strong class="label">Sold out</strong>.</li>
+<li>Tap <strong class="label">Sign in</strong> and enter your PIN.</li>
+<li>Tap <strong class="label">Reset all to available</strong>.</li>
+<li>Mark anything you really do not have.</li>
+<li>Tap <strong class="label">Done</strong>.</li>
+</ol>
+<div class="photo">Photo: kitchen screen with the "Sold out?" panel open</div>
+<h2>3. When this happens → do this</h2><div class="cols">
+<h4>A guest order arrives</h4>
+<ul>
+<li class="">It looks like any other ticket.</li>
+<li class="">Read the extras and notes in bold. Example: "Extra pepper".</li>
+<li class="">Cook it. Mark it ready as normal.</li>
+<li class="">Room food also goes out when you mark it ready.</li>
+</ul>
+<h4>You run out of a dish</h4>
+<ol start="1">
+<li>Tap <strong class="label">Sold out</strong>.</li>
+<li>Find the dish. Example: Egusi Soup.</li>
+<li>Tap its green <strong class="label">Available</strong> button.</li>
+<li>It turns red: <strong class="label">Sold out</strong>.</li>
+<li>Tap <strong class="label">Done</strong>.</li>
+</ol>
+<ul>
+<li class="">Guests stop seeing it within about a minute and a half.</li>
+</ul>
+<h4>The dish is back</h4>
+<ol start="1">
+<li>Tap <strong class="label">Sold out</strong>.</li>
+<li>Tap the red <strong class="label">Sold out</strong> button on that dish.</li>
+<li>It turns green: <strong class="label">Available</strong>.</li>
+</ol>
+</div><h2 class="never">4. Never do this</h2>
+<ul>
+<li class="">Never let a waiter use the sold-out panel.</li>
+<li class="">A waiter's PIN is refused there anyway.</li>
+<li class="">Never mark a dish sold out "just in case".</li>
+<li class="">Never skip <strong class="label">Reset all to available</strong> in the morning.</li>
+</ul>
+<h2>5. If something goes wrong</h2>
+<table><thead><tr><th>Problem</th><th>What to do / who to call</th></tr></thead><tbody>
+<tr><td>Buttons are greyed out</td><td>Tap <strong class="label">Sign in</strong> with your own PIN.</td></tr>
+<tr><td>"Not allowed" message</td><td>Only chefs and managers can change it. Call the manager.</td></tr>
+<tr><td>Guest ordered a dish you cannot make</td><td>Tell the waiter or reception. Do not just skip it.</td></tr>
+</tbody></table>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

@@ -11,6 +11,20 @@ class OrderItem extends Model
 
     protected $guarded = [];
 
+    /**
+     * chips is a snapshot of the chosen chip LABELS (e.g. ["Cold"]) — never
+     * chip ids — so renaming a chip later never rewrites what was ordered.
+     */
+    protected $casts = [
+        'chips' => 'array',
+    ];
+
+    /** True when the bar/kitchen has something extra to read on this line. */
+    public function hasGuestInstructions(): bool
+    {
+        return ! empty($this->chips) || filled($this->note);
+    }
+
     public function order()
     {
         return $this->belongsTo(Order::class);

@@ -119,7 +119,6 @@ Route::get('/pos', function () {
 
 require __DIR__.'/settings.php';
 
-use App\Http\Controllers\FloorPlanController;
 use App\Http\Controllers\FolioReceiptController;
 use App\Http\Controllers\HandoverPdfController;
 use App\Http\Controllers\StockTransferController;
@@ -133,12 +132,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/stock-transfers/bulk-receive', [StockTransferController::class, 'bulkReceive']);
     Route::get('/warehouses/{warehouse}/product/{product}/quantity', [StockTransferController::class, 'productQuantity']);
     Route::get('/warehouses/{warehouse}/ingredient/{ingredient}/quantity', [StockTransferController::class, 'ingredientQuantity']);
-
-    // Floor plan AJAX routes
-    Route::get('/admin/floor-plan/order/{orderId}', [FloorPlanController::class, 'getOrderDetails']);
-    Route::get('/admin/floor-plan/popular-items', [FloorPlanController::class, 'getPopularItems']);
-    Route::post('/admin/floor-plan/add-item', [FloorPlanController::class, 'addItemToOrder']);
 });
+
+// Guest QR ordering routes live in routes/guest.php, loaded OUTSIDE this
+// 'web' group (bootstrap/app.php) — guest pages are stateless (D9).
 
 use App\Http\Controllers\KioskRegistrationController;
 

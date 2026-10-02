@@ -25,6 +25,11 @@ class PorterDeliveryService
                 throw new \Exception('Only room orders go through porter delivery.');
             }
 
+            // Phase 5: a guest's room order is delivered from Room Orders.
+            if (\App\Models\GuestRequestItem::where('order_id', $order->id)->exists()) {
+                throw new \Exception('This is a guest QR room order — reception sends it from the Room Orders page.');
+            }
+
             if ($order->status !== 'ready') {
                 throw new \Exception('This order is not ready for pickup.');
             }
@@ -54,6 +59,11 @@ class PorterDeliveryService
 
             if (! $order->booking_id) {
                 throw new \Exception('Only room orders go through porter delivery.');
+            }
+
+            // Phase 5: a guest's room order is delivered from Room Orders.
+            if (\App\Models\GuestRequestItem::where('order_id', $order->id)->exists()) {
+                throw new \Exception('This is a guest QR room order — reception sends it from the Room Orders page.');
             }
 
             if (! $order->picked_up_at) {

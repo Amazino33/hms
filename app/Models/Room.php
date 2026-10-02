@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasQrToken;
 use Illuminate\Database\Eloquent\Model;
 
 class Room extends Model
 {
+    use HasQrToken;
+
     protected $guarded = [];
 
     public function bookings()

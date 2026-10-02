@@ -8,6 +8,7 @@
     'hideFieldLabel' => false, // stepper.blade.php already labels the whole -/pad/+ row — $label still
                                // drives the sheet header (spec: header must reflect the bound field's
                                // identity) but the redundant duplicate above the bare tap-target is skipped.
+    'tall' => false,      // 56px tap-target instead of 48px — for fields a waiter hits standing at the till
 ])
 @php
     // A stable per-instance identity for the teleported scrim/sheet pair.
@@ -98,7 +99,7 @@
     @endif
 
     <button type="button" @click="openPad()"
-        class="w-full h-12 rounded-xl border-2 text-center text-xl font-mono font-bold text-gray-900 dark:text-white touch-manipulation px-3 transition-colors"
+        class="w-full {{ $tall ? 'h-14' : 'h-12' }} rounded-xl border-2 text-center text-xl font-mono font-bold text-gray-900 dark:text-white touch-manipulation px-3 transition-colors"
         :class="padDirty ? 'border-amber-400 dark:border-amber-500' : 'border-gray-200 dark:border-gray-700'"
         x-text="{{ $currency ? "'₦' + Number({$model} || 0).toLocaleString()" : "String({$model} ?? 0)" }}">
     </button>

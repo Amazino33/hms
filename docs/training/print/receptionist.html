@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Receptionist — Room orders</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+</style>
+</head>
+<body>
+<div class="sheet roles">
+<div class="role"><span class="name">Receptionist</span><span class="tag">Guest ordering</span></div>
+<h1>Receptionist — Room orders</h1>
+<p>Text in bold is copied exactly from the screen.</p>
+<h2>1. Your job in guest ordering</h2>
+<p>You approve room orders, send them up, and handle room payments.</p>
+<h2>2. Start of shift</h2>
+<ol start="1">
+<li>Keep the venue WhatsApp phone at the desk, charged.</li>
+<li>Open <strong class="label">Room Orders</strong> in the admin menu.</li>
+<li>Tap <strong class="label">Tap to enable order sounds</strong>.</li>
+<li>Leave the page open. It refreshes by itself.</li>
+</ol>
+<div class="photo">Photo: Room Orders page with three columns</div>
+<h2>3. When this happens → do this</h2><div class="cols">
+<h4>A new order appears under New orders</h4>
+<ol start="1">
+<li>Look at the Ref. Example: R7-0423.</li>
+<li>Find the WhatsApp message with the same Ref.</li>
+<li>Check the items match the screen.</li>
+<li>Confirm with the guest on WhatsApp.</li>
+<li>Tap <strong class="label">Approve</strong>.</li>
+<li>Food goes to the kitchen. Drinks go to the bar.</li>
+</ol>
+<h4>The card says No WhatsApp — call the room</h4>
+<ol start="1">
+<li>Phone the room.</li>
+<li>Read the order back to the guest.</li>
+<li>Then tap <strong class="label">Approve</strong>.</li>
+</ol>
+<h4>The card says New phone</h4>
+<ul>
+<li class="">This phone has not ordered for this room before.</li>
+<li class="">Check it is really the guest. Call the room if unsure.</li>
+</ul>
+<h4>Saving the guest's number</h4>
+<ol start="1">
+<li>In the approve box, fill <strong class="label">Guest WhatsApp number (from chat)</strong>.</li>
+<li>Tick <strong class="label">Agreed to receive specials</strong> ONLY if they said yes.</li>
+<li>Tap <strong class="label">Approve</strong>.</li>
+</ol>
+<h4>The guest wants fewer items</h4>
+<ol start="1">
+<li>Tap <strong class="label">−</strong> to give fewer. Or <strong class="label">✕</strong> to remove.</li>
+<li>Pick a reason. Tap <strong class="label">Confirm</strong>.</li>
+</ol>
+<ul>
+<li class="">You cannot add items.</li>
+<li class="">To add, the guest orders again from the phone.</li>
+</ul>
+<h4>You cannot serve the order at all</h4>
+<ol start="1">
+<li>Tap <strong class="label">Reject</strong>.</li>
+<li>Type a reason. The guest sees it.</li>
+<li>Tap <strong class="label">Reject</strong> again.</li>
+</ol>
+<h4>An order appears under To deliver</h4>
+<ol start="1">
+<li>Give the tray to a porter.</li>
+<li>Tap <strong class="label">Send with…</strong>.</li>
+<li>Tap the porter's name. Or <strong class="label">Reception</strong> if you carry it.</li>
+</ol>
+<ul>
+<li class="">The guest sees "On the way with Musa".</li>
+</ul>
+<h4>The porter comes back (Out for delivery)</h4>
+<ul>
+<li class="">The guest took it: tap <strong class="label">Delivered</strong>.</li>
+<li class="">The guest refused it: tap <strong class="label">Refused</strong>.</li>
+</ul>
+<ol start="1">
+<li>Type why. Example: "Wrong drink".</li>
+<li>Tap <strong class="label">Record refusal</strong>.</li>
+</ol>
+<ul>
+<li class="">Nothing comes off the bill yet. A manager decides.</li>
+</ul>
+<h4>A purple card says a room guest paid</h4>
+<ul>
+<li class="">This is only what the guest SAYS.</li>
+</ul>
+<ol start="1">
+<li>Check the transfer arrived in the account.</li>
+<li>Money arrived: tap <strong class="label">Open folio payment</strong>.</li>
+<li>Check the amount and name. Tap <strong class="label">Save payment</strong>.</li>
+<li>No money: tap <strong class="label">Not received</strong>.</li>
+</ol>
+<h4>A blue card appears (Call reception)</h4>
+<ol start="1">
+<li>Read it. Example: "Room 7 · Cutlery".</li>
+<li>Tap <strong class="label">On it</strong>.</li>
+<li>Send someone to the room.</li>
+</ol>
+</div><h2 class="never">4. Never do this</h2>
+<ul>
+<li class="">Never change an order because of a chat message.</li>
+<li class="">Change it here in the system, with a reason.</li>
+<li class="">Never approve before the Ref matches.</li>
+<li class="">Never tick specials unless the guest said yes.</li>
+<li class="">Never save a payment before the money arrives.</li>
+<li class="">Never give guests your personal number.</li>
+</ul>
+<h2>5. If something goes wrong</h2>
+<table><thead><tr><th>Problem</th><th>What to do / who to call</th></tr></thead><tbody>
+<tr><td><strong class="label">Approve</strong> refuses: guest checked out</td><td>Tap <strong class="label">Reject</strong>. Tell the manager.</td></tr>
+<tr><td>WhatsApp message has no matching card</td><td>Ask the guest to order on the menu again.</td></tr>
+<tr><td>Chat asks for extra items</td><td>Ask the guest to order them from the phone.</td></tr>
+<tr><td>Transfer not in the account</td><td>Tap <strong class="label">Not received</strong>. Tell the manager.</td></tr>
+<tr><td>No sound</td><td>Tap <strong class="label">Tap to enable order sounds</strong>.</td></tr>
+</tbody></table>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

@@ -74,7 +74,14 @@
                                     </span>
                                 @endif
                             </div>
-                            
+
+                            @if($item->hasGuestInstructions())
+                                <div class="mb-2 font-extrabold text-red-700 dark:text-yellow-300">
+                                    @if(! empty($item->chips)){{ implode(' · ', $item->chips) }}@endif
+                                    @if(filled($item->note))<div>“{{ $item->note }}”</div>@endif
+                                </div>
+                            @endif
+
                             {{-- Show ingredients for menu items --}}
                             @if($item->item_type === 'menu_item' && $item->menuItem && $item->menuItem->recipes)
                                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 pl-6">

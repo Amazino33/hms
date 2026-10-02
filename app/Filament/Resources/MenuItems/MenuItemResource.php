@@ -7,6 +7,7 @@ use App\Filament\Resources\MenuItems\Pages\EditMenuItem;
 use App\Filament\Resources\MenuItems\Pages\ListMenuItems;
 use App\Filament\Resources\MenuItems\Pages\ViewMenuItem;
 use App\Filament\Resources\MenuItems\Schemas\MenuItemInfolist;
+use App\Filament\Support\MenuContentFields;
 use App\Models\Category;
 use App\Models\Ingredient;
 use App\Models\MenuItem;
@@ -47,7 +48,11 @@ class MenuItemResource extends Resource
                 ->required(),
             Hidden::make('type')->default('food'),
             TextInput::make('sale_price')->numeric()->required(),
-            Toggle::make('available_for_sale')->default(true),
+            Toggle::make('available_for_sale')
+                ->default(true)
+                ->helperText('Off = sold out. The kitchen can also flip this from the KDS "Sold out" panel — it is the same switch.'),
+            MenuContentFields::photo(),
+            MenuContentFields::description(),
             Repeater::make('recipes')
                 ->relationship('recipes')
                 ->schema([
@@ -83,11 +88,14 @@ class MenuItemResource extends Resource
     {
 
         return $table->columns([
+            MenuContentFields::thumbnailColumn(),
             TextColumn::make('name')->searchable(),
             TextColumn::make('sku'),
             TextColumn::make('sale_price')->money('NGN'),
             TextColumn::make('total_recipe_cost')->money('NGN'),
             IconColumn::make('type')->boolean(),
+        ])->filters([
+            MenuContentFields::missingPhotoFilter(),
         ])->actions([
             EditAction::make(),
         ]);

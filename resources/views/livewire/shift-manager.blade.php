@@ -384,4 +384,37 @@
         </div>
     </div>
 
+    {{-- D3: guest tables blocking the end of shift — hand each one over. --}}
+    @if (! empty($guestHandoverTables))
+        <div class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" x-data="{ pin: '' }">
+            <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">Hand over your guest tables first</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400">These tables still have guest drinks waiting at the bar. Hand each to a waiter who is on shift — they confirm with their PIN.</p>
+
+                <div class="space-y-2">
+                    @foreach ($guestHandoverTables as $row)
+                        <label wire:key="handover-{{ $row['session_id'] }}" class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
+                            <input type="radio" wire:model="handoverSessionId" value="{{ $row['session_id'] }}">
+                            <span class="font-semibold text-gray-900 dark:text-white">{{ $row['table'] }}</span>
+                        </label>
+                    @endforeach
+                </div>
+
+                <select wire:model="handoverToUserId" class="w-full h-12 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white px-3">
+                    <option value="">Hand to…</option>
+                    @foreach ($this->handoverCandidates() as $id => $name)
+                        <option value="{{ $id }}">{{ $name }}</option>
+                    @endforeach
+                </select>
+
+                <input type="password" inputmode="numeric" maxlength="4" x-model="pin" placeholder="Their 4-digit PIN"
+                    class="w-full h-12 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white px-3 tracking-widest">
+
+                <div class="flex gap-2">
+                    <button type="button" wire:click="closeGuestHandover" class="flex-1 h-12 rounded-lg border border-gray-300 dark:border-gray-600 font-semibold text-gray-700 dark:text-gray-300">Close</button>
+                    <button type="button" @click="$wire.handoverGuestTable(pin); pin = ''" class="flex-1 h-12 rounded-lg bg-emerald-600 text-white font-bold">Hand over</button>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

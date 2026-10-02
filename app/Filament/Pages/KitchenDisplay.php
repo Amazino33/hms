@@ -66,7 +66,15 @@ class KitchenDisplay extends Page
 
     public function markAsReady($orderId)
     {
-        (new \App\Services\KitchenOrderService)->markReady($orderId, auth()->id());
+        // A stock shortage no longer refuses Mark Ready (it is logged
+        // instead), so what's left here is a second tap on a ticket that
+        // is already ready, or one that was cancelled meanwhile — say so
+        // instead of an error page.
+        try {
+            (new \App\Services\KitchenOrderService)->markReady($orderId, auth()->id());
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+            \App\Services\UserFeedback::blocked('Already Handled', 'This ticket is no longer waiting — it was already marked ready or was cancelled. The screen will refresh.');
+        }
 
         Cache::forget('kitchen_display:active_orders');
         Cache::forget('kitchen_display:recent_history');

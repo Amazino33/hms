@@ -724,6 +724,21 @@ class PagePermissionsSeeder extends Seeder
             ],
         ];
 
+        // Guest QR ordering admin (Phase 1B) — owner/manager level only.
+        foreach ([
+            'App\Filament\Pages\GuestOrdering' => 'Guest Ordering Settings',
+            'App\Filament\Pages\QrCodes' => 'QR Codes',
+        ] as $pageClass => $pageName) {
+            foreach (['super_admin', 'admin', 'manager'] as $role) {
+                $permissions[] = ['page_class' => $pageClass, 'page_name' => $pageName, 'role_name' => $role];
+            }
+        }
+
+        // Guest room ordering (Phase 5) — reception's Room Orders page.
+        foreach (['super_admin', 'manager', 'receptionist'] as $role) {
+            $permissions[] = ['page_class' => 'App\Filament\Pages\RoomOrders', 'page_name' => 'Room Orders', 'role_name' => $role];
+        }
+
         foreach ($permissions as $permission) {
             PagePermission::firstOrCreate(
                 ['page_class' => $permission['page_class'], 'role_name' => $permission['role_name']],

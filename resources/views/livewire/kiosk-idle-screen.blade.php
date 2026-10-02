@@ -169,6 +169,9 @@ new class extends Component {
 }; ?>
 
 <div class="min-h-screen bg-gray-900 p-6" x-data="{}" @print-bill.window="printPOSBill($event.detail[0] ?? $event.detail)">
+    {{-- Guest QR orders waiting for a waiter (Phase 3). --}}
+    <livewire:guest-orders-strip />
+
     <h1 class="text-2xl font-bold text-white mb-6">Select a Table</h1>
 
     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">

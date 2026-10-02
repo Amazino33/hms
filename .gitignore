@@ -2,6 +2,9 @@
 /node_modules
 /public/hot
 /public/storage
+/public/media/menu/*
+!/public/media/menu/.htaccess
+/public/media/branding/*
 /storage/*.key
 /storage/pail
 /storage/backups

@@ -5,13 +5,16 @@ namespace App\Filament\Pages;
 use App\Models\Booking;
 use App\Models\FolioLine;
 use App\Models\IncidentalPriceListItem;
+use App\Models\Order;
 use App\Models\Room;
 use App\Models\RoomSupply;
 use App\Models\WareHouse;
 use App\Services\BookingService;
 use App\Services\Ceo\RoomProfitService;
 use App\Services\FolioService;
+use App\Services\RoomOrderService;
 use App\Services\RoomSupplyService;
+use App\Services\UserFeedback;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -60,6 +63,10 @@ class FolioDetail extends Page
     public ?int $voidingLineId = null;
 
     public string $voidReason = '';
+
+    public ?int $cancellingOrderId = null;
+
+    public string $cancelOrderReason = '';
 
     public ?int $extendNights = null;
 
@@ -238,6 +245,82 @@ class FolioDetail extends Page
         } catch (\Exception $e) {
             Notification::make()->title('Could not void')->body($e->getMessage())->danger()->persistent()->send();
         }
+    }
+
+    /**
+     * Every room order billed to this stay, newest first — the place a
+     * room order gets cancelled from (Phase 0C), since its charge lives on
+     * this folio.
+     */
+    public function roomOrders()
+    {
+        if (! $this->booking) {
+            return collect();
+        }
+
+        return Order::where('booking_id', $this->booking->id)
+            ->where('is_return', false)
+            ->with('items')
+            ->latest('id')
+            ->get();
+    }
+
+    public function canCancelRoomOrder(Order $order): bool
+    {
+        return ! $this->booking->isCheckedOut()
+            && (new RoomOrderService)->canCancel($order, auth()->user());
+    }
+
+    public function openCancelRoomOrder(int $orderId): void
+    {
+        $this->cancellingOrderId = $orderId;
+        $this->cancelOrderReason = '';
+    }
+
+    public function closeCancelRoomOrder(): void
+    {
+        $this->cancellingOrderId = null;
+        $this->cancelOrderReason = '';
+    }
+
+    public function cancelRoomOrder(): void
+    {
+        if (! $this->cancellingOrderId || trim($this->cancelOrderReason) === '') {
+            UserFeedback::blocked('A reason is required', 'Say why this room order is being cancelled — it goes on the guest\'s folio.');
+
+            return;
+        }
+
+        $order = Order::where('booking_id', $this->booking->id)->find($this->cancellingOrderId);
+
+        if (! $order) {
+            UserFeedback::blocked('Order not found', 'That order is not on this stay. Refresh the page and try again.');
+
+            return;
+        }
+
+        try {
+            $cancelled = (new RoomOrderService)->cancel($order, auth()->user(), $this->cancelOrderReason);
+        } catch (\Exception $e) {
+            if (get_class($e) !== \Exception::class) {
+                report($e);
+                UserFeedback::failed('Could not cancel the room order');
+
+                return;
+            }
+
+            UserFeedback::blocked('Could not cancel', $e->getMessage());
+
+            return;
+        }
+
+        $this->closeCancelRoomOrder();
+        $this->loadBooking($this->booking->id);
+
+        UserFeedback::succeeded(
+            'Room order cancelled',
+            'Charge reversed on the folio: '.$cancelled->pluck('order_number')->join(', ').'.'
+        );
     }
 
     public function roomSupplies()

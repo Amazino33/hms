@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
+use App\Filament\Support\MenuContentFields;
 use App\Imports\ProductImport;
 use App\Services\ProductDeletionService;
 use Filament\Actions\Action as ActionsAction;
@@ -24,6 +25,7 @@ class ProductsTable
     {
         return $table
             ->columns([
+                MenuContentFields::thumbnailColumn(),
                 TextColumn::make('name')
                     ->searchable(),
                 TextColumn::make('sku')
@@ -52,6 +54,7 @@ class ProductsTable
             ])
             ->filters([
                 TrashedFilter::make(),
+                MenuContentFields::missingPhotoFilter(),
             ])
             ->paginated([10, 25, 50, 100])
             ->recordActions([

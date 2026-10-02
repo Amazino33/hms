@@ -6,7 +6,6 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\OrderPayment;
 use App\Models\User;
 use App\Models\Guest;
 use Illuminate\Support\Facades\DB;
@@ -45,6 +44,13 @@ new class extends Component {
     public $returnReason = '';
     public $returnQuantity = 1;
     public $maxReturnQuantity = 1;
+
+    // Phase 4 D12: a guest claimed a transfer, but Mark Paid is being done
+    // without one — confirm before going on. ['method' => ..., 'claimed' => ...]
+    public ?array $claimWarning = null;
+
+    // Per-request only (not public, so never sent to the browser).
+    private array $openClaimsMemo = [];
 
     // Cash Drop Properties
     public $showCashDropModal = false;
@@ -147,10 +153,18 @@ new class extends Component {
 
             foreach ($orders as $order) {
                 foreach ($order->items as $item) {
-                    if (isset($this->existingItems[$item->product_id ?: $item->id])) {
-                        $this->existingItems[$item->product_id ?: $item->id]['quantity'] += $item->quantity;
+                    // Menu items are keyed "menu_{id}" — the same key the cart
+                    // and OrderSplitter use. They used to be keyed by the
+                    // order-item id, which OrderSplitter read as a PRODUCT id:
+                    // the full payment screen then re-created a dish as
+                    // whichever product shared that number (or failed after
+                    // deleting the bill), and a dish could merge with a
+                    // product into one line (Phase 0F).
+                    $key = $item->item_type === 'menu_item' ? 'menu_' . $item->menu_item_id : $item->product_id;
+
+                    if (isset($this->existingItems[$key])) {
+                        $this->existingItems[$key]['quantity'] += $item->quantity;
                     } else {
-                        $key = $item->product_id ?: $item->id;
                         $this->existingItems[$key] = [
                             'id' => $item->product_id ?: $item->menu_item_id,
                             'name' => $item->product_name,
@@ -431,6 +445,16 @@ new class extends Component {
 
         $isTakeaway = $this->selectedTableId === 'takeaway';
         $tableId = $isTakeaway ? null : (int) $this->selectedTableId;
+
+        // D17: a table with an unpaid order that came from a guest QR request
+        // is paid with fast Mark Paid only. This screen re-creates the
+        // table's orders, which would cut them loose from the guest's
+        // request lines and bill.
+        if (!$isTakeaway && $this->tableHasGuestOrders($tableId)) {
+            UserFeedback::blocked('Guest QR table — use Mark Paid.', 'This table ordered from the QR menu. Pay it with the Mark Paid buttons (Split by method if they pay several ways).');
+            return false;
+        }
+
         $orderStatus = ($paidAmount >= $total) ? 'paid' : 'partial';
 
         // STRICT RULE 2: Prevent paying for orders that are still cooking/pending
@@ -463,30 +487,10 @@ new class extends Component {
             return false;
         }
 
-        // Restore old stock & delete previous orders only when a table is involved
-        $waiterUserId = auth()->id();
-        if (!$isTakeaway && $tableId) {
-            $existingOrders = Order::where('table_id', $tableId)->whereIn('status', ['ready', 'served'])->with('items')->get();
-            $waiterUserId = $existingOrders->first()?->user_id ?? auth()->id();
-
-            foreach ($existingOrders as $existingOrder) {
-                foreach ($existingOrder->items as $item) {
-                    $product = Product::with('category')->find($item->product_id);
-                    if ($product) {
-                        $warehouseId = $this->getWarehouseId($product);
-                        DB::table('inventory_items')
-                            ->where('product_id', $item->product_id)
-                            ->where('warehouse_id', $warehouseId)
-                            ->increment('quantity', $item->quantity);
-                    }
-                }
-                $existingOrder->items()->delete();
-                $existingOrder->delete();
-            }
-        }
-
-        // Prepare all items for OrderSplitter (combine existing and new)
-        $allItems = $this->existingItems;
+        // Prepare all items for OrderSplitter (combine existing and new).
+        // Lines voided down to 0 are left out — OrderSplitter clamps every
+        // quantity to at least 1, which would bring a voided item back.
+        $allItems = array_filter($this->existingItems, fn ($item) => ($item['quantity'] ?? 0) > 0);
         foreach ($cartItems as $productId => $item) {
             $qty = $item['qty'] ?? $item['quantity'] ?? 1;
             $normalizedItem = [
@@ -505,22 +509,98 @@ new class extends Component {
             }
         }
 
+        // Phase 0F: the delete-and-recreate below (its own audit pending) now
+        // runs as ONE transaction — a failure anywhere leaves the table's bill
+        // exactly as it was, where it used to be deleted first and then lost.
+        // And stock moves exactly once: the originals' stock already left the
+        // shelf (bar at creation, kitchen at Mark Ready), so the re-created
+        // orders are built WITHOUT deducting and carry the originals'
+        // stock_deducted_at forward. The old silent shelf restock (raw
+        // increment, no transaction) followed by a second deduction is gone.
         try {
-            $splitter = new OrderSplitter();
-            $orders = $splitter->handle($allItems, $tableId, $waiterUserId, [
-                'amount_paid' => $paidAmount,
-                'payment_method' => $paymentMethod,
-                'status' => $orderStatus,
-                'guest_id' => $guestId,
-                'processed_by_user_id' => auth()->id(),
-                // Attribute to the waiter's own shift (accountability is
-                // per-waiter, even if a different staff member is the one
-                // finalizing checkout at the till).
-                'shift_id' => \App\Models\User::find($waiterUserId)?->currentShift()?->id,
-                'paid_cash' => $splitPayments['cash'] ?? ($paymentMethod === 'cash' ? $paidAmount : 0),
-                'paid_pos' => $splitPayments['pos'] ?? ($paymentMethod !== 'cash' ? $paidAmount : 0),
-                'kiosk_device_id' => session('kiosk_device_id'),
-            ]);
+            $orders = DB::transaction(function () use ($isTakeaway, $tableId, $allItems, $paidAmount, $paymentMethod, $orderStatus, $guestId, $splitPayments) {
+                $waiterUserId = auth()->id();
+                $originalsDeductedAt = collect();
+
+                if (!$isTakeaway && $tableId) {
+                    $existingOrders = Order::where('table_id', $tableId)
+                        ->whereIn('status', ['ready', 'served'])
+                        ->lockForUpdate()
+                        ->with('items')
+                        ->get();
+                    $waiterUserId = $existingOrders->first()?->user_id ?? auth()->id();
+
+                    foreach ($existingOrders as $existingOrder) {
+                        // A served original whose stock never left the shelf
+                        // (only possible from an order forced to "ready"
+                        // without Mark Ready, before Phase 0F locked that)
+                        // is charged now — it has been served.
+                        if (is_null($existingOrder->stock_deducted_at)) {
+                            \App\Services\InventoryService::deductInventoryForOrderItems($existingOrder, allowShortfall: true);
+                            $existingOrder->refresh();
+                        }
+
+                        $originalsDeductedAt[$existingOrder->destination] = min(
+                            $originalsDeductedAt[$existingOrder->destination] ?? $existingOrder->stock_deducted_at,
+                            $existingOrder->stock_deducted_at,
+                        );
+
+                        $existingOrder->items()->delete();
+                        $existingOrder->delete();
+                    }
+                }
+
+                $splitter = new OrderSplitter();
+                $orders = $splitter->handle($allItems, $tableId, $waiterUserId, [
+                    'amount_paid' => $paidAmount,
+                    'payment_method' => $paymentMethod,
+                    'status' => $orderStatus,
+                    'guest_id' => $guestId,
+                    'processed_by_user_id' => auth()->id(),
+                    // Attribute to the waiter's own shift (accountability is
+                    // per-waiter, even if a different staff member is the one
+                    // finalizing checkout at the till).
+                    'shift_id' => \App\Models\User::find($waiterUserId)?->currentShift()?->id,
+                    'paid_cash' => $splitPayments['cash'] ?? ($paymentMethod === 'cash' ? $paidAmount : 0),
+                    'paid_pos' => $splitPayments['pos'] ?? ($paymentMethod !== 'cash' ? $paidAmount : 0),
+                    'kiosk_device_id' => session('kiosk_device_id'),
+                    // Re-creating already-deducted originals: no second deduction.
+                    'defer_stock_deduction' => $originalsDeductedAt->isNotEmpty(),
+                ]);
+
+                foreach ($orders as $order) {
+                    if ($originalsDeductedAt->isNotEmpty()) {
+                        $order->forceFill(['stock_deducted_at' => $originalsDeductedAt[$order->destination] ?? $originalsDeductedAt->min()])->saveQuietly();
+                    }
+                }
+
+                if ($paidAmount > 0 && !empty($orders)) {
+                    // A mixed cart (e.g. food + drinks) is split by OrderSplitter into
+                    // one Order per destination, each already carrying its own
+                    // proportional amount_paid. Record a payment per order — not just
+                    // the first — otherwise destination-level cash reporting silently
+                    // drops whatever was paid against the other split orders.
+                    $shiftId = auth()->user()?->currentShift()?->id;
+                    $method = !empty($splitPayments) ? 'split' : $paymentMethod;
+
+                    foreach ($orders as $order) {
+                        if ($order->amount_paid <= 0) {
+                            continue;
+                        }
+
+                        \App\Models\OrderPayment::create([
+                            'order_id' => $order->id,
+                            'amount' => $order->amount_paid,
+                            'method' => $method,
+                            'user_id' => auth()->id(),
+                            'shift_id' => $shiftId,
+                            'paid_at' => now(),
+                        ]);
+                    }
+                }
+
+                return $orders;
+            });
         } catch (\Exception $e) {
             // Every deliberate validation throw inside OrderSplitter/
             // InventoryService (out of stock, insufficient ingredients, no
@@ -542,31 +622,6 @@ new class extends Component {
             UserFeedback::failed('Could not process payment');
 
             return false;
-        }
-
-        if ($paidAmount > 0 && !empty($orders)) {
-            // A mixed cart (e.g. food + drinks) is split by OrderSplitter into
-            // one Order per destination, each already carrying its own
-            // proportional amount_paid. Record a payment per order — not just
-            // the first — otherwise destination-level cash reporting silently
-            // drops whatever was paid against the other split orders.
-            $shiftId = auth()->user()?->currentShift()?->id;
-            $method = !empty($splitPayments) ? 'split' : $paymentMethod;
-
-            foreach ($orders as $order) {
-                if ($order->amount_paid <= 0) {
-                    continue;
-                }
-
-                \App\Models\OrderPayment::create([
-                    'order_id' => $order->id,
-                    'amount' => $order->amount_paid,
-                    'method' => $method,
-                    'user_id' => auth()->id(),
-                    'shift_id' => $shiftId,
-                    'paid_at' => now(),
-                ]);
-            }
         }
 
         if ($tableId) {
@@ -686,8 +741,10 @@ new class extends Component {
      * served; anything still cooking or not yet carried to the table goes
      * through the standard flow instead, via the checks below.
      */
-    public function markPaidFast(string $method)
+    public function markPaidFast(string $method, bool $confirmedNoTransfer = false)
     {
+        $this->claimWarning = null;
+
         if (!auth()->user()?->currentShift()) {
             Notification::make()->title('No Active Shift')->body('You must start a shift before processing payments.')->danger()->send();
             return;
@@ -713,6 +770,20 @@ new class extends Component {
             return;
         }
 
+        // Phase 4: a guest QR table settles its own bill (D19) through
+        // GuestTablePaymentService, which also settles the guests' claims.
+        if ($guest = $this->guestBillSession($tableId)) {
+            $prefill = \App\Services\Guest\GuestTablePaymentService::prefill($guest);
+
+            if ($method !== 'transfer' && $prefill['claimed'] > 0 && !$confirmedNoTransfer) {
+                $this->claimWarning = ['method' => $method, 'claimed' => $prefill['claimed']];
+                return;
+            }
+
+            $this->settleFastPay($tableId, collect(), [['method' => $method, 'amount' => $prefill['outstanding']]], $guest);
+            return;
+        }
+
         $servedOrders = Order::where('table_id', $tableId)->where('status', 'served')->get();
 
         if ($servedOrders->isEmpty()) {
@@ -720,48 +791,174 @@ new class extends Component {
             return;
         }
 
-        $shiftId = auth()->user()?->currentShift()?->id;
-        $totalPaid = 0;
+        // One line, for exactly what's outstanding — the amount is still
+        // never anything the client sends. The service re-reads and locks
+        // the orders itself, so a double-tap or a second device on the
+        // same table is refused rather than paid twice.
+        $outstanding = $servedOrders->sum(fn ($order) => round(max(0, (float) $order->total_amount - (float) $order->amount_paid), 2));
 
-        $orderIds = $servedOrders->pluck('id')->all();
+        $this->settleFastPay($tableId, $servedOrders, [['method' => $method, 'amount' => $outstanding]]);
+    }
 
-        DB::transaction(function () use ($orderIds, $method, $shiftId, &$totalPaid) {
-            // Re-fetched and locked inside the transaction, re-checking
-            // status='served' on the locked copy — $servedOrders above was
-            // read before the transaction started, so without this a
-            // double-tap or two devices open on the same table could both
-            // see the same outstanding balance and both record a payment
-            // for it, double-counting revenue and overstating what the
-            // waiter is expected to remit at settlement.
-            $orders = Order::whereIn('id', $orderIds)
-                ->where('status', 'served')
-                ->lockForUpdate()
-                ->get();
+    /**
+     * "Split by method": the same full settlement as markPaidFast(), but
+     * the outstanding total is spread across up to three methods (e.g.
+     * part cash, part transfer). The lines must add up to the bill exactly
+     * — FastMarkPaidService enforces that server-side; the Confirm button
+     * staying disabled until Remaining is ₦0 is only a courtesy.
+     *
+     * @param  array<int, array{method?: string, amount?: mixed, payer_reference?: ?string}>  $lines
+     */
+    public function markPaidSplit(array $lines): bool
+    {
+        if (!auth()->user()?->currentShift()) {
+            Notification::make()->title('No Active Shift')->body('You must start a shift before processing payments.')->danger()->send();
+            return false;
+        }
 
-            foreach ($orders as $order) {
-                $outstanding = round(max(0, (float) $order->total_amount - (float) $order->amount_paid), 2);
+        if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
+            Notification::make()->title('Please select a table')->warning()->send();
+            return false;
+        }
 
-                if ($outstanding > 0) {
-                    OrderPayment::create([
-                        'order_id' => $order->id,
-                        'amount' => $outstanding,
-                        'method' => $method,
-                        'user_id' => auth()->id(),
-                        'shift_id' => $shiftId,
-                        'paid_at' => now(),
-                    ]);
+        $tableId = $this->selectedTableId;
 
-                    $totalPaid += $outstanding;
-                }
+        if (Order::where('table_id', $tableId)->whereIn('status', ['pending', 'preparing', 'ready'])->exists()) {
+            Notification::make()->title('Not Ready')->body('Some items are still cooking, or not yet confirmed served.')->danger()->send();
+            return false;
+        }
 
-                $order->update([
-                    'amount_paid' => $order->total_amount,
-                    'status' => 'paid',
-                ]);
+        if ($guest = $this->guestBillSession($tableId)) {
+            return $this->settleFastPay($tableId, collect(), $lines, $guest);
+        }
+
+        $servedOrders = Order::where('table_id', $tableId)->where('status', 'served')->get();
+
+        if ($servedOrders->isEmpty()) {
+            Notification::make()->title('Nothing to Pay')->warning()->send();
+            return false;
+        }
+
+        return $this->settleFastPay($tableId, $servedOrders, $lines);
+    }
+
+    /**
+     * What the split panel's "Remaining" counter starts from — the same
+     * figure FastMarkPaidService will demand, read fresh each time the
+     * panel opens rather than baked into the page at render time.
+     */
+    /**
+     * D17: does this table have an unpaid order that came from a guest QR
+     * request? Those tables pay with fast Mark Paid only.
+     */
+    public function tableHasGuestOrders($tableId): bool
+    {
+        if (!$tableId || $tableId === 'takeaway') {
+            return false;
+        }
+
+        return \App\Models\GuestRequestItem::whereHas('order', fn ($q) => $q
+            ->where('table_id', (int) $tableId)
+            ->whereNotIn('status', ['paid', 'cancelled', 'returned']))
+            ->exists();
+    }
+
+    /**
+     * Phase 4: the open guest sitting at this table, when it has something
+     * unpaid on its bill — Mark Paid then settles that bill (D19) through
+     * GuestTablePaymentService. Older orders the waiter said belong to
+     * other guests are paid by the ordinary path afterwards.
+     */
+    public function guestBillSession($tableId): ?\App\Models\GuestTableSession
+    {
+        if (!$tableId || $tableId === 'takeaway') {
+            return null;
+        }
+
+        $session = \App\Models\GuestTableSession::open()->where('table_id', (int) $tableId)->first();
+
+        return $session && \App\Services\Guest\GuestBillService::unpaidOrders($session)->isNotEmpty() ? $session : null;
+    }
+
+    /** Opens the split panel by itself (Phase 4) — asked once per render, three layouts share it. */
+    public function guestHasOpenClaims($tableId): bool
+    {
+        $key = (string) $tableId;
+
+        if (!array_key_exists($key, $this->openClaimsMemo)) {
+            $guest = $this->guestBillSession($tableId);
+            $this->openClaimsMemo[$key] = $guest && \App\Models\GuestPaymentClaim::where('guest_table_session_id', $guest->id)->open()->exists();
+        }
+
+        return $this->openClaimsMemo[$key];
+    }
+
+    /**
+     * What the split panel opens with: the outstanding total, and on a guest
+     * table its open "I've paid" claims plus the pre-filled lines (a
+     * transfer line for the claims, capped at the bill; cash for the rest).
+     */
+    public function fastPayPrefill(): array
+    {
+        $this->skipRender();
+
+        $guest = $this->guestBillSession($this->selectedTableId);
+
+        if ($guest) {
+            return \App\Services\Guest\GuestTablePaymentService::prefill($guest);
+        }
+
+        return ['outstanding' => $this->outstandingForTable(), 'claims' => [], 'claimed' => 0, 'lines' => []];
+    }
+
+    public function fastPayOutstanding(): float
+    {
+        $this->skipRender();
+
+        return $this->outstandingForTable();
+    }
+
+    private function outstandingForTable(): float
+    {
+        if (!$this->selectedTableId || $this->selectedTableId === 'takeaway') {
+            return 0.0;
+        }
+
+        if ($guest = $this->guestBillSession($this->selectedTableId)) {
+            return \App\Services\Guest\GuestBillService::unpaidTotal($guest);
+        }
+
+        return round((float) Order::where('table_id', $this->selectedTableId)
+            ->where('status', 'served')
+            ->get()
+            ->sum(fn ($order) => max(0, (float) $order->total_amount - (float) $order->amount_paid)), 2);
+    }
+
+    private function settleFastPay($tableId, $servedOrders, array $lines, ?\App\Models\GuestTableSession $guest = null): bool
+    {
+        try {
+            $totalPaid = $guest
+                ? (new \App\Services\Guest\GuestTablePaymentService())->pay($guest, $lines, auth()->user())
+                : (new \App\Services\FastMarkPaidService())->payWithMethods($servedOrders, $lines, auth()->user());
+        } catch (\Exception $e) {
+            // Same split as checkout(): a deliberate rule throw is a plain
+            // \Exception whose message is already written for the waiter.
+            if (get_class($e) === \Exception::class) {
+                UserFeedback::blocked('Could Not Mark Paid', $e->getMessage());
+                return false;
             }
-        });
 
-        \App\Models\Table::find($tableId)->update(['status' => 'available']);
+            report($e);
+            UserFeedback::failed('Could not mark paid');
+
+            return false;
+        }
+
+        // A guest table may still hold older orders that belong to other
+        // guests (D19 "No") — it is only free once nothing is unpaid.
+        if (!$guest || !Order::where('table_id', $tableId)->whereIn('status', \App\Services\Guest\GuestBillService::UNPAID)->exists()) {
+            \App\Models\Table::find($tableId)->update(['status' => 'available']);
+        }
 
         Notification::make()->title('Paid: ₦' . number_format($totalPaid))->success()->send();
 
@@ -772,6 +969,8 @@ new class extends Component {
         $this->selectedGuestId = null;
 
         $this->dispatch('order-completed');
+
+        return true;
     }
 
     public function cancelOrder()
@@ -1062,7 +1261,7 @@ new class extends Component {
         // the bill dropped the instant this button was pressed, whether or
         // not the drink/dish ever actually came back.
         Order::create([
-            'order_number' => 'RET-' . time(),
+            'order_number' => \App\Services\Orders\OrderNumberGenerator::nextReturn(\App\Services\Orders\OrderNumberGenerator::stationFor($destination)),
             'table_id' => $this->selectedTableId === 'takeaway' ? null : $this->selectedTableId,
             'user_id' => auth()->id(),
             'shift_id' => auth()->user()?->currentShift()?->id,
@@ -1418,9 +1617,13 @@ new class extends Component {
                         <button @if(auth()->user()->currentShift()) @click="sendToKitchen()" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span
                                 class="text-sm lg:text-base">Order</span></button>
+@if($this->tableHasGuestOrders($selectedTableId))
+<div class="text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded-lg flex items-center justify-center text-center p-2">Guest QR table — use Mark Paid.</div>
+@else
                         <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span
                                 class="text-sm lg:text-base">Pay</span></button>
+@endif
                         <button @if(auth()->user()->currentShift()) @click="$wire.call('cancelOrder')" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-4 px-4 rounded-lg flex flex-col items-center justify-center touch-manipulation transition-colors"><span
                                 class="text-sm lg:text-base">Cancel</span></button>
@@ -1437,6 +1640,7 @@ new class extends Component {
                             <button wire:click="markPaidFast('transfer')"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">Transfer</button>
                         </div>
+                        @include('partials.split-by-method', ['instance' => 'desk'])
                     </div>
                 </div>
             </div>
@@ -1729,10 +1933,14 @@ new class extends Component {
                             class="{{ auth()->user()->currentShift() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                             Order
                         </button>
+@if($this->tableHasGuestOrders($selectedTableId))
+<div class="text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded-lg flex items-center justify-center text-center p-2">Guest QR table — use Mark Paid.</div>
+@else
                         <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                             Pay
                         </button>
+@endif
                         <button @if(auth()->user()->currentShift()) @click="$wire.call('cancelOrder')" @endif
                             class="{{ auth()->user()->currentShift() ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-gray-400 cursor-not-allowed' }} text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors touch-manipulation">
                             Cancel
@@ -1749,6 +1957,7 @@ new class extends Component {
                             <button wire:click="markPaidFast('transfer')"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm">Transfer</button>
                         </div>
+                        @include('partials.split-by-method', ['instance' => 'mob'])
                     </div>
                 </div>
             </div>
@@ -2036,10 +2245,15 @@ new class extends Component {
                                     class="h-16 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold touch-manipulation">
                                     Transfer</button>
                             </div>
+                            @include('partials.split-by-method', ['instance' => 'kiosk'])
+@if($this->tableHasGuestOrders($selectedTableId))
+<div class="mt-2 w-full text-center text-sm font-semibold text-amber-600 dark:text-amber-400">Guest QR table — use Mark Paid.</div>
+@else
                             <button @if(auth()->user()->currentShift()) @click="openPaymentModal()" @endif
                                 class="mt-2 w-full h-10 rounded-lg text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation">
                                 Split payment…
                             </button>
+@endif
                         </div>
                     </template>
 
@@ -2719,6 +2933,19 @@ new class extends Component {
                     <button wire:click="submitReturnRequest"
                         class="px-4 py-3 font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 touch-manipulation flex items-center justify-center gap-2">Confirm
                         Return</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if($claimWarning)
+        <div class="fixed inset-0 z-[80] bg-black/70 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm border-2 border-amber-500">
+                <h3 class="text-lg font-bold text-amber-700 dark:text-amber-400">Guest claimed ₦{{ number_format($claimWarning['claimed']) }} by transfer — no transfer line entered. Continue?</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mt-2">Their claim will be recorded as not matched. To use it, choose Transfer or Split by method instead.</p>
+                <div class="grid grid-cols-2 gap-3 mt-5">
+                    <button type="button" wire:click="$set('claimWarning', null)" class="h-14 rounded-xl bg-gray-100 dark:bg-gray-800 font-bold text-gray-800 dark:text-gray-100">Go back</button>
+                    <button type="button" wire:click="markPaidFast('{{ $claimWarning['method'] }}', true)" class="h-14 rounded-xl bg-amber-500 font-bold text-black">Continue</button>
                 </div>
             </div>
         </div>

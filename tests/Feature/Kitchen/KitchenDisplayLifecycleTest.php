@@ -32,6 +32,9 @@ use Spatie\Permission\Models\Role;
 function seedKitchenOrder(): array
 {
     $table = TableModel::create(['name' => 'Table 1', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    // Mark Ready deducts every kitchen ticket's stock since Phase 0D, so
+    // the kitchen it deducts from has to exist.
+    WareHouse::firstOrCreate(['name' => 'Kitchen'], ['type' => 'consumer']);
     $category = Category::create(['name' => 'Food', 'type' => 'food']);
     $product = Product::create(['name' => 'Jollof Rice', 'price' => 1500, 'category_id' => $category->id, 'is_active' => true]);
 
@@ -131,8 +134,14 @@ it('refuses to mark a bar-destination order ready from the kitchen display', fun
 
     $admin = actingAdmin();
 
-    expect(fn () => Livewire::actingAs($admin)->test(KitchenDisplay::class)->instance()->markAsReady($barOrder->id))
-        ->toThrow(ModelNotFoundException::class);
+    // Still refused by KitchenOrderService's pending+kitchen guard — the
+    // page now says so instead of surfacing the exception as an error page.
+    Livewire::actingAs($admin)->test(KitchenDisplay::class)
+        ->call('markAsReady', $barOrder->id)
+        ->assertNotified('Already Handled');
+
+    expect($barOrder->fresh()->status)->toBe('pending');
+    expect((int) InventoryItem::where('product_id', $product->id)->where('warehouse_id', 4)->value('quantity'))->toBe(10);
 });
 
 it('refuses to re-mark an already-ready kitchen order as ready again', function () {
@@ -142,9 +151,13 @@ it('refuses to re-mark an already-ready kitchen order as ready again', function 
     $component = Livewire::actingAs($admin)->test(KitchenDisplay::class);
     $component->call('markAsReady', $order->id);
     expect($order->fresh()->status)->toBe('ready');
+    $processedBy = $order->fresh()->processed_by_user_id;
 
-    expect(fn () => $component->instance()->markAsReady($order->id))
-        ->toThrow(ModelNotFoundException::class);
+    // Still refused — the page now says so instead of an error page.
+    $component->call('markAsReady', $order->id)->assertNotified('Already Handled');
+
+    expect($order->fresh()->status)->toBe('ready');
+    expect($order->fresh()->processed_by_user_id)->toBe($processedBy);
 });
 
 it('matches the same three fixes on the bar display', function () {

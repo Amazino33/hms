@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Shift;
+use App\Services\Orders\OrderNumberGenerator;
 use Filament\Actions\Action;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,33 @@ use Illuminate\Support\Facades\Log;
 class OrderSplitter
 {
     /**
+     * The guest-request marker (Phase 3, D18). Only a call carrying
+     * ['source' => OrderSplitter::SOURCE_GUEST_REQUEST] may use the per-line
+     * guest fields below; for every other caller they are ignored and the
+     * behaviour is exactly as before. Only the guest services pass it — an
+     * architecture test enforces that.
+     */
+    public const SOURCE_GUEST_REQUEST = 'guest_request';
+
+    /**
+     * After a guest-request call: cart key => the order_items.id that line
+     * became, so a guest request line can point at its real order line.
+     * Empty for every other caller.
+     *
+     * @var array<string, int>
+     */
+    public array $lastLineItemIds = [];
+
+    /**
      * Create separate orders per destination based on cart.
+     *
+     * Optional per-line fields (Phase 3):
+     *   chips, note          any caller — stored on the order item
+     *   line_type, line_id   guest-request calls only — the item's identity,
+     *                        so lines can use unique keys (two "Beer" lines
+     *                        with different chips must not merge)
+     *   unit_price_override  guest-request calls only — the price the guest
+     *                        was shown at submit (the price lock, D18)
      *
      * @param  array|\Illuminate\Support\Collection  $cart  keyed by productId => [name,price,quantity] or menuItemId prefixed with 'menu_' => [name,price,quantity]
      * @param  array  $options  optional keys: payment_method, amount_paid, guest_id
@@ -25,8 +52,10 @@ class OrderSplitter
     public function handle($cart, ?int $tableId, int $userId, array $options = []): array
     {
         $created = [];
+        $this->lastLineItemIds = [];
+        $isGuestRequest = ($options['source'] ?? null) === self::SOURCE_GUEST_REQUEST;
 
-        DB::transaction(function () use ($cart, $tableId, $userId, $options, &$created) {
+        DB::transaction(function () use ($cart, $tableId, $userId, $options, $isGuestRequest, &$created) {
             // Normalize cart so each item includes its id and type. The
             // client-supplied 'price' and 'quantity' are NEVER trusted here
             // — 'price' is overwritten with the product/menu item's actual
@@ -35,11 +64,12 @@ class OrderSplitter
             // Livewire method argument (unlike a public property) carries
             // no checksum, so anything sent as 'price' in the request body
             // must be treated as attacker-controlled.
-            $prepared = collect($cart)->map(function ($item, $key) {
+            $prepared = collect($cart)->map(function ($item, $key) use ($isGuestRequest) {
                 $item['key'] = $key;
-                if (str_starts_with($key, 'menu_')) {
+                $guestLineType = $isGuestRequest ? ($item['line_type'] ?? null) : null;
+                if ($guestLineType === 'menu_item' || ($guestLineType === null && str_starts_with($key, 'menu_'))) {
                     $item['type'] = 'menu_item';
-                    $item['menu_item_id'] = (int) str_replace('menu_', '', $key);
+                    $item['menu_item_id'] = $guestLineType ? (int) $item['line_id'] : (int) str_replace('menu_', '', $key);
 
                     $menuItem = MenuItem::find($item['menu_item_id']);
                     if (! $menuItem) {
@@ -48,13 +78,20 @@ class OrderSplitter
                     $item['price'] = (float) $menuItem->sale_price;
                 } else {
                     $item['type'] = 'product';
-                    $item['product_id'] = (int) $key;
+                    $item['product_id'] = $guestLineType ? (int) $item['line_id'] : (int) $key;
 
                     $product = Product::find($item['product_id']);
                     if (! $product) {
                         throw new \Exception("Product not found: {$item['name']}");
                     }
                     $item['price'] = (float) $product->price;
+                }
+
+                // The price lock (D18): a guest pays the price they were
+                // shown. Honoured ONLY on a guest-request call — any other
+                // caller's 'price' is still never trusted.
+                if ($isGuestRequest && isset($item['unit_price_override'])) {
+                    $item['price'] = round((float) $item['unit_price_override'], 2);
                 }
 
                 $item['quantity'] = max(1, (int) ($item['quantity'] ?? 1));
@@ -113,7 +150,7 @@ class OrderSplitter
                 }
 
                 $order = Order::create([
-                    'order_number' => 'ORD-'.time().'-'.strtoupper(substr($destination, 0, 1)),
+                    'order_number' => OrderNumberGenerator::next(OrderNumberGenerator::stationFor($destination)),
                     'total_amount' => $groupTotal,
                     'amount_paid' => $amountPaid,
                     'paid_cash' => $paidCash,
@@ -136,7 +173,7 @@ class OrderSplitter
                         if (! $menuItem) {
                             throw new \Exception("Menu item not found: {$item['name']}");
                         }
-                        OrderItem::create([
+                        $orderItem = OrderItem::create([
                             'order_id' => $order->id,
                             'menu_item_id' => $item['menu_item_id'], // Use menu_item_id for menu items
                             'product_id' => null, // No product_id for menu items
@@ -145,7 +182,7 @@ class OrderSplitter
                             'quantity' => $item['quantity'],
                             'unit_price' => $item['price'],
                             'subtotal' => $item['price'] * $item['quantity'],
-                        ]);
+                        ] + self::lineExtras($item));
                     } else {
                         $product = Product::with('category')->find($item['product_id']);
                         $warehouseId = match (true) {
@@ -154,7 +191,7 @@ class OrderSplitter
                             default => 3,
                         };
 
-                        OrderItem::create([
+                        $orderItem = OrderItem::create([
                             'order_id' => $order->id,
                             'product_id' => $item['product_id'],
                             'menu_item_id' => null, // No menu_item_id for products
@@ -163,7 +200,11 @@ class OrderSplitter
                             'quantity' => $item['quantity'],
                             'unit_price' => $item['price'],
                             'subtotal' => $item['price'] * $item['quantity'],
-                        ]);
+                        ] + self::lineExtras($item));
+                    }
+
+                    if ($isGuestRequest) {
+                        $this->lastLineItemIds[(string) $item['key']] = $orderItem->id;
                     }
                 }
 
@@ -173,7 +214,16 @@ class OrderSplitter
                 // here — a guest's room order can be a while away from
                 // actually being made, and stock shouldn't leave the shelf
                 // on paper before it physically does.
-                if (empty($options['defer_stock_deduction'])) {
+                //
+                // Every kitchen ticket headed for the kitchen screen does
+                // the same (Phase 0D): food leaves the shelf when the cook
+                // marks it Ready, in KitchenOrderService::markReady(). A
+                // kitchen order created already paid/partial (takeaway, the
+                // full payment screen's re-creation) never reaches that
+                // screen at all, so it still deducts here, as before.
+                $deferToMarkReady = $destination === 'kitchen' && $orderStatus === 'pending';
+
+                if (empty($options['defer_stock_deduction']) && ! $deferToMarkReady) {
                     InventoryService::deductInventoryForOrderItems($order);
                 }
 
@@ -207,6 +257,28 @@ class OrderSplitter
         });
 
         return $created;
+    }
+
+    /**
+     * Optional chips (label snapshots) and note for a line — only when the
+     * caller actually sent them, so every existing caller writes exactly the
+     * same row as before.
+     *
+     * @return array<string, mixed>
+     */
+    private static function lineExtras(array $item): array
+    {
+        $extras = [];
+
+        if (! empty($item['chips']) && is_array($item['chips'])) {
+            $extras['chips'] = array_values($item['chips']);
+        }
+
+        if (isset($item['note']) && $item['note'] !== '') {
+            $extras['note'] = $item['note'];
+        }
+
+        return $extras;
     }
 
     /**

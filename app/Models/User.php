@@ -252,6 +252,20 @@ class User extends Authenticatable implements FilamentUser
                 );
             }
 
+            // D3: guest drinks still waiting at the bar for this waiter's
+            // tables would be released under a shift that no longer exists.
+            // Hand the table over first (ShiftManager offers it).
+            $guestTables = \App\Services\Guest\GuestSessionHandoverService::blockingSessions($this);
+
+            if ($guestTables->isNotEmpty()) {
+                throw new \Exception(
+                    // getRelationValue(): inside a model, $s->table is Eloquent's
+                    // own protected $table string, not the relation.
+                    'Guest drinks are still waiting at the bar for '.$guestTables->map(fn ($s) => $s->getRelationValue('table')?->name)->filter()->join(', ')
+                    .' — hand those tables over to another waiter before you end your shift.'
+                );
+            }
+
             $outstanding = (new ShiftAccountingService())->outstandingOrders($shift);
 
             if ($outstanding->isNotEmpty()) {

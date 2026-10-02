@@ -54,13 +54,13 @@ class OrderResource extends Resource
                                     ->prefix('₦')
                                     ->formatStateUsing(fn($state) => number_format($state ?? 0))
                                     ->readOnly()
+                                    ->dehydrated(false)
                                     ->extraInputAttributes(['class' => 'text-2xl font-black text-primary-600']),
                                 // A. The Table - CHANGED to Select
                                 Select::make('table_id')
                                     ->label('Table')
-                                    ->relationship('table', 'name') // Loads names, saves ID
-                                    ->disabled() // Keeps it read-only
-                                    ->dehydrated() // CRITICAL: Sends the ID even when disabled
+                                    ->relationship('table', 'name') // Loads names
+                                    ->disabled() // Read-only: moving a table is its own flow (Phase 0F)
                                     ->extraInputAttributes(['class' => 'text-xl font-bold text-primary-600']),
 
                                 // B. Status - CHANGED to Select
@@ -74,8 +74,9 @@ class OrderResource extends Resource
                                         'paid' => 'PAID',
                                         'cancelled' => 'CANCELLED',
                                     ])
+                                    // Never written from here (Phase 0F): status only moves
+                                    // through Mark Ready, Served, Void, Return and payment.
                                     ->disabled()
-                                    ->dehydrated()
                                     ->extraInputAttributes(['class' => 'font-bold']),
 
                                 // C. Cancellation Reason - only show for cancelled orders
@@ -90,8 +91,7 @@ class OrderResource extends Resource
                                 Select::make('user_id')
                                     ->label('Server')
                                     ->relationship('user', 'name')
-                                    ->disabled()
-                                    ->dehydrated(),
+                                    ->disabled(),
                             ]),
                         ])
                         ->columnSpan(2),
@@ -100,14 +100,22 @@ class OrderResource extends Resource
                 // 2. FULL WIDTH SECTION: The Items List
                 Section::make('Order Items')
                     ->schema([
+                        // Read-only (Phase 0F): editing lines here changed the bill
+                        // with no stock movement. Corrections go through Void and
+                        // Return, which handle both.
                         Repeater::make('items')
                             ->relationship()
+                            ->disabled()
+                            ->addable(false)
+                            ->deletable(false)
                             ->schema([
                                 // ... (I left this exactly as your original code) ...
+                                // Not required(): the repeater is read-only (Phase 0F), and a
+                                // menu-item line has no product, so requiring one made any
+                                // order with food impossible to save at all.
                                 Select::make('product_id')
                                     ->label('Product')
                                     ->options(Product::pluck('name', 'id'))
-                                    ->required()
                                     ->searchable()
                                     ->live(debounce: 300)
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {

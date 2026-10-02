@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Commission;
+use App\Models\KitchenWasteLog;
 use App\Models\Order;
 use App\Services\DashboardCache;
 use App\Services\InventoryService;
@@ -37,7 +38,26 @@ class OrderObserver
             && in_array($order->status, $restockStatuses, true)
             && ! in_array($order->getOriginal('status'), $restockStatuses, true)
         ) {
-            InventoryService::returnInventoryForCancelledOrder($order);
+            // Cooked food is never restocked (Phase 0D): a kitchen ticket
+            // cancelled once the cook has marked it Ready is recorded as
+            // waste instead, with no stock movement at all. A kitchen
+            // ticket cancelled before that still goes through the normal
+            // return path, whose stock_deducted_at guard gives back only
+            // what really left the shelf (nothing for anything created
+            // since Phase 0D; everything for an older one that deducted at
+            // creation). Return tickets are untouched by this.
+            if ($this->isCookedKitchenCancellation($order)) {
+                $this->recordKitchenWaste($order);
+            } elseif ($this->isReturnTicketThatNeverRestocks($order)) {
+                // Phase 0F. A REJECTED return ticket (status cancelled) means
+                // the item never came back — nothing to restock. And a
+                // kitchen return never restocks either: the dish was cooked
+                // (ReturnConfirmationService records it as waste) or not made
+                // yet (nothing was ever deducted). Only a confirmed BAR
+                // return puts stock back.
+            } else {
+                InventoryService::returnInventoryForCancelledOrder($order);
+            }
         }
     }
 
@@ -72,6 +92,44 @@ class OrderObserver
     }
 
     // ── Private Helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * Anything past pending/preparing has left the pass — ready, served,
+     * or already paid/partial (takeaway). 'preparing' is never actually set
+     * today, but it is still a not-yet-cooked state if it ever is.
+     */
+    private function isCookedKitchenCancellation(Order $order): bool
+    {
+        return $order->status === 'cancelled'
+            && $order->destination === 'kitchen'
+            && ! $order->is_return
+            && ! in_array($order->getOriginal('status'), ['pending', 'preparing'], true);
+    }
+
+    private function isReturnTicketThatNeverRestocks(Order $order): bool
+    {
+        return $order->is_return
+            && ($order->status === 'cancelled' || $order->destination === 'kitchen');
+    }
+
+    private function recordKitchenWaste(Order $order): void
+    {
+        foreach ($order->items as $item) {
+            KitchenWasteLog::create([
+                'order_id' => $order->id,
+                'order_item_id' => $item->id,
+                'item_type' => $item->item_type,
+                'product_id' => $item->product_id,
+                'menu_item_id' => $item->menu_item_id,
+                'item_name' => $item->product_name,
+                'quantity' => $item->quantity,
+                'sale_value' => round((float) $item->unit_price * $item->quantity, 2),
+                'order_status_before' => $order->getOriginal('status'),
+                'reason' => $order->cancellation_reason,
+                'recorded_by' => auth()->id(),
+            ]);
+        }
+    }
 
     private function calculateAndSaveCommission(Order $order): void
     {

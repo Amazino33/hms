@@ -17,7 +17,7 @@ it('delegates the transfer form submit handler via document, not a direct node r
     $view = file_get_contents(resource_path('views/filament/pages/storekeeper-transfers.blade.php'));
 
     expect($view)->not->toContain("getElementById('transfer-form').addEventListener('submit'");
-    expect($view)->toContain("document.addEventListener('submit', function (e) {");
+    expect($view)->toContain("document.addEventListener('submit', async function (e) {");
     expect($view)->toContain("e.target.id !== 'transfer-form'");
 });
 

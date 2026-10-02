@@ -47,6 +47,32 @@ return [
             'report' => false,
         ],
 
+        // Menu photos (Phase 1A). Written straight under public/ rather than
+        // the 'public' disk, so they're served by the web server with no
+        // `storage:link` symlink (deploy.sh never creates one). Every file
+        // name is unique per upload, so public/media/menu/.htaccess can
+        // safely tell browsers to cache them for a year. The folder is
+        // gitignored: uploads live on the server, never in the repo.
+        'menu_photos' => [
+            'driver' => 'local',
+            'root' => public_path('media/menu'),
+            'url' => '/media/menu',
+            'visibility' => 'public',
+            'throw' => true,
+            'report' => false,
+        ],
+
+        // Public copies of the venue logo for the guest pages (Phase 4/7A).
+        // Only ever written by App\Services\BrandingLogo.
+        'branding' => [
+            'driver' => 'local',
+            'root' => public_path('media/branding'),
+            'url' => '/media/branding',
+            'visibility' => 'public',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

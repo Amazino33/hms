@@ -5,9 +5,11 @@
 #   1. Backs up the database (never skip this)
 #   2. Puts the site in maintenance mode
 #   3. Pulls the latest code from GitHub
-#   4. Installs PHP dependencies (no npm needed — compiled assets are
-#      committed to git, since this server can't run npm)
-#   5. Runs database migrations
+#   4. Installs PHP dependencies, then restores the hand-patched Filament
+#      notifications.js that composer's post-install step overwrites
+#   5. Runs database migrations, then rebuilds front-end assets if Node/npm
+#      is installed (otherwise warns loudly — then public/build must be
+#      committed from a dev machine)
 #   6. Ensures roles/permissions exist — additive only, never removes or
 #      overwrites anything already configured live via the Shield UI
 #   7. Rebuilds caches and restarts the queue
@@ -39,6 +41,12 @@ php artisan hms:maintenance-down || true
 
 echo ""
 echo "==> [3/8] Pulling latest code from GitHub..."
+# Files this script itself regenerates on the server (the front-end build
+# and the Filament asset composer overwrites) are reset to the committed
+# versions first — otherwise a server-side build leaves them modified and
+# the --ff-only pull below refuses to run.
+git checkout -- public/build public/js/filament/notifications/notifications.js
+git clean -fdq public/build
 # --ff-only: fail loudly instead of creating a surprise merge commit if
 # history has diverged (e.g. someone edited something directly on the server)
 git pull --ff-only origin main
@@ -46,10 +54,33 @@ git pull --ff-only origin main
 echo ""
 echo "==> [4/8] Installing PHP dependencies..."
 composer install --no-dev --optimize-autoloader
+# composer's post-autoload-dump runs `php artisan filament:upgrade`, which
+# republishes Filament's assets over public/js/filament/notifications/
+# notifications.js — a file hand-patched in commit 475df40 ("Fix silent
+# hang"). Put the patched version back every time.
+git checkout -- public/js/filament/notifications/notifications.js
 
 echo ""
 echo "==> [5/8] Running database migrations..."
 php artisan migrate --force
+
+echo ""
+echo "==> [5b/8] Building front-end assets..."
+# Tailwind only compiles the classes it finds in the Blade templates, so a
+# deploy that changes a template without rebuilding ships unstyled screens.
+if command -v npm >/dev/null 2>&1; then
+    npm ci --no-audit --no-fund
+    npm run build
+else
+    echo ""
+    echo "    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo "    !!  Front-end NOT rebuilt — npm is not installed on this server.  !!"
+    echo "    !!  The committed public/build is being used as-is: make sure it !!"
+    echo "    !!  was rebuilt (npm run build) and committed on a dev machine.   !!"
+    echo "    !!  See docs/deploy-node.md.                                      !!"
+    echo "    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo ""
+fi
 
 echo ""
 echo "==> [6/8] Ensuring roles and new permissions exist (additive only)..."
@@ -79,6 +110,9 @@ foreach (\Database\Seeders\ShieldSeeder::getRolesWithPermissions() as \$entry) {
 echo 'Roles and Shield permissions ensured additively.' . PHP_EOL;
 "
 php artisan db:seed --class=PagePermissionsSeeder --force
+# Guest pages show a public WebP copy of the company logo (Phase 4) — the
+# uploaded original stays private. Idempotent; never fails the deploy.
+php artisan branding:publish-logo || true
 
 echo ""
 echo "==> [7/8] Rebuilding caches and restarting queue..."

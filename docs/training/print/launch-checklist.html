@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guest ordering — Launch checklist</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+</style>
+</head>
+<body>
+<div class="sheet">
+<div class="role"><span class="name">Owner / Manager</span><span class="tag">Guest ordering</span></div>
+<h1>Guest ordering — Launch checklist</h1>
+<p>Tick each box. Do not print any QR code until "Technical" is all ticked.</p>
+<p>Text in bold is copied exactly from the screen.</p>
+<h2>Technical (before printing anything)</h2>
+<ul>
+<li class="task"><span class="box">☐</span> <code>APP_URL</code> in the production <code>.env</code> is the real <code>https://</code> address.<br><span class="sub">QR codes are built from it. A wrong value prints dead codes.</span></li>
+<li class="task"><span class="box">☐</span> PHP has GD with WebP support.<br><span class="sub">Check in the server terminal: <code>php -r "var_dump(gd_info()['WebP Support'] ?? false);"</code> must print <code>true</code>.</span></li>
+<li class="task"><span class="box">☐</span> Upload limit is at least 8 MB.<br><span class="sub">Check: <code>php -r "echo ini_get('upload_max_filesize'), ' ', ini_get('post_max_size');"</code>.</span></li>
+<li class="task"><span class="box">☐</span> Built screen files are present.<br><span class="sub"><code>public/build</code> is committed to git, and <code>deploy.sh</code> also builds it when Node is installed.</span></li>
+<li class="task"><span class="box">☐</span> The scheduler is running every minute.<br><span class="sub">In DirectAdmin → Cron Jobs, this line must exist:</span><br><span class="sub"><code>* * * * * cd /home/selumcom/domains/selum.com.ng/hms_core &amp;&amp; php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</code></span></li>
+<li class="task"><span class="box">☐</span> The guest jobs actually run. In the server terminal:<br><span class="sub">1. <code>php artisan schedule:list</code>. It must list <code>guest:expire-stale</code> (every 10 minutes) and <code>guest:bar-monitor</code> (every minute).</span><br><span class="sub">2. Wait two minutes. Run <code>php artisan schedule:list</code> again. "Next due" times must have moved on.</span><br><span class="sub">3. Run <code>php artisan guest:expire-stale</code> once by hand. It prints how many orders and tables it closed.</span></li>
+<li class="task"><span class="box">☐</span> The stock sizing queries were run on production. The owner read the results.<br><span class="sub">Phase 0B queries: <code>docs/audits/floorplan-add-item-verification.md</code>, section 5.</span><br><span class="sub">Phase 0F queries: <code>docs/audits/phase-0F-verification.md</code>, section 2.</span></li>
+<li class="task"><span class="box">☐</span> The storekeeper and kitchen were told: ingredient counts now move at Mark Ready, not at order time.</li>
+</ul>
+<h2>Content</h2>
+<ul>
+<li class="task"><span class="box">☐</span> Transfer accounts entered in <strong class="label">Guest Ordering Settings</strong> → <strong class="label">Transfer accounts</strong>.<br><span class="sub">Check each one: scan a table code, open <strong class="label">Bill</strong> → <strong class="label">Pay by transfer</strong>, tap <strong class="label">Copy</strong>, paste it in a note.</span></li>
+<li class="task"><span class="box">☐</span> <strong class="label">Reception WhatsApp number</strong> is correct. Default is 2348144734612.</li>
+<li class="task"><span class="box">☐</span> WhatsApp Business is installed on the venue phone at the reception desk.</li>
+<li class="task"><span class="box">☐</span> Porters have the Porter role. Their names appear under <strong class="label">Porters</strong> in the settings.</li>
+<li class="task"><span class="box">☐</span> The <strong class="label">Missing photo</strong> filter on Menu Items shows 0 (or a short list the owner accepts).</li>
+<li class="task"><span class="box">☐</span> Chips (for example "Cold", "Extra pepper") reviewed by the bar and kitchen.</li>
+<li class="task"><span class="box">☐</span> <strong class="label">Specials banner</strong> set, with <strong class="label">Show the banner</strong> on or off as wanted.</li>
+<li class="task"><span class="box">☐</span> QR cards printed from <strong class="label">QR Codes</strong>: <strong class="label">Print all table cards (A6, 4 per page)</strong> and <strong class="label">Print all room stickers (80 mm, 6 per page)</strong>.</li>
+<li class="task"><span class="box">☐</span> Every printed code scanned once before it goes out.</li>
+</ul>
+<h2>Soft launch plan</h2>
+<ul>
+<li class="">Week 1: 3–4 tables only. Owner or manager on the floor.</li>
+<li class="">Week 2: all tables.</li>
+<li class="">Week 3: rooms.</li>
+<li class="">Move to the next week only if there is no open ❌ from the dry run.</li>
+</ul>
+<h2>Daily (first two weeks)</h2>
+<p>Morning:</p>
+<ul>
+<li class="task"><span class="box">☐</span> Tap <strong class="label">Tap to enable order sounds</strong> on every kiosk, bar screen and Room Orders page.</li>
+<li class="task"><span class="box">☐</span> Kitchen taps <strong class="label">Reset all to available</strong> on the kitchen screen.</li>
+</ul>
+<p>Night:</p>
+<ul>
+<li class="task"><span class="box">☐</span> Late bar shifts: there is no screen yet. Ask the developer for the wait-log report (see <code>discrepancies.md</code>).</li>
+<li class="task"><span class="box">☐</span> <strong class="label">Delivery Refusals</strong>: nothing left on <strong class="label">Waiting for a manager</strong>.</li>
+<li class="task"><span class="box">☐</span> Unmatched claims: ask waiters and reception which claims were not paid.</li>
+</ul>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

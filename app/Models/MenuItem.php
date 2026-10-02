@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasMenuPhoto;
 use App\Services\InventoryService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,9 +12,19 @@ use Spatie\Activitylog\Support\LogOptions;
 class MenuItem extends Model
 {
     use HasFactory;
+    use HasMenuPhoto;
     use LogsActivity;
 
-    protected $fillable = ['name', 'sku', 'category_id', 'type', 'sale_price', 'available_for_sale'];
+    protected $fillable = ['name', 'sku', 'category_id', 'type', 'sale_price', 'available_for_sale', 'photo_path', 'description'];
+
+    protected $casts = [
+        'available_for_sale' => 'boolean',
+    ];
+
+    public function availabilityLogs()
+    {
+        return $this->hasMany(MenuItemAvailabilityLog::class);
+    }
 
     public function getActivitylogOptions(): LogOptions
     {
@@ -80,7 +91,7 @@ class MenuItem extends Model
      *     is not yet trusted to gate sales. Reporting a real (usually
      *     zero) figure then would grey out food tiles that the POS would
      *     nonetheless happily sell, because the actual gate in
-     *     FloorPlanController honours that same toggle. Tying the display
+     *     InventoryService honours that same toggle. Tying the display
      *     to it keeps the two in step, and makes that one switch turn
      *     kitchen stock control on end to end.
      *

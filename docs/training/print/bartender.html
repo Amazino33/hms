@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bartender — Guest QR orders</title>
+<style>
+@page { size: A4; margin: 14mm; @bottom-center { content: "Selum · Guest ordering · v1 · 2026-10-02"; font: 9pt Arial, Helvetica, sans-serif; color: #444; } }
+@media print { footer { display: none; } .sheet { padding: 0 !important; } }
+@page landscape { size: A4 landscape; margin: 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.22; color: #111; background: #fff; }
+.sheet { max-width: 182mm; margin: 0 auto; padding: 0 0 9mm; }
+.role { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5pt solid #111; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+.role .name { font-size: 20pt; font-weight: 700; }
+.role .tag { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+h1 { font-size: 14pt; margin: 0 0 1mm; }
+@media print { .roles h1 { display: none; } }
+h2 { font-size: 13pt; margin: 2.5mm 0 1mm; padding: .8mm 2mm; background: #eee; border-left: 4pt solid #111; break-after: avoid; }
+h3 { font-size: 13pt; margin: 2mm 0 1mm; }
+h4 { font-size: 12pt; margin: 2mm 0 .5mm; text-decoration: underline; break-after: avoid; }
+p { margin: .8mm 0; }
+ol, ul { margin: .5mm 0 1mm; padding-left: 6mm; }
+li { margin: .2mm 0; }
+.cols { column-count: 2; column-gap: 7mm; column-rule: .5pt solid #bbb; }
+.cols h4:first-child { margin-top: 0; }
+li.task { list-style: none; margin-left: -5mm; }
+.box { font-size: 14pt; }
+.sub { display: inline-block; margin-left: 6mm; font-size: 12pt; color: #333; }
+strong.label { font-weight: 700; background: #fff3b0; padding: 0 1mm; border-radius: 1mm; }
+code { font-family: "Courier New", monospace; font-size: 11pt; background: #f2f2f2; padding: 0 1mm; word-break: break-all; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; page-break-inside: auto; }
+th, td { border: 1pt solid #555; padding: .8mm 1.5mm; text-align: left; vertical-align: top; font-size: 12pt; }
+th { background: #ddd; }
+tr { page-break-inside: avoid; }
+.photo { border: 1.5pt dashed #777; color: #555; padding: 1mm; margin: 1mm 0; text-align: center; font-style: italic; }
+h2:has(+ ul li:first-child) { }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10pt; color: #444; border-top: 1pt solid #999; padding-top: 1.5mm; background: #fff; }
+@media screen { body { background: #ccc; } .sheet { background: #fff; padding: 14mm; margin: 6mm auto; box-shadow: 0 0 4mm rgba(0,0,0,.3); max-width: 210mm; } footer { position: static; max-width: 210mm; margin: 0 auto 6mm; } }
+/* Never-do-this box: the list right after its heading */
+.never + ul { border: 2pt solid #b00; padding: 2mm 2mm 2mm 9mm; background: #fff4f4; }
+</style>
+</head>
+<body>
+<div class="sheet roles">
+<div class="role"><span class="name">Bartender</span><span class="tag">Guest ordering</span></div>
+<h1>Bartender — Guest QR orders</h1>
+<p>Text in bold is copied exactly from the screen.</p>
+<h2>1. Your job in guest ordering</h2>
+<p>You get guest drinks ready from the bar screen.</p>
+<h2>2. Start of shift</h2>
+<ol start="1">
+<li>Start your shift BEFORE guests arrive.</li>
+<li>Use <strong class="label">Go to My Handover Count</strong> to start it.</li>
+<li>Open the bar screen. Find <strong class="label">Pending Orders</strong>.</li>
+<li>Tap <strong class="label">Tap to enable order sounds</strong>.</li>
+<li>Check that <strong class="label">Sound off</strong> has gone away.</li>
+</ol>
+<h2>3. When this happens → do this</h2><div class="cols">
+<h4>A guest card appears (red GUEST strip)</h4>
+<ol start="1">
+<li>Pour the drinks on the card.</li>
+<li>Read the extras in red. Example: "Cold".</li>
+<li>Tap <strong class="label">MARK READY</strong>. It goes on the guest's bill.</li>
+</ol>
+<h4>A drink is short or finished</h4>
+<ol start="1">
+<li>Tap <strong class="label">−</strong> to give fewer. Or <strong class="label">✕</strong> to remove it.</li>
+<li>Pick a reason: <strong class="label">Out of stock</strong>, <strong class="label">Wrong item</strong> or <strong class="label">Other</strong>.</li>
+<li>For <strong class="label">Other</strong>, type what happened.</li>
+<li>Tap <strong class="label">Confirm</strong>.</li>
+</ol>
+<ul>
+<li class="">The guest sees your reason on their phone.</li>
+</ul>
+<h4>A red banner says guests are waiting</h4>
+<ul>
+<li class="">It says "… start your shift to mark them ready."</li>
+<li class="">Start your shift now. Guests can see you are late.</li>
+</ul>
+<h4>Asked: Who is marking this ready?</h4>
+<ul>
+<li class="">Two shifts are open. Tap your own name.</li>
+<li class="">Then end the old shift. The amber banner will go.</li>
+</ul>
+<h4>A card shows GUEST · Room</h4>
+<ul>
+<li class="">A hotel room order. Tap <strong class="label">MARK READY</strong> as normal.</li>
+<li class="">Stock and the room charge happen at that moment.</li>
+<li class="">Reception sends it up to the room.</li>
+</ul>
+<h4>Returned from rooms</h4>
+<ol start="1">
+<li>Wait until you can count the bottles.</li>
+<li>Tap <strong class="label">Returned ✓</strong>.</li>
+</ol>
+<ul>
+<li class="">A manager then decides the refusal.</li>
+</ul>
+<h4>Your shift ends</h4>
+<ul>
+<li class="">Waiting drinks stay for the next bartender.</li>
+</ul>
+</div><h2 class="never">4. Never do this</h2>
+<ul>
+<li class="">Never tap <strong class="label">MARK READY</strong> before the drinks are poured.</li>
+<li class="">Never tap <strong class="label">Returned ✓</strong> before the bottles are back.</li>
+<li class="">Never remove a drink without a true reason.</li>
+<li class="">Never give guests your personal phone number.</li>
+</ul>
+<h2>5. If something goes wrong</h2>
+<table><thead><tr><th>Problem</th><th>What to do / who to call</th></tr></thead><tbody>
+<tr><td><strong class="label">MARK READY</strong> greyed out</td><td>Start your bartender shift.</td></tr>
+<tr><td>Two names appear</td><td>Pick yours. Ask the manager to end the old shift.</td></tr>
+<tr><td>No sound</td><td>Tap <strong class="label">Tap to enable order sounds</strong>.</td></tr>
+<tr><td>Refused bottles never came back</td><td>Do not tap <strong class="label">Returned ✓</strong>. Call the manager.</td></tr>
+</tbody></table>
+</div>
+<footer>Selum · Guest ordering · v1 · 2026-10-02</footer>
+</body>
+</html>

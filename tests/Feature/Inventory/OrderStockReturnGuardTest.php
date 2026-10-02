@@ -298,7 +298,10 @@ it('still restocks a confirmed return ticket, which by design never deducted any
     expect(barStock($product->id, $this->bar->id))->toBe(22.0);
 });
 
-it('restocks a return ticket carrying a menu item back into ingredients', function () {
+// Phase 0F changed this rule: cooked food is never restocked. A confirmed
+// kitchen return moves no stock (ReturnConfirmationService records the
+// cooked portion as kitchen waste instead) — see StockIntegrityPhase0FTest.
+it('never restocks ingredients for a confirmed kitchen return ticket', function () {
     [$rice, $dish] = riceDish($this->kitchen->id, $this->food->id);
 
     $returnTicket = Order::create([
@@ -312,7 +315,8 @@ it('restocks a return ticket carrying a menu item back into ingredients', functi
 
     $returnTicket->fresh()->update(['status' => 'returned']);
 
-    expect(kitchenStock($rice->id, $this->kitchen->id))->toBe(12.0);
+    expect(kitchenStock($rice->id, $this->kitchen->id))->toBe(10.0);
+    expect(\App\Models\IngredientTransaction::where('type', 'return')->exists())->toBeFalse();
 });
 
 /**

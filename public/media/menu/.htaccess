@@ -1,0 +1,16 @@
+# Menu photos (Phase 1A). Every upload gets a brand-new file name, so a
+# photo at a given URL never changes — browsers can keep it for a year.
+<IfModule mod_headers.c>
+    <FilesMatch "\.webp$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/webp "access plus 1 year"
+</IfModule>
+
+# Images only — nothing in here should ever execute.
+<FilesMatch "\.(php|phtml|phar)$">
+    Require all denied
+</FilesMatch>

@@ -181,6 +181,57 @@ class FolioService
         });
     }
 
+    /**
+     * Takes a room order's charge back off the folio when the order is
+     * cancelled (RoomOrderService::cancel() is the only caller). Same
+     * append-only shape as voidLine(): an equal-and-opposite line of the
+     * SAME type, linked by reversal_of_line_id, the original untouched.
+     * Kept separate from voidLine() because an order charge is never a
+     * receptionist's free-standing "edit" — it only comes off together
+     * with the order it bills for.
+     *
+     * Once only, enforced here under the row lock, not just in the UI.
+     */
+    public function reverseOrderCharge(FolioLine $line, string $reason, int $userId): FolioLine
+    {
+        return DB::transaction(function () use ($line, $reason, $userId) {
+            $line = FolioLine::where('id', $line->id)->lockForUpdate()->firstOrFail();
+
+            $this->assertNotSealed($line->folio);
+
+            if ($line->type !== 'order' || $line->isReversal()) {
+                throw new \Exception('Only a room-order charge can be reversed this way.');
+            }
+
+            if (trim($reason) === '') {
+                throw new \Exception('A reason is required to cancel a room order.');
+            }
+
+            if ($line->reversal()->exists()) {
+                throw new \Exception('This room-order charge has already been reversed.');
+            }
+
+            $reversal = FolioLine::create([
+                'folio_id' => $line->folio_id,
+                'order_id' => $line->order_id,
+                'type' => 'order',
+                'amount' => -1 * (float) $line->amount,
+                'description' => 'Cancelled: '.$line->description.' — '.$reason,
+                'created_by' => $userId,
+                'verified' => true,
+                'reversal_of_line_id' => $line->id,
+            ]);
+
+            activity('folio_line')
+                ->performedOn($line)
+                ->causedBy(User::find($userId))
+                ->withProperties(['reason' => $reason, 'reversal_line_id' => $reversal->id])
+                ->log('Room order charge reversed');
+
+            return $reversal;
+        });
+    }
+
     public function verifyTransfer(FolioLine $line, int $managerId): FolioLine
     {
         return DB::transaction(function () use ($line, $managerId) {
