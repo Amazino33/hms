@@ -147,13 +147,13 @@ it('saves and clears the logo mark from Guest Ordering Settings', function () {
     expect(BrandingLogo::hasMark())->toBeFalse();
 });
 
-it('labels the last nav button Waiter at a table and Reception in a room', function () {
+it('has four nav items, the last Waiter at a table and Reception in a room (D34)', function () {
     ['table' => $table, 'room' => $room] = uiPlaces();
 
     $nav = fn (string $html) => str($html)->between('<nav class="nav" aria-label="Main">', '</nav>')->toString();
 
     $tableNav = $nav($this->get('/m/'.$table->qr_token)->getContent());
-    expect($tableNav)->toContain('Drinks')->toContain('Food')->toContain('Search')->toContain('Bill')->toContain('Waiter');
+    expect($tableNav)->toContain('Drinks')->toContain('Food')->toContain('Bill')->toContain('Waiter');
     expect(str_contains($tableNav, 'Reception'))->toBeFalse();
 
     $roomNav = $nav($this->get('/m/'.$room->qr_token)->getContent());
@@ -162,7 +162,8 @@ it('labels the last nav button Waiter at a table and Reception in a room', funct
 
     // Browse-only (menu link): no Bill, no Waiter.
     $menuNav = $nav($this->get('/menu')->getContent());
-    expect($menuNav)->toContain('Search');
+    expect($menuNav)->toContain('Drinks')->toContain('Food');
+    expect(str_contains($tableNav, 'Search'))->toBeFalse(); // D34: search lives in the top bar
     expect(str_contains($menuNav, 'Bill'))->toBeFalse();
 });
 

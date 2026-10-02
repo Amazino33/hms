@@ -88,7 +88,6 @@
         "unavailable": "[]"
     },
     "table.bill": {
-        "accepted_by_first_name": "string",
         "bill": {
             "call": "null",
             "claims": "[]",
@@ -126,23 +125,6 @@
                 ]
             }
         },
-        "last_round": {
-            "lines": [
-                {
-                    "chips": [
-                        "string"
-                    ],
-                    "name": "string",
-                    "price": "int",
-                    "qty": "int"
-                }
-            ],
-            "ready_at": "string",
-            "ref": "string",
-            "superseded": "bool",
-            "total": "int"
-        },
-        "latest_status": "string",
         "message": "null",
         "ok": "bool",
         "table": {
@@ -200,7 +182,6 @@
         "ok": "bool"
     },
     "table.bill.after_claim_and_call": {
-        "accepted_by_first_name": "string",
         "bill": {
             "call": {
                 "reason": "string",
@@ -251,23 +232,6 @@
                 ]
             }
         },
-        "last_round": {
-            "lines": [
-                {
-                    "chips": [
-                        "string"
-                    ],
-                    "name": "string",
-                    "price": "int",
-                    "qty": "int"
-                }
-            ],
-            "ready_at": "string",
-            "ref": "string",
-            "superseded": "bool",
-            "total": "int"
-        },
-        "latest_status": "string",
         "message": "null",
         "ok": "bool",
         "table": {
@@ -303,10 +267,7 @@
         "whatsapp_url": "string"
     },
     "room.bill.untrusted": {
-        "accepted_by_first_name": "null",
         "bill": "null",
-        "last_round": "null",
-        "latest_status": "string",
         "message": "string",
         "ok": "bool",
         "table": {
@@ -315,7 +276,6 @@
         }
     },
     "room.bill.trusted": {
-        "accepted_by_first_name": "null",
         "bill": {
             "call": "null",
             "claims": "[]",
@@ -363,8 +323,6 @@
                 ]
             }
         },
-        "last_round": "null",
-        "latest_status": "string",
         "message": "null",
         "ok": "bool",
         "table": {

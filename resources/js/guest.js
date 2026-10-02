@@ -12,12 +12,24 @@
  * Phase 7A (D31): every panel is a bottom sheet. Opening one pushes a
  * history entry so the phone's back button closes it; dragging the grabber
  * down more than 80 px closes it too.
+ *
+ * Phase 7C (D34–D38): sticky top bar with search, first-visit hints, the
+ * "Order sent" moment and status strip, inline row steppers, and the
+ * owner-set selling features. Every cart line remembers how it was added
+ * (`via`, sent as added_via) — a label for the owner's reports, nothing more.
  */
 import Alpine from 'alpinejs';
 
 const naira = (n) => '₦' + Math.round(n || 0).toLocaleString('en-NG');
 const fold = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const json = { 'Content-Type': 'application/json', Accept: 'application/json' };
+const store = {
+    get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* private mode */ } },
+};
+const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const BADGES = { chefs_special: 'Chef\'s special', bestseller: 'Bestseller', new: 'New', spicy: 'Spicy' };
+const FINAL = ['ready', 'delivered'];
 
 Alpine.data('guestMenu', () => ({
     boot: JSON.parse(document.getElementById('guest-boot').textContent),
@@ -61,6 +73,22 @@ Alpine.data('guestMenu', () => ({
     whatsappUrl: null,
     whatsappSlow: false,
 
+    // Phase 7C
+    currentVia: 'menu',
+    hints: false,
+    hintTip: false,
+    placeholderIdx: 0,
+    pairFor: null,
+    sentMoment: false,
+    latestStatus: null,
+    acceptedBy: null,
+    finalSince: null,
+    lastRound: null,
+    nudgeSeen: null,
+    againDismissed: false,
+    closedDismissed: false,
+    now: Date.now(),
+
     init() {
         this.unavailable = new Set(this.boot.unavailable);
         this.tab = this.boot.menu.tabs.drinks.length ? 'drinks' : 'food';
@@ -93,6 +121,48 @@ Alpine.data('guestMenu', () => ({
         });
 
         this.watchKeyboard();
+        this.watchTopbar();
+        this.startHints();
+        this.againDismissed = store.get(this.againKey()) === (this.boot.last_visit?.summary || '');
+        // One clock for the countdown, the status strip timeout and the nudge.
+        setInterval(() => { this.now = Date.now(); }, 30000);
+    },
+
+    // Sticky section titles sit just under the sticky top bar (D34).
+    watchTopbar() {
+        const bar = document.querySelector('.topbar');
+        if (!bar) return;
+        const set = () => document.documentElement.style.setProperty('--top', bar.offsetHeight + 'px');
+        set();
+        if ('ResizeObserver' in window) new ResizeObserver(set).observe(bar);
+    },
+
+    // ---- First-visit hints (D35) -------------------------------------------
+    // Once per device: the place pill glows with a tooltip (6 s), and the
+    // search placeholder cycles real item names. The first touch ends both.
+    startHints() {
+        if (store.get('selum_hints_seen') || !this.boot.place) return;
+        this.hints = true;
+        this.hintTip = true;
+        store.set('selum_hints_seen', '1');
+        const stop = () => {
+            this.hints = false;
+            this.hintTip = false;
+            clearInterval(this._hintCycle);
+            document.removeEventListener('pointerdown', stop, true);
+        };
+        document.addEventListener('pointerdown', stop, true);
+        setTimeout(() => { this.hintTip = false; }, 6000);
+        if ((this.boot.hint_items || []).length > 1 && !reducedMotion()) {
+            this._hintCycle = setInterval(() => {
+                this.placeholderIdx = (this.placeholderIdx + 1) % this.boot.hint_items.length;
+            }, 2600);
+        }
+    },
+
+    get placeholder() {
+        const names = this.boot.hint_items || [];
+        return this.hints && names.length ? `Search "${names[this.placeholderIdx % names.length]}"…` : 'Search the menu';
     },
 
     // ---- Keyboard (iOS + older Android) ------------------------------------
@@ -233,6 +303,14 @@ Alpine.data('guestMenu', () => ({
         return this.boot.popular.map((key) => items[key]).filter((item) => item && !this.unavailable.has(item.key));
     },
 
+    // "We recommend" (D38): owner picks, or tonight's real sellers.
+    get recommended() {
+        const items = this.allItems();
+        return (this.boot.recommended || []).map((key) => items[key]).filter((item) => item && !this.unavailable.has(item.key));
+    },
+
+    badgeLabel(badge) { return BADGES[badge] || ''; },
+
     allItems() {
         if (!this._items) {
             this._items = {};
@@ -249,7 +327,7 @@ Alpine.data('guestMenu', () => ({
 
     scrollTo(slug) {
         this.activeSection = slug;
-        document.getElementById(slug)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.querySelector(`#menu-list section[data-slug="${slug}"]`)?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
     },
 
     // Scrolling the list moves the active category pill.
@@ -291,29 +369,110 @@ Alpine.data('guestMenu', () => ({
     },
 
     // ---- Item sheet ---------------------------------------------------
-    open(item) {
+    open(item, via = 'menu') {
         this.current = item;
+        this.currentVia = via;
         this.picked = {};
         this.note = '';
         this.qty = 1;
         this.openSheet('item');
     },
 
-    // The round "+" on a row: straight into the cart, unless the item has
-    // options to choose (e.g. Cold / Not cold) — then the sheet opens.
-    quickAdd(item, button) {
+    // ---- Rows (D37) ------------------------------------------------------
+    qtyOf(key) { return this.cart.reduce((n, l) => (l.key === key ? n + l.qty : n), 0); },
+
+    // "+" on a row: straight into the cart, unless the item has options to
+    // choose (e.g. Cold / Not cold) — then the sheet opens.
+    rowAdd(item, via = 'menu', button = null) {
         try { navigator.vibrate && navigator.vibrate(10); } catch (e) { /* not supported */ }
         button?.classList.add('pop');
         setTimeout(() => button?.classList.remove('pop'), 120);
 
         if (item.chips && item.chips.length) {
-            this.open(item);
+            this.open(item, via);
             return;
         }
 
-        this.addLine({ key: item.key, type: item.type, id: item.id, name: item.name, price: item.price, qty: 1, chips: [], note: '' });
+        this.addLine({ key: item.key, type: item.type, id: item.id, name: item.name, price: item.price, qty: 1, chips: [], note: '', via });
         this.writeCart();
-        this.flash('Added');
+        this.showPairs(item);
+    },
+
+    // "−" takes back the most recent add: one off a plain item, the whole
+    // latest line for an item with options.
+    rowMinus(item) {
+        const line = [...this.cart].reverse().find((l) => l.key === item.key);
+        if (!line) return;
+        if (line.qty > 1 && !(item.chips && item.chips.length)) {
+            line.qty--;
+        } else {
+            this.cart = this.cart.filter((l) => l.uid !== line.uid);
+        }
+        this.writeCart();
+    },
+
+    // ---- Goes well with (D38) --------------------------------------------
+    pairItems(item) {
+        const items = this.allItems();
+        return (item.pairs || []).map((key) => items[key]).filter((p) => p && !this.unavailable.has(p.key)).slice(0, 3);
+    },
+
+    // Under the row just added to; gone after 12 s or the next add.
+    showPairs(item) {
+        clearTimeout(this._pairTimer);
+        this.pairFor = this.pairItems(item).length ? item.key : null;
+        if (this.pairFor) this._pairTimer = setTimeout(() => { this.pairFor = null; }, 12000);
+    },
+
+    pairAdd(item) {
+        this.pairFor = null;
+        if (item.chips && item.chips.length) {
+            this.open(item, 'pairing');
+            return;
+        }
+        this.addLine({ key: item.key, type: item.type, id: item.id, name: item.name, price: item.price, qty: 1, chips: [], note: '', via: 'pairing' });
+        this.writeCart();
+        this.flash(`${item.name} added`);
+    },
+
+    // ---- Quick add-ons in the cart (D38) -----------------------------------
+    get addonItems() {
+        const items = this.allItems();
+        const inCart = new Set(this.cart.map((l) => l.key));
+        return (this.boot.quick_addons || []).map((key) => items[key])
+            .filter((item) => item && !this.unavailable.has(item.key) && !inCart.has(item.key))
+            .slice(0, 3);
+    },
+
+    addonAdd(item) {
+        if (item.chips && item.chips.length) {
+            this.open(item, 'addon');
+            return;
+        }
+        this.addLine({ key: item.key, type: item.type, id: item.id, name: item.name, price: item.price, qty: 1, chips: [], note: '', via: 'addon' });
+        this.writeCart();
+    },
+
+    // ---- Order again (D38) — today's prices, from the server -----------------
+    againKey() { return 'selum_again_' + (this.boot.token || 'menu'); },
+    get againVisible() { return !!this.boot.last_visit && !this.againDismissed && !this.cart.length; },
+
+    dismissAgain() {
+        this.againDismissed = true;
+        store.set(this.againKey(), this.boot.last_visit?.summary || '');
+    },
+
+    orderAgain() {
+        const lines = (this.boot.last_visit?.lines || []).filter((l) => !this.unavailable.has(l.key));
+        if (!lines.length) {
+            this.flash('Those items aren\'t available right now.', true);
+            this.dismissAgain();
+            return;
+        }
+        lines.forEach((l) => this.addLine({ ...l, via: 'again' }));
+        this.writeCart();
+        this.dismissAgain();
+        this.openSheet('cart');
     },
 
     isPicked(group, label) { return (this.picked[group.group] || []).includes(label); },
@@ -329,10 +488,11 @@ Alpine.data('guestMenu', () => ({
 
     addToCart() {
         const item = this.current;
-        this.addLine({ key: item.key, type: item.type, id: item.id, name: item.name, price: item.price, qty: this.qty, chips: Object.values(this.picked).flat(), note: this.note.trim().slice(0, 100) });
+        this.addLine({ key: item.key, type: item.type, id: item.id, name: item.name, price: item.price, qty: this.qty, chips: Object.values(this.picked).flat(), note: this.note.trim().slice(0, 100), via: this.currentVia });
         this.writeCart();
         this.closeSheet();
         this.flash(`${item.name} added`);
+        this.showPairs(item);
     },
 
     addLine(line) {
@@ -340,7 +500,7 @@ Alpine.data('guestMenu', () => ({
         if (same) {
             same.qty = Math.min(20, same.qty + line.qty);
         } else {
-            this.cart.push({ ...line, uid: Date.now() + Math.random() });
+            this.cart.push({ ...line, via: line.via || 'menu', uid: Date.now() + Math.random() });
         }
     },
 
@@ -373,7 +533,7 @@ Alpine.data('guestMenu', () => ({
             const res = await fetch(`/m/${this.boot.token}/requests`, {
                 method: 'POST',
                 headers: json,
-                body: JSON.stringify({ channel, lines: this.cart.map((l) => ({ type: l.type, id: l.id, qty: l.qty, chips: l.chips, note: l.note || null })) }),
+                body: JSON.stringify({ channel, lines: this.cart.map((l) => ({ type: l.type, id: l.id, qty: l.qty, chips: l.chips, note: l.note || null, added_via: l.via || 'menu' })) }),
             });
             const data = await res.json().catch(() => ({}));
 
@@ -381,9 +541,18 @@ Alpine.data('guestMenu', () => ({
                 this.cart = [];
                 this.writeCart();
                 this.sentRequest = data.request;
-                this.openSheet('sent');
                 this.whatsappUrl = data.whatsapp_url || null;
                 this.whatsappSlow = false;
+                this.latestStatus = 'waiting';
+                this.acceptedBy = null;
+                this.finalSince = null;
+                if (!this.whatsappUrl) {
+                    // D36: the tick moment, then the dot flies to Bill.
+                    this.closeSheet();
+                    this.orderSentMoment();
+                } else {
+                    this.openSheet('sent');
+                }
                 if (this.whatsappUrl) {
                     // The confirmation stays behind; if WhatsApp hasn't taken
                     // over within 2 s, offer the link by hand.
@@ -407,6 +576,119 @@ Alpine.data('guestMenu', () => ({
         } finally {
             this.sending = false;
         }
+    },
+
+    // ---- Order sent moment (D36) ----------------------------------------------
+    // Ring 400 ms, tick 250 ms, hold 1.2 s; then a dot flies to the Bill icon.
+    orderSentMoment() {
+        this.sentMoment = true;
+        const still = reducedMotion();
+        setTimeout(() => {
+            this.sentMoment = false;
+            if (!still) this.flyToBill();
+        }, still ? 1500 : 1850);
+    },
+
+    flyToBill() {
+        const dot = this.$refs.flyDot;
+        const bill = this.$refs.billNav;
+        if (!dot || !bill) return;
+        const to = bill.getBoundingClientRect();
+        const dx = to.left + to.width / 2 - window.innerWidth / 2;
+        const dy = to.top + 8 - window.innerHeight / 2;
+        dot.style.setProperty('--dx', dx + 'px');
+        dot.style.setProperty('--dy', dy + 'px');
+        dot.classList.remove('go');
+        void dot.offsetWidth; // restart the animation
+        dot.classList.add('go');
+        setTimeout(() => {
+            dot.classList.remove('go');
+            bill.classList.add('bounce');
+            setTimeout(() => bill.classList.remove('bounce'), 400);
+        }, 520);
+    },
+
+    // ---- Status strip + Bill dot (D36) -----------------------------------------
+    applyVisit(data) {
+        if (!('latest_status' in data)) return;
+        const status = data.latest_status;
+        if (FINAL.includes(status)) {
+            if (!FINAL.includes(this.latestStatus) || !this.finalSince) this.finalSince = Date.now();
+        } else {
+            this.finalSince = null;
+        }
+        this.latestStatus = status;
+        this.acceptedBy = data.accepted_by_first_name || null;
+        this.lastRound = data.last_round || null;
+    },
+
+    get statusText() {
+        if (!this.canOrder) return '';
+        switch (this.latestStatus) {
+            case 'waiting': return this.isRoom ? 'Order sent · waiting for reception' : 'Order sent · waiting for a waiter';
+            case 'accepted': return this.acceptedBy ? `${this.acceptedBy} accepted your order ✓` : 'Your order was accepted ✓';
+            case 'preparing': return 'Preparing your food';
+            case 'ready':
+            case 'delivered':
+                // Gone 2 minutes after the order is done.
+                if (this.finalSince && this.now - this.finalSince > 120000) return '';
+                return this.latestStatus === 'delivered' ? 'Your order was delivered ✓' : 'Your order is ready ✓';
+            default: return '';
+        }
+    },
+
+    get statusTone() {
+        if (this.latestStatus === 'waiting') return 'wait';
+        return FINAL.includes(this.latestStatus) ? 'done' : 'go';
+    },
+
+    get billDot() {
+        if (this.latestStatus === 'waiting') return 'wait';
+        return ['accepted', 'preparing'].includes(this.latestStatus) ? 'go' : '';
+    },
+
+    // ---- Another round? (D38) ---------------------------------------------------
+    // Once per round, N minutes after the drinks were marked ready, never
+    // while a sheet is open, and not once newer drinks were ordered.
+    get nudge() {
+        const round = this.lastRound;
+        const delay = this.boot.round_delay_min || 0;
+        if (!this.canOrder || !round || !round.ready_at || round.superseded || delay <= 0 || this.sentMoment) return null;
+        if (this.tableState.state === 'closed') return null;
+        if ((this.nudgeSeen || store.get('selum_round_seen')) === round.ref) return null;
+        if (this.now - Date.parse(round.ready_at) < delay * 60000) return null;
+        const summary = round.lines.map((l) => `${l.qty} × ${l.name}`).join(', ');
+        return { ...round, summary: `${summary} · ${naira(round.total)}` };
+    },
+
+    dismissNudge() {
+        const ref = this.lastRound?.ref;
+        if (!ref) return;
+        this.nudgeSeen = ref;
+        store.set('selum_round_seen', ref);
+    },
+
+    acceptNudge() {
+        this.dismissNudge();
+        this.anotherRound('round');
+    },
+
+    // ---- Specials countdown (D38) — only a real end time -----------------------
+    get specialsMinutesLeft() {
+        const ends = this.boot.specials?.ends_at;
+        if (!ends) return null;
+        return Math.ceil((Date.parse(ends) - this.now) / 60000);
+    },
+
+    get specialsOver() { const left = this.specialsMinutesLeft; return left !== null && left <= 0; },
+
+    get specialsLeft() {
+        const left = this.specialsMinutesLeft;
+        if (left === null || left <= 0 || left > 180) return '';
+        if (left < 60) return `Ends in ${left} min`;
+        const h = Math.floor(left / 60);
+        const m = left % 60;
+        return m ? `Ends in ${h} h ${m} min` : `Ends in ${h} h`;
     },
 
     // ---- This phone's requests -----------------------------------------
@@ -459,6 +741,7 @@ Alpine.data('guestMenu', () => ({
         // Closed: forget this table's cart and cached state once per closed
         // sitting; the next order starts a new one.
         if (state.state === 'closed' && state.closed_ref) {
+            this.closedDismissed = store.get('selum_closed_seen_' + this.boot.token) === state.closed_ref;
             let seen = null;
             try { seen = localStorage.getItem('gq_closed_' + this.boot.token); } catch (e) { /* private mode */ }
             if (seen !== state.closed_ref) {
@@ -483,6 +766,7 @@ Alpine.data('guestMenu', () => ({
                 this.applyTableState(data.table || { state: 'none' });
                 this.bill = data.bill;
                 this.billMessage = data.message && data.message !== 'No open bill' ? data.message : null;
+                this.applyVisit(data);
             }
         } catch (e) { /* offline: keep what we have */ }
         this.scheduleBill();
@@ -496,6 +780,11 @@ Alpine.data('guestMenu', () => ({
     // appears once reception approves this phone's first order (D25).
     scheduleBill() {
         clearTimeout(this.billTimer);
+        // D36: while an order is on its way, follow it every 10 s.
+        if (['waiting', 'accepted', 'preparing'].includes(this.latestStatus) && this.tableState.state !== 'closed') {
+            this.billTimer = setTimeout(() => this.refreshBill(), 10000);
+            return;
+        }
         if (this.tableState.state === 'room') {
             const fast = this.bill?.live && this.billOpen;
             this.billTimer = setTimeout(() => this.refreshBill(), fast ? 8000 : 30000);
@@ -506,7 +795,7 @@ Alpine.data('guestMenu', () => ({
         this.billTimer = setTimeout(() => this.refreshBill(), fast ? 8000 : 30000);
     },
 
-    async anotherRound() {
+    async anotherRound(via = 'round') {
         if (this.loadingRound) return;
         this.loadingRound = true;
         try {
@@ -520,7 +809,7 @@ Alpine.data('guestMenu', () => ({
                 this.flash(data.skipped.length ? 'Your last round is sold out right now.' : 'No drinks to repeat yet.', true);
                 return;
             }
-            data.lines.forEach((l) => this.addLine(l));
+            data.lines.forEach((l) => this.addLine({ ...l, via }));
             this.writeCart();
             this.openSheet('cart');
             if (data.skipped.length) this.flash('Not available now: ' + data.skipped.join(', '), true);
@@ -643,6 +932,11 @@ Alpine.data('guestMenu', () => ({
         } finally {
             this.calling = false;
         }
+    },
+
+    seeMenuAfterClose() {
+        this.closedDismissed = true;
+        store.set('selum_closed_seen_' + this.boot.token, this.tableState.closed_ref || '');
     },
 
     flash(message, error = false) {

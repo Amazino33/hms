@@ -16,6 +16,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -76,6 +77,10 @@ class GuestOrdering extends Page implements HasForms
             'specials_starts_at' => $specials['starts_at']?->toDateTimeString(),
             'specials_ends_at' => $specials['ends_at']?->toDateTimeString(),
             'logo_mark' => BrandingLogo::hasMark() ? BrandingLogo::MARK : null,
+            'quick_addons' => GuestOrderingSettings::quickAddons(),
+            'round_delay_min' => GuestOrderingSettings::roundDelayMinutes(),
+            'review_url' => GuestOrderingSettings::reviewUrl(),
+            'specials_whatsapp_message' => GuestOrderingSettings::specialsWhatsappMessage(),
         ]);
     }
 
@@ -149,6 +154,39 @@ class GuestOrdering extends Page implements HasForms
                         })
                         ->deleteUploadedFileUsing(fn () => null),
                 ]),
+            // Phase 7C (D38): selling features — owner-set, honest only.
+            Section::make('Selling')
+                ->description('Suggestions shown to guests. Everything here is optional.')
+                ->schema([
+                    Select::make('quick_addons')
+                        ->label('Quick add-ons')
+                        ->helperText('Up to '.GuestOrderingSettings::QUICK_ADDONS_MAX.', in order. Offered in the cart as "Anything else?" — items already in the cart or sold out are skipped.')
+                        ->multiple()
+                        ->searchable()
+                        ->reorderable()
+                        ->maxItems(GuestOrderingSettings::QUICK_ADDONS_MAX)
+                        ->options(fn () => \App\Support\GuestMenuOptions::itemOptions())
+                        ->columnSpanFull(),
+                    TextInput::make('round_delay_min')
+                        ->label('"Another round?" delay (minutes)')
+                        ->helperText('How long after drinks are ready to ask once. 0 turns it off.')
+                        ->numeric()
+                        ->integer()
+                        ->minValue(0)
+                        ->maxValue(GuestOrderingSettings::ROUND_DELAY_MAX)
+                        ->required(),
+                    TextInput::make('review_url')
+                        ->label('Google review link')
+                        ->helperText('Optional. Shown on the "Thanks for visiting" page. Must start with https://')
+                        ->url()
+                        ->startsWith(['https://'])
+                        ->maxLength(500),
+                    TextInput::make('specials_whatsapp_message')
+                        ->label('WhatsApp specials message')
+                        ->helperText('Pre-typed for guests who tap "Get our specials on WhatsApp". Sending it is their opt-in.')
+                        ->maxLength(200)
+                        ->columnSpanFull(),
+                ])->columns(2),
             Section::make('Specials banner')
                 ->description('An optional strip across the top of the guest menu.')
                 ->schema([
@@ -210,6 +248,11 @@ class GuestOrdering extends Page implements HasForms
                 }
 
                 GuestOrderingSettings::setReceptionWhatsapp($data['reception_whatsapp'] ?? null, auth()->user());
+
+                GuestOrderingSettings::setQuickAddons(array_values((array) ($data['quick_addons'] ?? [])), auth()->user());
+                GuestOrderingSettings::setRoundDelayMinutes($data['round_delay_min'] ?? GuestOrderingSettings::ROUND_DELAY_DEFAULT, auth()->user());
+                GuestOrderingSettings::setReviewUrl($data['review_url'] ?? null, auth()->user());
+                GuestOrderingSettings::setSpecialsWhatsappMessage($data['specials_whatsapp_message'] ?? null, auth()->user());
 
                 // Cleared on the form: back to the full logo.
                 if (blank($data['logo_mark'] ?? null)) {

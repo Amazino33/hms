@@ -42,7 +42,7 @@ class GuestRequestService
     public function __construct(private readonly GuestMenuService $menu = new GuestMenuService) {}
 
     /**
-     * @param  array<int, array{type?: string, id?: mixed, qty?: mixed, chips?: mixed, note?: mixed}>  $lines
+     * @param  array<int, array{type?: string, id?: mixed, qty?: mixed, chips?: mixed, note?: mixed, added_via?: mixed}>  $lines
      * @param  ?string  $channel  rooms: 'whatsapp' when the guest is sending it on WhatsApp too
      *
      * @throws GuestRequestException
@@ -556,7 +556,16 @@ class GuestRequestService
                 throw new GuestRequestException('unavailable', "Sorry, {$model->name} just sold out — we've removed it from your order.", 422, ['item' => $key, 'name' => $model->name]);
             }
 
+            // Phase 7C (D38): how the guest added it — a label for the owner's
+            // reports only. It never changes price, routing, stock or rules.
+            $addedVia = $line['added_via'] ?? 'menu';
+
+            if (! is_string($addedVia) || ! in_array($addedVia, \App\Support\GuestMenuOptions::ADDED_VIA, true)) {
+                throw new GuestRequestException('bad_added_via', 'Something in your order isn\'t right. Please refresh the menu and try again.');
+            }
+
             $prepared[] = [
+                'added_via' => $addedVia,
                 'item_type' => $type,
                 'item_id' => $model->id,
                 'station' => $station,

@@ -15,10 +15,12 @@ class MenuItem extends Model
     use HasMenuPhoto;
     use LogsActivity;
 
-    protected $fillable = ['name', 'sku', 'category_id', 'type', 'sale_price', 'available_for_sale', 'photo_path', 'description'];
+    protected $fillable = ['name', 'sku', 'category_id', 'type', 'sale_price', 'available_for_sale', 'photo_path', 'description', 'guest_badge', 'guest_recommended', 'guest_sort'];
 
     protected $casts = [
         'available_for_sale' => 'boolean',
+        'guest_recommended' => 'boolean',
+        'guest_sort' => 'integer',
     ];
 
     public function availabilityLogs()

@@ -53,6 +53,11 @@ class MenuItemResource extends Resource
                 ->helperText('Off = sold out. The kitchen can also flip this from the KDS "Sold out" panel — it is the same switch.'),
             MenuContentFields::photo(),
             MenuContentFields::description(),
+            \Filament\Schemas\Components\Section::make('Guest menu')
+                ->description('Badge, "We recommend" and pairings for the guest QR menu.')
+                ->schema(MenuContentFields::guestSelling())
+                ->columns(2)
+                ->columnSpanFull(),
             Repeater::make('recipes')
                 ->relationship('recipes')
                 ->schema([
@@ -96,6 +101,7 @@ class MenuItemResource extends Resource
             IconColumn::make('type')->boolean(),
         ])->filters([
             MenuContentFields::missingPhotoFilter(),
+            MenuContentFields::allCapsNameFilter(),
         ])->actions([
             EditAction::make(),
         ]);

@@ -65,6 +65,7 @@ class ProductResource extends Resource
                 ->schema([
                     MenuContentFields::photo(),
                     MenuContentFields::description(),
+                    ...MenuContentFields::guestSelling(),
                 ])->columns(2),
 
             Section::make('Fridge Restock Alert')

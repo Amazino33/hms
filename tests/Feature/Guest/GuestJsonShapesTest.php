@@ -20,11 +20,13 @@ use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
 /**
- * Phase 7A is UI only: every guest JSON endpoint must keep exactly the
- * shape it had before the refresh. The shapes (keys and value types, never
- * values) were recorded from the Phase 5 code into
- * tests/Feature/Guest/snapshots/guest-json-shapes.json; this test compares
- * against them. Delete that file only when an endpoint is meant to change.
+ * Every guest JSON endpoint keeps its shape (keys and value types, never
+ * values). Phase 7A recorded the Phase 5 shapes into
+ * snapshots/guest-json-shapes-7a.json. Phase 7C may only ADD keys — the
+ * bill's latest_status, accepted_by_first_name and last_round (D36/D38) —
+ * so the 7A shape must still sit unchanged inside today's, and today's
+ * full shape is pinned in snapshots/guest-json-shapes.json. Delete that
+ * file only when an endpoint is meant to change.
  */
 function gsShape(mixed $value): mixed
 {
@@ -47,6 +49,36 @@ function gsShape(mixed $value): mixed
     }
 
     return get_debug_type($value);
+}
+
+/**
+ * Keys in $now that are not in $was — and fails on anything removed or
+ * retyped. Paths are dotted ("table.bill.latest_status").
+ *
+ * @return list<string>
+ */
+function gsAddedKeys(mixed $was, mixed $now, string $path = ''): array
+{
+    if (! is_array($was) || array_is_list($was)) {
+        if (is_array($was) && is_array($now) && array_is_list($now)) {
+            return gsAddedKeys($was[0], $now[0], $path.'[]');
+        }
+        expect($now)->toBe($was, "Shape changed at {$path}");
+
+        return [];
+    }
+
+    expect($now)->toBeArray("{$path} is no longer an object");
+    $added = [];
+    foreach ($was as $key => $shape) {
+        expect(array_key_exists($key, $now))->toBeTrue("Key removed: {$path}.{$key}");
+        $added = [...$added, ...gsAddedKeys($shape, $now[$key], ltrim("{$path}.{$key}", '.'))];
+    }
+    foreach (array_diff_key($now, $was) as $key => $shape) {
+        $added[] = ltrim("{$path}.{$key}", '.');
+    }
+
+    return $added;
 }
 
 function gsFixture(): array
@@ -133,4 +165,14 @@ it('keeps every guest JSON endpoint in exactly its Phase 5 shape', function () {
     }
 
     expect($actual)->toBe(json_decode(file_get_contents($file), true));
+
+    // Phase 7C: only additive keys, and only the three on the bill.
+    $added = gsAddedKeys(json_decode(file_get_contents(__DIR__.'/snapshots/guest-json-shapes-7a.json'), true), $actual);
+    $billKeys = fn (string $bill) => ["{$bill}.latest_status", "{$bill}.accepted_by_first_name", "{$bill}.last_round"];
+    expect($added)->toEqualCanonicalizing([
+        ...$billKeys('table.bill'),
+        ...$billKeys('table.bill.after_claim_and_call'),
+        ...$billKeys('room.bill.untrusted'),
+        ...$billKeys('room.bill.trusted'),
+    ]);
 });

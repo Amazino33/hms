@@ -233,3 +233,18 @@ A short welcome splash on the first open of a visit: crest → "Welcome to {comp
 
 ### D33 — One tap: Mark Ready (supersedes "Release" wording everywhere)
 On the bar display, guest drink cards sit IN THE SAME QUEUE as normal orders (oldest first) and use the same **Mark Ready** button. For a guest card, Mark Ready, in ONE transaction: creates the real bar order (OrderSplitter for tables / the room path for rooms, exactly as release did) AND marks it ready through the shared bar ready service. All release rules still apply (D1 bartender shift and "who is marking ready", D2 credit, D3 waiter safety net, D18 price lock, D24 rooms). Staff never see the word "Release".
+
+### D34 — Search and table are always visible
+A sticky top bar holds the crest, company name, the Table/Room pill, and a search bar. Search leaves the bottom nav (now 4 items: Drinks · Food · Bill · Waiter/Reception).
+
+### D35 — First-visit hints, once only
+On a device's first visit: the Table pill glows and shows "You're ordering for Table 5"; the search placeholder cycles through real item names. Both stop on the first touch, and never show again on that device.
+
+### D36 — Order feedback
+After Send: a short "Order sent" tick moment, then a dot flies to the Bill icon. A status strip under the search bar and a coloured dot on the Bill icon track the latest order (red = waiting, green = accepted/progressing).
+
+### D37 — Rows by photo
+Items without a photo use a slim row (no tile). Items with a photo show a 64 px thumbnail on the left. The add control is always on the right; after the first add, it becomes an inline − qty + stepper.
+
+### D38 — Selling features (honest only)
+"Goes well with" pairings, cart "Quick add-ons", badges (Chef's special, Bestseller, New, Spicy) and a "We recommend" row are all set by the owner in admin. "Another round?" appears once per round, N minutes after drinks were marked ready. "Order again" appears for returning devices. The specials countdown shows only a real end time. Each cart line records how it was added (`added_via`), so the owner can later measure what works.

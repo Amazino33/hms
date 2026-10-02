@@ -55,6 +55,7 @@ class ProductsTable
             ->filters([
                 TrashedFilter::make(),
                 MenuContentFields::missingPhotoFilter(),
+                MenuContentFields::allCapsNameFilter(),
             ])
             ->paginated([10, 25, 50, 100])
             ->recordActions([

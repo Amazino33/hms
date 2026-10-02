@@ -2,12 +2,20 @@
 
 namespace App\Filament\Support;
 
+use App\Models\GuestItemPairing;
 use App\Services\MenuPhotoProcessor;
+use App\Support\GuestMenuOptions;
+use Closure;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Filters\Filter;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
@@ -80,5 +88,73 @@ class MenuContentFields
             ->label('Missing photo')
             ->toggle()
             ->query(fn (Builder $query) => $query->whereNull('photo_path'));
+    }
+
+    /**
+     * Phase 7C: find names typed in ALL CAPS so the owner can tidy them.
+     * Nothing is changed automatically. Case-sensitive on MySQL too (its
+     * default collation would otherwise call "Beer" and "BEER" equal);
+     * names with no letters at all ("33") are not "all caps".
+     */
+    public static function allCapsNameFilter(): Filter
+    {
+        return Filter::make('all_caps_name')
+            ->label('Name in ALL CAPS')
+            ->toggle()
+            ->query(fn (Builder $query) => DB::getDriverName() === 'mysql'
+                ? $query->whereRaw('CAST(name AS BINARY) = CAST(UPPER(name) AS BINARY)')->whereRaw('CAST(name AS BINARY) <> CAST(LOWER(name) AS BINARY)')
+                : $query->whereRaw('name = UPPER(name)')->whereRaw('name <> LOWER(name)'));
+    }
+
+    /**
+     * Phase 7C (D38): the owner's selling tools for the guest menu — badge,
+     * "We recommend", order within the category, and up to 3 "goes well
+     * with" items. Honest only: nothing here is computed or faked.
+     *
+     * @return array<int, \Filament\Schemas\Components\Component>
+     */
+    public static function guestSelling(): array
+    {
+        return [
+            Select::make('guest_badge')
+                ->label('Badge')
+                ->options(GuestMenuOptions::BADGES)
+                ->placeholder('None'),
+            Toggle::make('guest_recommended')
+                ->label('Recommended')
+                ->helperText('Shown in the "We recommend" row at the top of the guest menu.')
+                ->inline(false),
+            TextInput::make('guest_sort')
+                ->label('Sort order')
+                ->numeric()
+                ->integer()
+                ->helperText('Lower comes first within its category. Empty = after the numbered ones, by name.'),
+            Select::make('guest_pairs')
+                ->label('Goes well with')
+                ->helperText('Up to 3, in order. Suggested to the guest right after they add this item.')
+                ->multiple()
+                ->searchable()
+                ->reorderable()
+                ->maxItems(GuestItemPairing::MAX)
+                ->options(fn (?Model $record) => collect(GuestMenuOptions::itemOptions())
+                    ->except($record ? [GuestMenuOptions::keyFor($record)] : [])
+                    ->all())
+                ->rules([
+                    fn (?Model $record): Closure => function (string $attribute, $value, Closure $fail) use ($record) {
+                        $value = (array) $value;
+
+                        if (count($value) > GuestItemPairing::MAX) {
+                            $fail('Pick at most '.GuestItemPairing::MAX.' items that go well with this one.');
+                        }
+
+                        if ($record && in_array(GuestMenuOptions::keyFor($record), $value, true)) {
+                            $fail('An item can\'t go well with itself.');
+                        }
+                    },
+                ])
+                ->dehydrated(false)
+                ->loadStateFromRelationshipsUsing(fn (Select $component, ?Model $record) => $component->state($record ? GuestItemPairing::keysFor($record) : []))
+                ->saveRelationshipsUsing(fn (Model $record, $state) => GuestItemPairing::syncFor($record, (array) $state)),
+        ];
     }
 }

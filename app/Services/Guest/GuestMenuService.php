@@ -104,17 +104,20 @@ class GuestMenuService
                 ])->values()->all()]);
 
         $items = collect();
+        // Phase 7C: owner-picked "goes well with" keys (availability is
+        // filtered per request, outside this cache).
+        $pairs = \App\Models\GuestItemPairing::allKeyed();
 
         foreach (Product::with('category')->where('is_active', true)->get() as $product) {
             $station = GuestStation::forProduct($product);
 
             if ($station) {
-                $items->push($this->itemPayload('p', $product, (float) $product->price, $station, $chipsByCategory));
+                $items->push($this->itemPayload('p', $product, (float) $product->price, $station, $chipsByCategory, $pairs));
             }
         }
 
         foreach (MenuItem::with('category')->get() as $menuItem) {
-            $items->push($this->itemPayload('m', $menuItem, (float) $menuItem->sale_price, GuestStation::KITCHEN, $chipsByCategory));
+            $items->push($this->itemPayload('m', $menuItem, (float) $menuItem->sale_price, GuestStation::KITCHEN, $chipsByCategory, $pairs));
         }
 
         $tabs = ['drinks' => [], 'food' => []];
@@ -126,7 +129,14 @@ class GuestMenuService
                 ->map(fn (Collection $sectionItems, string $name) => [
                     'name' => $name,
                     'slug' => \Illuminate\Support\Str::slug($tab.'-'.$name),
-                    'items' => $sectionItems->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->map(fn ($item) => collect($item)->except(['tab', 'category'])->all())->values()->all(),
+                    // The owner's guest_sort first (unset ones after), then name.
+                    'items' => $sectionItems
+                        ->sortBy([
+                            fn ($a, $b) => ($a['sort'] === null) <=> ($b['sort'] === null),
+                            fn ($a, $b) => ($a['sort'] ?? 0) <=> ($b['sort'] ?? 0),
+                            fn ($a, $b) => strnatcasecmp($a['name'], $b['name']),
+                        ])
+                        ->map(fn ($item) => collect($item)->except(['tab', 'category'])->all())->values()->all(),
                 ])
                 ->values()
                 ->all();
@@ -135,7 +145,7 @@ class GuestMenuService
         return ['tabs' => $tabs];
     }
 
-    private function itemPayload(string $prefix, MenuItem|Product $model, float $price, string $station, Collection $chipsByCategory): array
+    private function itemPayload(string $prefix, MenuItem|Product $model, float $price, string $station, Collection $chipsByCategory, array $pairs = []): array
     {
         $disk = Storage::disk(MenuPhotoProcessor::DISK);
 
@@ -152,6 +162,11 @@ class GuestMenuService
             'note' => $station === GuestStation::KITCHEN,
             'tab' => GuestStation::tabFor($station),
             'category' => $model->category?->name,
+            // Phase 7C (D38) — owner-set, honest only.
+            'badge' => array_key_exists((string) $model->guest_badge, \App\Support\GuestMenuOptions::BADGES) ? $model->guest_badge : null,
+            'recommended' => (bool) $model->guest_recommended,
+            'sort' => $model->guest_sort,
+            'pairs' => $pairs[$prefix.$model->id] ?? [],
         ];
     }
 

@@ -22,6 +22,7 @@ use App\Services\Guest\GuestRequestService;
 use App\Services\Guest\GuestRoundService;
 use App\Services\Guest\GuestShifts;
 use App\Services\Guest\GuestTableState;
+use App\Services\Guest\GuestVisitService;
 use App\Services\Guest\GuestWaiterCallService;
 use App\Services\Guest\GuestWhatsapp;
 use App\Services\Guest\QrTokens;
@@ -70,6 +71,8 @@ class GuestMenuController extends Controller
                     : $this->roomState($stay, $this->deviceId($request)),
                 'accounts' => ($isTable || $stay) ? $this->accountList() : [],
                 'whatsapp' => ! $isTable && GuestOrderingSettings::receptionWhatsapp() !== null,
+                // Phase 7C (D38): this phone's earlier visit, for "Order again".
+                'last_visit' => ($isTable || $stay) ? (new GuestVisitService($this->menu))->lastVisit($place, $this->deviceId($request)) : null,
             ],
         ]);
     }
@@ -85,6 +88,7 @@ class GuestMenuController extends Controller
                 'notice' => 'Scan the QR code on your table to order.',
                 'table' => null,
                 'accounts' => [],
+                'last_visit' => null,
             ],
         ]);
     }
@@ -201,7 +205,7 @@ class GuestMenuController extends Controller
                     ! $state['trusted'] => 'Your bill appears after your first order is approved.',
                     default => null,
                 },
-            ]);
+            ] + $this->visitState($place, $device));
         }
 
         $state = GuestTableState::for($place, $device);
@@ -211,7 +215,7 @@ class GuestMenuController extends Controller
             'table' => GuestTableState::present($state),
             'bill' => $state['session'] ? (new GuestBillService)->forSession($state['session'], $device) : null,
             'message' => $state['session'] ? null : 'No open bill',
-        ]);
+        ] + $this->visitState($place, $device));
     }
 
     public function claim(Request $request, string $token): JsonResponse
@@ -373,12 +377,69 @@ class GuestMenuController extends Controller
     /** @return array<string, mixed> */
     private function bootData(): array
     {
+        $menu = $this->menu->payload();
+        $unavailable = $this->menu->unavailable();
+        $popular = array_column($this->menu->popularTonight(), 'key');
+
+        // Phase 7C (D38): only what can be ordered right now is suggested.
+        $onMenu = [];
+        foreach ($menu['tabs'] as $sections) {
+            foreach ($sections as $section) {
+                foreach ($section['items'] as $item) {
+                    $onMenu[$item['key']] = $item;
+                }
+            }
+        }
+        $orderable = fn (string $key) => isset($onMenu[$key]) && ! in_array($key, $unavailable, true);
+
+        foreach ($menu['tabs'] as $tab => $sections) {
+            foreach ($sections as $s => $section) {
+                foreach ($section['items'] as $i => $item) {
+                    $menu['tabs'][$tab][$s]['items'][$i]['pairs'] = array_values(array_filter($item['pairs'] ?? [], $orderable));
+                }
+            }
+        }
+
+        $recommended = collect($onMenu)
+            ->filter(fn ($item) => $item['recommended'] && $orderable($item['key']))
+            ->sortBy([
+                fn ($a, $b) => ($a['sort'] === null) <=> ($b['sort'] === null),
+                fn ($a, $b) => ($a['sort'] ?? 0) <=> ($b['sort'] ?? 0),
+                fn ($a, $b) => strnatcasecmp($a['name'], $b['name']),
+            ])
+            ->keys()->values()->all();
+
+        // No owner picks yet: the honest fallback is tonight's real sellers.
+        $recommendedOrPopular = $recommended ?: $popular;
+
         return [
-            'menu' => $this->menu->payload(),
-            'unavailable' => $this->menu->unavailable(),
-            'popular' => array_column($this->menu->popularTonight(), 'key'),
+            'menu' => $menu,
+            'unavailable' => $unavailable,
+            'popular' => $popular,
             'specials' => GuestOrderingSettings::liveSpecials(),
+            'recommended' => $recommendedOrPopular,
+            'quick_addons' => array_values(array_filter(GuestOrderingSettings::quickAddons(), $orderable)),
+            'round_delay_min' => GuestOrderingSettings::roundDelayMinutes(),
+            'review_url' => GuestOrderingSettings::reviewUrl(),
+            'specials_whatsapp_url' => GuestOrderingSettings::specialsWhatsappUrl(),
+            'hint_items' => collect($recommendedOrPopular ?: array_keys(array_filter($onMenu, fn ($item) => $orderable($item['key']))))
+                ->take(3)
+                ->map(fn ($key) => $onMenu[$key]['name'] ?? null)
+                ->filter()->values()->all(),
         ];
+    }
+
+    /**
+     * Phase 7C (D36): this phone's order progress and last ready round —
+     * additive keys on the bill response.
+     *
+     * @return array{latest_status: ?string, accepted_by_first_name: ?string, last_round: ?array}
+     */
+    private function visitState(Table|Room $place, string $device): array
+    {
+        $visits = new GuestVisitService($this->menu);
+
+        return $visits->status($place, $device) + ['last_round' => $visits->lastRound($place, $device)];
     }
 
     /** @return array<string, mixed> */

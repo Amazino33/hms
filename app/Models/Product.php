@@ -20,6 +20,8 @@ class Product extends Model
 
     protected $casts = [
         'units_per_purchase_unit' => 'integer',
+        'guest_recommended' => 'boolean',
+        'guest_sort' => 'integer',
         'last_cost_price' => 'decimal:2',
         'created_by_staff' => 'boolean',
     ];

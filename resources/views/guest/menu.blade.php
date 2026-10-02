@@ -4,8 +4,6 @@
      Stateless — no session, no CSRF token, no Livewire, no Filament bundle.
      The venue name is $venue (Company::displayName()) — never typed here. --}}
 @php
-    $hour = now()->venueTime()->hour;
-    $greeting = $hour < 12 ? 'Good morning' : ($hour < 17 ? 'Good afternoon' : 'Good evening');
     $canOrder = $boot['mode'] === 'order';
     $isRoom = ($boot['kind'] ?? null) === 'room';
     $initial = mb_strtoupper(mb_substr(trim($venue), 0, 1)) ?: '•';
@@ -75,32 +73,45 @@
 <script type="application/json" id="guest-boot">@json($boot)</script>
 
 <div x-data="guestMenu" x-cloak x-effect="document.body.classList.toggle('has-cart', canOrder && cart.length > 0)">
-    <div class="wrap">
-        <header class="header">
-            <span class="medallion">
-                @if ($logo)
-                    <img src="{{ $logo }}" alt="" width="24" height="24" decoding="async">
-                @else
-                    <span class="letter">{{ $initial }}</span>
+    {{-- ===================== Sticky top bar (D34) ===================== --}}
+    <header class="topbar">
+        <div class="wrap">
+            <div class="header">
+                <span class="medallion">
+                    @if ($logo)
+                        <img src="{{ $logo }}" alt="" width="24" height="24" decoding="async">
+                    @else
+                        <span class="letter">{{ $initial }}</span>
+                    @endif
+                </span>
+                <span class="venue">{{ $venue }}</span>
+                @if ($boot['place'])
+                    <span class="place-wrap">
+                        <span class="place-pill" :class="{ glow: hints }">{{ $boot['place'] }}</span>
+                        {{-- D35: first visit only --}}
+                        <span class="hint-tip" x-show="hintTip" x-transition.opacity role="status">You're ordering for {{ $boot['place'] }}</span>
+                    </span>
                 @endif
-            </span>
-            <span class="venue">{{ $venue }}</span>
-            @if ($boot['place'])
-                <span class="place-pill">{{ $boot['place'] }}</span>
-            @endif
-        </header>
+            </div>
 
-        <section class="greeting">
-            <h1>{{ $greeting }}</h1>
-            <p>What are you having?</p>
-        </section>
+            <button type="button" class="search-bar" @click="openSearch()" aria-label="Search the menu">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <span class="search-ph" x-text="placeholder">Search the menu</span>
+            </button>
 
-        {{-- Moved / closed table (Phase 4) --}}
+            {{-- D36: the latest order's progress --}}
+            <button type="button" class="status-strip" x-show="statusText" x-transition.opacity @click="openSheet('bill')">
+                <span class="sdot" :class="statusTone"></span>
+                <span class="stext" x-text="statusText"></span>
+                <span class="slink">View bill</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="wrap">
+        {{-- Moved table (Phase 4) --}}
         <template x-if="tableState.state === 'moved'">
             <p class="banner" role="status">Your table moved to <strong x-text="tableState.moved_to"></strong> — scan the QR on your new table.</p>
-        </template>
-        <template x-if="tableState.state === 'closed'">
-            <p class="banner" role="status">Thanks for visiting 🙏 — this table is closed.</p>
         </template>
 
         @if ($boot['notice'])
@@ -108,31 +119,60 @@
         @endif
 
         @if ($boot['specials'])
-            <div class="specials">
+            <div class="specials" x-show="!specialsOver">
                 @if ($boot['specials']['image_url'])
                     <img src="{{ $boot['specials']['image_url'] }}" alt="" width="96" height="96" loading="lazy" decoding="async">
                 @endif
-                @if ($boot['specials']['text'])
-                    <p>{{ $boot['specials']['text'] }}</p>
-                @endif
+                <div>
+                    @if ($boot['specials']['text'])
+                        <p>{{ $boot['specials']['text'] }}</p>
+                    @endif
+                    {{-- D38: a countdown only to a real end time --}}
+                    <span class="countdown" x-show="specialsLeft" x-text="specialsLeft"></span>
+                </div>
             </div>
         @endif
 
-        <template x-if="popular.length >= 3">
-            <section aria-label="Popular tonight">
-                <p class="eyebrow">Popular tonight</p>
+        {{-- D38: Order again (returning phone) --}}
+        <template x-if="canOrder && againVisible">
+            <div class="again card" role="region" aria-label="Order again">
+                <button type="button" class="again-x" aria-label="Dismiss" @click="dismissAgain()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+                <p class="again-k">Welcome back · last time you had</p>
+                <p class="again-v" x-text="boot.last_visit.summary"></p>
+                <button type="button" class="primary again-btn" @click="orderAgain()">Order again</button>
+            </div>
+        </template>
+
+        {{-- D38: We recommend (owner picks; falls back to tonight's real sellers) --}}
+        <template x-if="recommended.length">
+            <section aria-label="We recommend">
+                <p class="eyebrow">We recommend</p>
                 <div class="popular">
-                    <template x-for="item in popular" :key="'pop-' + item.key">
-                        <button type="button" class="pop-card" @click="open(item)">
-                            <template x-if="item.thumb">
-                                <img class="tile" :src="item.thumb" :alt="item.name" width="132" height="100" loading="lazy" decoding="async" @load="$el.classList.add('loaded')" x-on:error="$el.classList.add('loaded')">
-                            </template>
-                            <template x-if="!item.thumb">
-                                <div class="tile ph" x-text="initial(item.name)"></div>
-                            </template>
-                            <div class="name" x-text="item.name"></div>
-                            <div class="price" x-text="naira(item.price)"></div>
-                        </button>
+                    <template x-for="item in recommended" :key="'rec-' + item.key">
+                        <div class="rec-card">
+                            <button type="button" class="rec-media" @click="open(item, 'recommended')">
+                                <template x-if="item.thumb">
+                                    <img class="tile" :src="item.thumb" :alt="item.name" width="150" height="112" loading="lazy" decoding="async" @load="$el.classList.add('loaded')" x-on:error="$el.classList.add('loaded')">
+                                </template>
+                                <template x-if="!item.thumb">
+                                    <div class="tile ph" x-text="initial(item.name)"></div>
+                                </template>
+                                <template x-if="item.badge">
+                                    <span class="badge-pill" :class="'b-' + item.badge" x-text="badgeLabel(item.badge)"></span>
+                                </template>
+                            </button>
+                            <div class="rec-row">
+                                <div class="rec-text">
+                                    <div class="name" x-text="item.name"></div>
+                                    <div class="price" x-text="naira(item.price)"></div>
+                                </div>
+                                @if ($canOrder)
+                                    <button type="button" class="mini-add" :aria-label="'Add ' + item.name" @click="rowAdd(item, 'recommended', $el)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                                @endif
+                            </div>
+                        </div>
                     </template>
                 </div>
             </section>
@@ -146,25 +186,49 @@
                         <span x-text="section.items.length + (section.items.length === 1 ? ' item' : ' items')"></span>
                     </div>
                     <template x-for="item in section.items" :key="item.key">
-                        <div class="item">
-                            <button type="button" class="body" style="text-align:left" @click="open(item)">
-                                <div class="name" x-text="item.name"></div>
-                                <div class="desc" x-show="item.description" x-text="item.description"></div>
-                                <div class="price" x-text="naira(item.price)"></div>
-                            </button>
-                            <div class="media">
+                        <div>
+                            {{-- D37: a thumb only when there is a photo; slim row otherwise --}}
+                            <div class="row" :class="{ slim: !item.thumb }">
                                 <template x-if="item.thumb">
-                                    <img class="tile" :src="item.thumb" :alt="item.name" width="92" height="92" loading="lazy" decoding="async" @load="$el.classList.add('loaded')" x-on:error="$el.classList.add('loaded')" @click="open(item)">
-                                </template>
-                                <template x-if="!item.thumb">
-                                    <div class="tile ph" x-text="initial(item.name)" @click="open(item)"></div>
-                                </template>
-                                @if ($canOrder)
-                                    <button type="button" class="add" :aria-label="'Add ' + item.name" @click="quickAdd(item, $el)">
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                                    <button type="button" class="row-thumb" @click="open(item)" :aria-label="item.name">
+                                        <img class="tile" :src="item.thumb" alt="" width="64" height="64" loading="lazy" decoding="async" @load="$el.classList.add('loaded')" x-on:error="$el.classList.add('loaded')">
                                     </button>
+                                </template>
+                                <button type="button" class="row-body" @click="open(item)">
+                                    <span class="name"><span x-text="item.name"></span>
+                                        <template x-if="item.badge"><span class="badge-pill" :class="'b-' + item.badge" x-text="badgeLabel(item.badge)"></span></template>
+                                    </span>
+                                    <span class="desc" x-show="item.description" x-text="item.description"></span>
+                                    <span class="price" x-text="naira(item.price)"></span>
+                                </button>
+                                @if ($canOrder)
+                                    <template x-if="!qtyOf(item.key)">
+                                        <button type="button" class="row-add" :aria-label="'Add ' + item.name" @click="rowAdd(item, 'menu', $el)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                                    </template>
+                                    <template x-if="qtyOf(item.key)">
+                                        <div class="row-stepper" role="group" :aria-label="item.name + ' quantity'">
+                                            <button type="button" :aria-label="'One less ' + item.name" @click="rowMinus(item)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                                            <span x-text="qtyOf(item.key)"></span>
+                                            <button type="button" :aria-label="'One more ' + item.name" @click="rowAdd(item, 'menu', $el)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                                        </div>
+                                    </template>
                                 @endif
                             </div>
+
+                            {{-- D38: Goes well with — under the row just added to --}}
+                            <template x-if="pairFor === item.key && pairItems(item).length">
+                                <div class="pair-strip" x-transition.opacity>
+                                    <p class="pair-k">Goes well with</p>
+                                    <div class="pair-chips">
+                                        <template x-for="pair in pairItems(item)" :key="'pair-' + item.key + pair.key">
+                                            <button type="button" class="pair-chip" @click="pairAdd(pair)">
+                                                <span x-text="pair.name + ' · ' + naira(pair.price)"></span>
+                                                <span class="pair-plus" aria-hidden="true">+</span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
                     </template>
                 </section>
@@ -173,9 +237,31 @@
         </main>
     </div>
 
-    {{-- ===================== Bottom stack (D31) ===================== --}}
+    {{-- ===================== Bottom stack ===================== --}}
     <div class="bottom">
         <div class="bottom-inner">
+            {{-- D38: Another round? — once per round, never over a sheet --}}
+            <template x-if="nudge && !sheet">
+                <div class="nudge" role="dialog" aria-label="Another round" x-transition:enter-start="nudge-enter">
+                    <div class="nudge-top">
+                        <span class="nudge-icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1 8a4 4 0 0 1-8 0L7 3ZM12 15v6M8 21h8"/></svg>
+                        </span>
+                        <div class="nudge-text">
+                            <p class="nudge-title">Ready for another round?</p>
+                            <p class="nudge-sub" x-text="nudge.summary"></p>
+                        </div>
+                        <button type="button" class="nudge-x" aria-label="Close" @click="dismissNudge()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                        </button>
+                    </div>
+                    <div class="nudge-actions">
+                        <button type="button" class="secondary" @click="dismissNudge()">Not now</button>
+                        <button type="button" class="primary" @click="acceptNudge()">Add to my order</button>
+                    </div>
+                </div>
+            </template>
+
             @if ($canOrder)
                 <button type="button" class="cart-bar" x-show="cart.length && !sheet" x-transition:enter-start="cart-enter" x-transition:leave-end="cart-enter" @click="openSheet('cart')">
                     <span class="count" x-text="cartCount"></span>
@@ -184,12 +270,14 @@
                 </button>
             @endif
 
-            <nav class="cat-pills" aria-label="Categories">
+            {{-- Pills only when the tab has more than one category --}}
+            <nav class="cat-pills" aria-label="Categories" x-show="sections.length > 1">
                 <template x-for="section in sections" :key="'pill-' + section.slug">
                     <button type="button" class="cat-pill" :class="{ on: activeSection === section.slug }" @click="scrollTo(section.slug)" x-text="section.name"></button>
                 </template>
             </nav>
 
+            {{-- D34: Drinks · Food · Bill · Waiter (search lives in the top bar) --}}
             <nav class="nav" aria-label="Main">
                 <button type="button" :class="{ on: tab === 'drinks' && !sheet }" @click="showTab('drinks')">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10l-1 8a4 4 0 0 1-8 0L7 3ZM12 15v6M8 21h8"/></svg>
@@ -199,15 +287,11 @@
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1.5-3 4-3 7h3"/></svg>
                     Food
                 </button>
-                <button type="button" :class="{ on: sheet === 'search' }" @click="openSearch()">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                    Search
-                </button>
                 @if ($canOrder)
-                    <button type="button" :class="{ on: ['bill', 'pay', 'split'].includes(sheet) }" @click="openSheet('bill')">
+                    <button type="button" x-ref="billNav" :class="{ on: ['bill', 'pay', 'split'].includes(sheet) }" @click="openSheet('bill')">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg>
                         Bill
-                        <span class="dot" x-show="bill && bill.totals.remaining > 0"></span>
+                        <span class="bdot" x-show="billDot" :class="billDot"></span>
                     </button>
                     <button type="button" :class="{ on: sheet === 'call' }" @click="openSheet('call')">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>
@@ -304,7 +388,7 @@
             </template>
             <template x-for="item in (search.trim().length >= 2 ? searchResults : popular)" :key="'s-' + item.key">
                 <div class="item">
-                    <button type="button" class="body" style="text-align:left" @click="open(item)">
+                    <button type="button" class="body" style="text-align:left" @click="open(item, 'search')">
                         <div class="name" x-text="item.name"></div>
                         <div class="desc" x-show="item.description" x-text="item.description"></div>
                         <div class="price" x-text="naira(item.price)"></div>
@@ -317,7 +401,7 @@
                             <div class="tile ph" x-text="initial(item.name)"></div>
                         </template>
                         @if ($canOrder)
-                            <button type="button" class="add" :aria-label="'Add ' + item.name" @click="quickAdd(item, $el)">
+                            <button type="button" class="add" :aria-label="'Add ' + item.name" @click="rowAdd(item, 'search', $el)">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                             </button>
                         @endif
@@ -351,6 +435,22 @@
                     </div>
                 </div>
             </template>
+            {{-- D38: Quick add-ons (owner-picked; not already in the cart, not sold out) --}}
+            <template x-if="addonItems.length">
+                <div class="addons">
+                    <p class="addons-k">Anything else?</p>
+                    <p class="muted small">Quick add-ons</p>
+                    <div class="addon-row">
+                        <template x-for="item in addonItems" :key="'add-' + item.key">
+                            <div class="addon-card">
+                                <div class="name" x-text="item.name"></div>
+                                <div class="price" x-text="naira(item.price)"></div>
+                                <button type="button" class="mini-add" :aria-label="'Add ' + item.name" @click="addonAdd(item)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
             <div class="total"><span>Total</span><span x-text="naira(cartTotal)"></span></div>
             <p class="muted small center">{{ $isRoom ? 'Reception confirms your order before anything is made. It goes on your room bill.' : 'A waiter confirms your order before anything is made.' }}</p>
         </div>
@@ -367,7 +467,7 @@
             </div>
         @else
             <div class="actions">
-                <button type="button" class="primary" :disabled="sending || !cart.length" @click="send()" x-text="sending ? 'Sending…' : 'Send to waiter'"></button>
+                <button type="button" class="primary" :disabled="sending || !cart.length" @click="send()" x-text="sending ? 'Sending…' : 'Send to waiter · ' + naira(cartTotal)"></button>
             </div>
         @endif
     </div>
@@ -638,6 +738,51 @@
             </template>
         </div>
     </div>
+
+    {{-- D36: Order sent --}}
+    <div class="sent-moment" x-show="sentMoment" x-transition.opacity role="status" aria-live="polite">
+        <svg class="sent-ring" width="96" height="96" viewBox="0 0 96 96" aria-hidden="true">
+            <circle class="sent-circle" cx="48" cy="48" r="44" fill="none" stroke-width="4"/>
+            <path class="sent-tick" d="M30 49l12 12 24-26" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="sent-title">Order sent</p>
+        <p class="muted">{{ $isRoom ? 'Reception will confirm it shortly' : 'A waiter will confirm it shortly' }}</p>
+    </div>
+    <span class="fly-dot" x-ref="flyDot" aria-hidden="true"></span>
+
+    @if (! $isRoom && $canOrder)
+        {{-- Closed table (D11): thanks, review, specials — tables only --}}
+        <div class="closed-page" x-show="tableState.state === 'closed' && !closedDismissed" x-transition.opacity role="dialog" aria-modal="true" aria-label="This table is closed">
+            <div class="closed-top">
+                <span class="medallion big">
+                    @if ($splashLogo)
+                        <img src="{{ $splashLogo }}" alt="" width="104" height="104" decoding="async">
+                    @else
+                        <span class="letter">{{ $initial }}</span>
+                    @endif
+                </span>
+                <h2 class="closed-title">Thanks for visiting</h2>
+                <p class="muted">{{ $boot['place'] }} is closed. We hope to see you again soon.</p>
+            </div>
+            <div class="closed-actions">
+                <template x-if="boot.review_url">
+                    <a class="review-btn" :href="boot.review_url" target="_blank" rel="noopener">
+                        <span class="stars" aria-hidden="true">★★★</span> Rate us on Google
+                    </a>
+                </template>
+                <template x-if="boot.specials_whatsapp_url">
+                    <div>
+                        <a class="wa-outline" :href="boot.specials_whatsapp_url" target="_blank" rel="noopener">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#25D366" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Z"/></svg>
+                            Get our specials on WhatsApp
+                        </a>
+                        <p class="muted small center">Only if you want. You can stop anytime.</p>
+                    </div>
+                </template>
+                <button type="button" class="text-button" @click="seeMenuAfterClose()">See the menu</button>
+            </div>
+        </div>
+    @endif
 
     <div class="toast" :class="{ error: toast?.error }" x-show="toast" x-transition.opacity role="status" aria-live="polite">
         <template x-if="toast?.error">

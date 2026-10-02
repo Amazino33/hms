@@ -30,6 +30,110 @@ class GuestOrderingSettings
 
     public const SPECIALS_TEXT_MAX = 120;
 
+    // Phase 7C (D38) — selling features, all optional.
+    public const QUICK_ADDONS = 'guest_quick_addons';
+
+    public const ROUND_DELAY = 'guest_round_delay_min';
+
+    public const REVIEW_URL = 'guest_review_url';
+
+    public const SPECIALS_WHATSAPP_MESSAGE = 'guest_specials_whatsapp_message';
+
+    public const QUICK_ADDONS_MAX = 6;
+
+    public const ROUND_DELAY_DEFAULT = 20;
+
+    public const ROUND_DELAY_MAX = 120;
+
+    public const SPECIALS_WHATSAPP_DEFAULT = 'Hi! Please send me your specials 🙂';
+
+    /** @return list<string> item keys, in order */
+    public static function quickAddons(): array
+    {
+        $keys = json_decode((string) SettingsService::get(self::QUICK_ADDONS), true);
+
+        return is_array($keys) ? array_values(array_filter($keys, 'is_string')) : [];
+    }
+
+    /**
+     * @param  array<int, string>  $keys
+     *
+     * @throws \Exception
+     */
+    public static function setQuickAddons(array $keys, User $actor): void
+    {
+        $keys = array_values(array_unique(array_filter($keys)));
+
+        if (count($keys) > self::QUICK_ADDONS_MAX) {
+            throw new \Exception('Pick at most '.self::QUICK_ADDONS_MAX.' quick add-ons.');
+        }
+
+        foreach ($keys as $key) {
+            if (! \App\Support\GuestMenuOptions::find($key)) {
+                throw new \Exception('One of the quick add-ons no longer exists.');
+            }
+        }
+
+        SettingsService::set(self::QUICK_ADDONS, json_encode($keys), 'string', $actor->id);
+    }
+
+    /** "Another round?" delay in minutes; 0 = off. */
+    public static function roundDelayMinutes(): int
+    {
+        $value = SettingsService::get(self::ROUND_DELAY);
+
+        return $value === null || $value === '' ? self::ROUND_DELAY_DEFAULT : (int) $value;
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public static function setRoundDelayMinutes(mixed $minutes, User $actor): void
+    {
+        if (filter_var($minutes, FILTER_VALIDATE_INT) === false || (int) $minutes < 0 || (int) $minutes > self::ROUND_DELAY_MAX) {
+            throw new \Exception('The "Another round?" delay must be 0 to '.self::ROUND_DELAY_MAX.' minutes (0 turns it off).');
+        }
+
+        SettingsService::set(self::ROUND_DELAY, (string) (int) $minutes, 'integer', $actor->id);
+    }
+
+    public static function reviewUrl(): ?string
+    {
+        return SettingsService::get(self::REVIEW_URL) ?: null;
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public static function setReviewUrl(?string $url, User $actor): void
+    {
+        $url = trim((string) $url);
+
+        if ($url !== '' && (! filter_var($url, FILTER_VALIDATE_URL) || ! str_starts_with(strtolower($url), 'https://'))) {
+            throw new \Exception('The Google review link must be a full https:// address.');
+        }
+
+        SettingsService::set(self::REVIEW_URL, $url, 'string', $actor->id);
+    }
+
+    public static function specialsWhatsappMessage(): string
+    {
+        return SettingsService::get(self::SPECIALS_WHATSAPP_MESSAGE) ?: self::SPECIALS_WHATSAPP_DEFAULT;
+    }
+
+    public static function setSpecialsWhatsappMessage(?string $message, User $actor): void
+    {
+        SettingsService::set(self::SPECIALS_WHATSAPP_MESSAGE, mb_substr(trim((string) $message), 0, 200), 'string', $actor->id);
+    }
+
+    /** The closed-page "Get our specials on WhatsApp" link, or null without a reception number. */
+    public static function specialsWhatsappUrl(): ?string
+    {
+        $number = self::receptionWhatsapp();
+
+        return $number ? 'https://wa.me/'.$number.'?text='.rawurlencode(self::specialsWhatsappMessage()) : null;
+    }
+
     /** e.g. "2348012345678", or null when not set. */
     public static function receptionWhatsapp(): ?string
     {
@@ -92,6 +196,8 @@ class GuestOrderingSettings
         return [
             'text' => $specials['text'],
             'image_url' => $specials['image_path'] ? Storage::disk(MenuPhotoProcessor::DISK)->url($specials['image_path']) : null,
+            // Phase 7C: a countdown only ever counts to a real end time.
+            'ends_at' => $specials['ends_at']?->toIso8601String(),
         ];
     }
 
