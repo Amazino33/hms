@@ -95,7 +95,9 @@ new class extends Component {
                 ? (new GuestRequestService)->confirm($request, $waiter, $sameGuests)
                 : (new GuestRequestService)->reacceptReturned($request, $waiter);
         } catch (SameGuestsQuestion $e) {
-            UserFeedback::blocked('Same guests?', $e->getMessage().' Tap Accept again and answer.');
+            // Ask right here on the kiosk with Yes / No buttons — a toast
+            // alone was easy to miss, and nothing told the waiter what to tap.
+            $this->dispatch('guest-ask-same', id: $request->id, unpaid: (int) round($e->unpaid), table: $e->tableName);
 
             return;
         } catch (\Exception $e) {
@@ -269,6 +271,7 @@ new class extends Component {
 @endphp
 
 <div wire:poll.5s class="mb-6"
+    x-on:guest-ask-same.window="same = null; pinFor = null; askSame = $event.detail"
     x-data="{
         sound: false,
         lastChime: 0,
@@ -301,7 +304,7 @@ new class extends Component {
         open(id, mode) { this.pinFor = id; this.mode = mode; this.pin = ''; this.reason = ''; },
         accept(id, unpaid, table) {
             this.same = null;
-            if (unpaid) { this.askSame = { id, unpaid, table }; return; }
+            if (unpaid !== null && unpaid !== undefined) { this.askSame = { id, unpaid, table }; return; }
             this.open(id, 'accept');
         },
         answer(same) { const id = this.askSame.id; this.askSame = null; this.same = same; this.open(id, 'accept'); },
@@ -456,7 +459,7 @@ new class extends Component {
     <div x-show="askSame" x-cloak class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" @click.self="askSame = null">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm text-center">
             <h3 class="text-xl font-bold text-gray-900" x-text="askSame ? askSame.table + ' already has ₦' + Number(askSame.unpaid).toLocaleString() + ' unpaid. Same guests?' : ''"></h3>
-            <p class="text-sm text-gray-500 mt-2">Yes adds it to these guests' bill. No keeps it separate, to be settled on its own.</p>
+            <p class="text-sm text-gray-500 mt-2">Yes adds it to these guests' bill. No keeps it separate, to be settled on its own. Then enter your PIN.</p>
             <button type="button" @click="answer(true)" class="mt-4 w-full min-h-[64px] rounded-xl bg-emerald-600 text-white text-lg font-bold">Yes, same guests</button>
             <button type="button" @click="answer(false)" class="mt-3 w-full min-h-[64px] rounded-xl bg-gray-800 text-white text-lg font-bold">No, different</button>
         </div>

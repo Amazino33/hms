@@ -218,6 +218,23 @@ it('does not ask "Same guests?" when the older orders owe nothing (₦0)', funct
     expect((new GuestRequestService)->confirm($request, $f['emeka'])->status)->toBe('confirmed');
 });
 
+it('pops the "Same guests?" question up on the kiosk instead of a toast, then accepts with the answer', function () {
+    $f = gbFixture();
+    gbOrder($f['t5'], 'served', [['Old Gin', 1, 7000]], null, now()->subHour());
+    $request = gbSubmit($f);
+
+    Livewire::test('guest-orders-strip')
+        ->call('accept', $request->id, '4826')
+        ->assertDispatched('guest-ask-same', id: $request->id, unpaid: 7000, table: 'Table 5')
+        ->assertNotNotified();
+    expect($request->fresh()->status)->toBe('pending');
+
+    Livewire::test('guest-orders-strip')
+        ->call('accept', $request->id, '4826', true)
+        ->assertNotified("{$request->ref} accepted");
+    expect($request->fresh()->status)->toBe('confirmed');
+});
+
 it('computes Remaining as unpaid minus open claims, never below zero', function () {
     $f = gbFixture();
     $session = gbServedBill($f);
@@ -555,7 +572,7 @@ it('shows claim cards on the waiter strip and asks Same guests before the PIN', 
     gbOrder($f['t3'], 'served', [['Old Gin', 1, 7000]], null, now()->subHour());
     Livewire::test('guest-orders-strip')
         ->call('accept', $t3Request->id, '5937')
-        ->assertNotified('Same guests?');
+        ->assertDispatched('guest-ask-same', id: $t3Request->id, unpaid: 7000, table: 'Table 3');
     expect($t3Request->fresh()->status)->toBe('pending');
     Livewire::test('guest-orders-strip')->call('accept', $t3Request->id, '5937', true)->assertNotified("{$t3Request->ref} accepted");
 });
