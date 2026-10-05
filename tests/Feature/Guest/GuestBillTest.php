@@ -207,6 +207,17 @@ it('asks "Same guests?" on the first acceptance when older unpaid orders exist (
     expect((new GuestRequestService)->confirm($later, $f['emeka'])->status)->toBe('confirmed');
 })->with(['yes' => true, 'no' => false]);
 
+it('does not ask "Same guests?" when the older orders owe nothing (₦0)', function () {
+    $f = gbFixture();
+    $paid = gbOrder($f['t5'], 'served', [['Old Gin', 1, 7000]], null, now()->subHour());
+    $paid->update(['amount_paid' => 7000]);
+    gbOrder($f['t5'], 'served', [['Comp Water', 1, 0]], null, now()->subHour());
+    $request = gbSubmit($f);
+
+    expect(GuestRequestService::earlierUnpaid($request->session))->toBeNull();
+    expect((new GuestRequestService)->confirm($request, $f['emeka'])->status)->toBe('confirmed');
+});
+
 it('computes Remaining as unpaid minus open claims, never below zero', function () {
     $f = gbFixture();
     $session = gbServedBill($f);

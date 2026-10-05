@@ -255,14 +255,18 @@ class GuestRequestService
             ->where('created_at', '<', $session->opened_at)
             ->whereIn('status', GuestBillService::UNPAID)
             ->where(fn ($q) => $q->where('is_return', false)->orWhereNull('is_return'))
-            ->get();
+            ->get()
+            // Only orders that still owe money. A "served" order that was
+            // paid in full (or came to ₦0) is not unpaid — asking about it
+            // left the kiosk unable to accept the table at all.
+            ->filter(fn ($o) => (float) $o->total_amount - (float) $o->amount_paid > 0);
 
         if ($orders->isEmpty()) {
             return null;
         }
 
         return [
-            'total' => round($orders->sum(fn ($o) => max(0, (float) $o->total_amount - (float) $o->amount_paid)), 2),
+            'total' => round($orders->sum(fn ($o) => (float) $o->total_amount - (float) $o->amount_paid), 2),
             'oldest' => $orders->min('created_at'),
         ];
     }
