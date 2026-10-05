@@ -127,9 +127,10 @@ new class extends Component {
         if (!$table)
             return;
 
-        // Directly query the active order to ensure accurate, live authorization
+        // Directly query the active order to ensure accurate, live authorization.
+        // A leftover ₦0 or settled order no longer locks the table.
         $activeOrder = \App\Models\Order::where('table_id', $value)
-            ->whereIn('status', ['pending', 'preparing', 'ready', 'served'])
+            ->occupyingTable()
             ->latest()
             ->first();
 

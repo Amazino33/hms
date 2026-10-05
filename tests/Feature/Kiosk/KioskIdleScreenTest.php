@@ -84,13 +84,53 @@ it('shows the name of whoever is handling an occupied table on the table grid', 
         'user_id' => $waiter->id,
         'status' => 'pending',
         'destination' => 'kitchen',
-        'total_amount' => 0,
+        'total_amount' => 1500,
     ]);
 
     $this->withUnencryptedCookie(EnsureValidKioskDevice::COOKIE_NAME, $token)
         ->get('/kiosk')
         ->assertStatus(200)
         ->assertSee('Sifon');
+});
+
+/**
+ * Real production report: tables nobody was sitting at showed "Occupied"
+ * (and a waiter's name) — from a stored status flag left behind, and from
+ * leftover orders worth ₦0 or already settled. Occupied now comes from
+ * live orders only.
+ */
+it('shows a table as Available when only a stale flag or leftover ₦0 / settled orders remain', function () {
+    ['token' => $token] = registerKioskAndGetToken();
+    $waiter = User::factory()->create(['name' => 'Peace Samuel']);
+    $order = fn (TableModel $table, string $status, float $total, float $paid = 0) => \App\Models\Order::create([
+        'order_number' => 'ORD-'.uniqid(), 'table_id' => $table->id, 'user_id' => $waiter->id,
+        'status' => $status, 'destination' => 'bar', 'total_amount' => $total, 'amount_paid' => $paid,
+    ]);
+
+    $flagOnly = TableModel::create(['name' => 'Table 2', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    $zero = TableModel::create(['name' => 'Table 10', 'capacity' => 4, 'status' => 'occupied', 'location' => 'Main']);
+    $order($zero, 'served', 0);
+    $order($zero, 'pending', 0);
+    $settled = TableModel::create(['name' => 'Table 13', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);
+    $order($settled, 'served', 3000, 3000);
+    $owing = TableModel::create(['name' => 'Table 24', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);
+    $order($owing, 'served', 3000, 1000);
+    $cooking = TableModel::create(['name' => 'Table 30', 'capacity' => 4, 'status' => 'available', 'location' => 'Main']);
+    $order($cooking, 'preparing', 2500, 2500);
+    $reserved = TableModel::create(['name' => 'Table 40', 'capacity' => 4, 'status' => 'reserved', 'location' => 'Main']);
+
+    $tables = TableModel::with('latestActiveOrder.user')->get()->keyBy('name');
+    expect($tables['Table 2']->displayStatus())->toBe('available')
+        ->and($tables['Table 10']->displayStatus())->toBe('available')
+        ->and($tables['Table 13']->displayStatus())->toBe('available')
+        ->and($tables['Table 24']->displayStatus())->toBe('occupied')
+        ->and($tables['Table 30']->displayStatus())->toBe('occupied')
+        ->and($tables['Table 40']->displayStatus())->toBe('reserved')
+        ->and($tables['Table 13']->latestActiveOrder)->toBeNull()
+        ->and($tables['Table 24']->latestActiveOrder->user->name)->toBe('Peace Samuel');
+
+    $html = $this->withUnencryptedCookie(EnsureValidKioskDevice::COOKIE_NAME, $token)->get('/kiosk')->assertOk()->getContent();
+    expect(substr_count($html, 'Peace Samuel'))->toBe(2); // Tables 24 and 30 only
 });
 
 it('does not show a name on an available table with no active order', function () {

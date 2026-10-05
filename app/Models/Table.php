@@ -17,15 +17,26 @@ class Table extends Model
     }
 
     /**
-     * Whoever most recently placed a still-active (not yet paid/cancelled)
-     * order at this table — used to show "who's handling this table" on
-     * the kiosk/staff table grid without a separate active-shift lookup,
-     * since the order itself already carries the attributed waiter.
+     * The latest order that really holds this table (Order::occupyingTable)
+     * — used to show "Occupied" and who's handling the table on the kiosk
+     * grid, since the order itself already carries the attributed waiter.
      */
     public function latestActiveOrder()
     {
-        return $this->hasOne(Order::class)
-            ->whereNotIn('status', ['paid', 'cancelled'])
-            ->latestOfMany();
+        return $this->hasOne(Order::class)->ofMany(['id' => 'max'], fn ($q) => $q->occupyingTable());
+    }
+
+    /**
+     * What the table grid shows: Occupied from live orders (never from the
+     * stored flag alone, which could be left behind), otherwise Reserved /
+     * Cleaning as set by staff, otherwise Available.
+     */
+    public function displayStatus(): string
+    {
+        if ($this->latestActiveOrder) {
+            return 'occupied';
+        }
+
+        return in_array($this->status, ['reserved', 'cleaning'], true) ? $this->status : 'available';
     }
 }

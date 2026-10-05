@@ -179,9 +179,9 @@ new class extends Component {
             <div class="relative" x-data="{ showMenu: false }">
                 <button wire:click="selectTable({{ $table->id }}, '{{ $table->name }}')"
                     class="w-full aspect-square rounded-xl flex flex-col items-center justify-center font-bold text-lg
-                        {{ $table->status === 'available' ? 'bg-green-600 text-white' : 'bg-amber-600 text-white' }}">
+                        {{ $table->displayStatus() === 'available' ? 'bg-green-600 text-white' : 'bg-amber-600 text-white' }}">
                     {{ $table->name }}
-                    <span class="text-xs font-normal mt-1">{{ ucfirst($table->status) }}</span>
+                    <span class="text-xs font-normal mt-1">{{ ucfirst($table->displayStatus()) }}</span>
                     @if ($table->latestActiveOrder?->user)
                         <span class="text-[10px] font-normal opacity-80 mt-0.5">{{ $table->latestActiveOrder->user->name }}</span>
                     @endif

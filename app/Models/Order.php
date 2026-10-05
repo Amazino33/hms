@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
@@ -13,6 +14,9 @@ class Order extends Model
     use LogsActivity;
 
     protected $guarded = [];
+
+    /** Still being made or carried to the table. */
+    public const IN_PROGRESS = ['pending', 'preparing', 'ready'];
 
     protected $casts = [
         'destination' => 'string',
@@ -126,5 +130,21 @@ class Order extends Model
         }
 
         return 'Takeaway';
+    }
+
+    /**
+     * Orders that mean someone is really at the table: food or drinks
+     * still on their way, or a served bill that still owes money. A
+     * leftover "served" order worth ₦0 (every item removed) or already
+     * settled does not hold the table — it used to keep tables showing
+     * "Occupied" on the kiosk long after the guests had gone.
+     */
+    public function scopeOccupyingTable(Builder $query): Builder
+    {
+        return $query
+            ->where(fn (Builder $q) => $q->where('is_return', false)->orWhereNull('is_return'))
+            ->where(fn (Builder $q) => $q
+                ->where(fn (Builder $q) => $q->whereIn('status', self::IN_PROGRESS)->where('total_amount', '>', 0))
+                ->orWhere(fn (Builder $q) => $q->where('status', 'served')->whereColumn('amount_paid', '<', 'total_amount')));
     }
 }
