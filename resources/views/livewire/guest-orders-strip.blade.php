@@ -227,7 +227,7 @@ new class extends Component {
         });
 
         // Phase 4: claims, calls, open guest tables.
-        $claims = GuestPaymentClaim::with(['session.table', 'transferAccount'])
+        $claims = GuestPaymentClaim::with(['session.table', 'session.assignedWaiter', 'transferAccount'])
             ->open()
             ->whereHas('session', fn ($q) => $q->whereNull('closed_at'))
             ->oldest('id')
@@ -351,6 +351,9 @@ new class extends Component {
             @foreach ($calls as $call)
                 @php $mine = $call->session?->assigned_waiter_user_id && $call->session->assigned_waiter_user_id === $ownerId; @endphp
                 <div wire:key="call-{{ $call->id }}" class="rounded-2xl p-4 bg-sky-900/70 border-2 {{ $mine ? 'border-yellow-300' : 'border-sky-400' }} text-white">
+                    @if ($call->session?->assignedWaiter)
+                        <div class="text-lg font-black text-yellow-300 mb-1">Dear {{ \App\Services\Guest\GuestShifts::firstName($call->session->assignedWaiter) }},</div>
+                    @endif
                     <div class="flex items-start justify-between gap-2">
                         <div class="text-xl font-black">{{ $call->table?->name }} · {{ $call->label() }}</div>
                         <span class="text-xs font-bold bg-sky-600 rounded-full px-2 py-1">{{ $call->created_at->diffForHumans(now(), true) }}</span>
@@ -364,6 +367,9 @@ new class extends Component {
 
             @foreach ($claims as $claim)
                 <div wire:key="claim-{{ $claim->id }}" class="rounded-2xl p-4 bg-purple-900/70 border-2 border-purple-400 text-white">
+                    @if ($claim->session?->assignedWaiter)
+                        <div class="text-lg font-black text-yellow-300 mb-1">Dear {{ \App\Services\Guest\GuestShifts::firstName($claim->session->assignedWaiter) }},</div>
+                    @endif
                     <div class="text-lg font-bold">
                         {{ $claim->session?->table?->name }} · {{ $claim->payer_name }} says they paid ₦{{ number_format((float) $claim->amount) }} by transfer{{ $claim->transferAccount ? ' → '.$claim->transferAccount->bank_name : '' }}
                     </div>
@@ -446,7 +452,7 @@ new class extends Component {
                 @foreach ($sessions as $session)
                     <div wire:key="ses-{{ $session->id }}" class="flex items-center gap-2 rounded-xl bg-gray-800 border border-gray-700 pl-3 pr-1 py-1 text-white">
                         <span class="font-bold">{{ $session->getRelationValue('table')?->name }}</span>
-                        <span class="text-xs text-gray-400">{{ $session->assignedWaiter ? \App\Services\Guest\GuestShifts::firstName($session->assignedWaiter) : 'no waiter yet' }}</span>
+                        <span class="text-base {{ $session->assignedWaiter ? 'font-bold text-yellow-300' : 'text-gray-400' }}">{{ $session->assignedWaiter ? \App\Services\Guest\GuestShifts::firstName($session->assignedWaiter) : 'no waiter yet' }}</span>
                         <button type="button" @click="startMove({{ $session->id }})" class="min-h-[44px] px-3 rounded-lg bg-gray-700 text-sm font-semibold">Move table</button>
                         <button type="button" @click="open({{ $session->id }}, 'close')" class="min-h-[44px] px-3 rounded-lg bg-gray-700 text-sm font-semibold">Close table</button>
                     </div>

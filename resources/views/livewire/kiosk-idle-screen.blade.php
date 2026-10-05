@@ -183,7 +183,7 @@ new class extends Component {
                     {{ $table->name }}
                     <span class="text-xs font-normal mt-1">{{ ucfirst($table->displayStatus()) }}</span>
                     @if ($table->latestActiveOrder?->user)
-                        <span class="text-[10px] font-normal opacity-80 mt-0.5">{{ $table->latestActiveOrder->user->name }}</span>
+                        <span class="text-sm font-bold mt-1">{{ $table->latestActiveOrder->user->name }}</span>
                     @endif
                 </button>
 
