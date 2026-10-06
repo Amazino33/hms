@@ -88,6 +88,7 @@ Alpine.data('guestMenu', () => ({
     againDismissed: false,
     closedDismissed: false,
     now: Date.now(),
+    dark: document.documentElement.getAttribute('data-theme') === 'dark',
 
     init() {
         this.unavailable = new Set(this.boot.unavailable);
@@ -126,6 +127,15 @@ Alpine.data('guestMenu', () => ({
         this.againDismissed = store.get(this.againKey()) === (this.boot.last_visit?.summary || '');
         // One clock for the countdown, the status strip timeout and the nudge.
         setInterval(() => { this.now = Date.now(); }, 30000);
+    },
+
+    // D39: light by default; the guest's switch is remembered on this phone.
+    toggleTheme() {
+        this.dark = !this.dark;
+        const root = document.documentElement;
+        if (this.dark) root.setAttribute('data-theme', 'dark'); else root.removeAttribute('data-theme');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', this.dark ? '#121214' : '#FAF7F2');
+        store.set('selum_theme', this.dark ? 'dark' : 'light');
     },
 
     // Sticky section titles sit just under the sticky top bar (D34).

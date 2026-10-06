@@ -22,7 +22,7 @@
     ]
   },
   "resources/css/guest.css": {
-    "file": "assets/guest-D5lNP2dF.css",
+    "file": "assets/guest-xccdCxST.css",
     "src": "resources/css/guest.css",
     "isEntry": true,
     "name": "guest",
@@ -45,7 +45,7 @@
     "isEntry": true
   },
   "resources/js/guest.js": {
-    "file": "assets/guest-BsB8xc8f.js",
+    "file": "assets/guest-ysuSVRJL.js",
     "name": "guest",
     "src": "resources/js/guest.js",
     "isEntry": true

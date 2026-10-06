@@ -248,3 +248,6 @@ Items without a photo use a slim row (no tile). Items with a photo show a 64 px 
 
 ### D38 — Selling features (honest only)
 "Goes well with" pairings, cart "Quick add-ons", badges (Chef's special, Bestseller, New, Spicy) and a "We recommend" row are all set by the owner in admin. "Another round?" appears once per round, N minutes after drinks were marked ready. "Order again" appears for returning devices. The specials countdown shows only a real end time. Each cart line records how it was added (`added_via`), so the owner can later measure what works.
+
+### D39 — Light theme by default, with a switch (supersedes D30's dark-only ground)
+The guest menu is light by default: warm cream ground, near-black text, the same deep red as the only accent, amber (darker on light) for errors. A sun/moon button in the top bar lets the guest switch to the D30 dark theme; the choice is remembered on that phone and applied before the page first paints. Everything else in D30 stands: red never signals an error, the crest sits on a white medallion, the venue name comes from Company Settings.

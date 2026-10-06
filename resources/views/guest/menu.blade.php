@@ -14,7 +14,16 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#121214">
+    <meta name="theme-color" content="#FAF7F2">
+    {{-- D39: light by default; the guest's own choice, applied before first paint. --}}
+    <script>
+    try {
+        if (localStorage.getItem('selum_theme') === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#121214');
+        }
+    } catch (e) { /* private mode: light */ }
+    </script>
     <title>{{ $boot['place'] ? $boot['place'].' · ' : '' }}{{ $venue }}</title>
     @if ($splashLogo)
         <link rel="preload" as="image" href="{{ $splashLogo }}">
@@ -85,6 +94,10 @@
                     @endif
                 </span>
                 <span class="venue">{{ $venue }}</span>
+                <button type="button" class="theme-btn" @click="toggleTheme()" :aria-label="dark ? 'Switch to light mode' : 'Switch to dark mode'">
+                    <svg class="moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+                    <svg class="sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                </button>
                 @if ($boot['place'])
                     <span class="place-wrap">
                         <span class="place-pill" :class="{ glow: hints }">{{ $boot['place'] }}</span>
