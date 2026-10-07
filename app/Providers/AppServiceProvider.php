@@ -3,33 +3,33 @@
 namespace App\Providers;
 
 use App\Models\Order;
+use App\Models\PagePermission;
 use App\Models\StaffDebt;
 use App\Models\User;
-use App\Models\PagePermission;
 use App\Observers\OrderObserver;
+use App\Observers\PagePermissionObserver;
+use App\Observers\PermissionObserver;
+use App\Observers\RoleObserver;
 use App\Observers\StaffDebtObserver;
 use App\Observers\UserObserver;
-use App\Observers\RoleObserver;
-use App\Observers\PermissionObserver;
-use App\Observers\PagePermissionObserver;
+use App\Services\SidebarCache;
 use App\Support\VenueTime;
 use Carbon\CarbonImmutable;
 use Filament\Support\Facades\FilamentTimezone;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
-use App\Services\SidebarCache;
-use Spatie\Permission\Events\RoleAttached;
-use Spatie\Permission\Events\RoleDetached;
 use Spatie\Permission\Events\PermissionAttached;
 use Spatie\Permission\Events\PermissionDetached;
-use Spatie\Permission\Models\Role;
+use Spatie\Permission\Events\RoleAttached;
+use Spatie\Permission\Events\RoleDetached;
 use Spatie\Permission\Models\Permission;
-use Illuminate\Auth\Events\Failed;
-use Illuminate\Auth\Events\Login;
-use Illuminate\Auth\Events\Logout;
+use Spatie\Permission\Models\Role;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -69,7 +69,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             $verb = $event instanceof RoleAttached ? 'attached to' : 'detached from';
-            $subject = $event->model instanceof User ? ($event->model->name ?? $event->model->email) : get_class($event->model) . '#' . $event->model->id;
+            $subject = $event->model instanceof User ? ($event->model->name ?? $event->model->email) : get_class($event->model).'#'.$event->model->id;
 
             activity('role')
                 ->performedOn($event->model)
@@ -83,7 +83,7 @@ class AppServiceProvider extends ServiceProvider
             // Role (e.g. $role->givePermissionTo(...)) but Spatie allows giving
             // permissions directly to a User too — handle both.
             if ($event->model instanceof Role) {
-                $event->model->users()->pluck('id')->each(fn($id) => SidebarCache::clearForUser($id));
+                $event->model->users()->pluck('id')->each(fn ($id) => SidebarCache::clearForUser($id));
             } elseif ($event->model instanceof User) {
                 SidebarCache::clearForUser($event->model->id);
             } else {
@@ -92,8 +92,8 @@ class AppServiceProvider extends ServiceProvider
 
             $verb = $event instanceof PermissionAttached ? 'attached to' : 'detached from';
             $subject = $event->model instanceof Role
-                ? 'role ' . $event->model->name
-                : (($event->model->name ?? $event->model->email) ?? get_class($event->model) . '#' . $event->model->id);
+                ? 'role '.$event->model->name
+                : (($event->model->name ?? $event->model->email) ?? get_class($event->model).'#'.$event->model->id);
 
             activity('permission')
                 ->performedOn($event->model)
@@ -107,21 +107,21 @@ class AppServiceProvider extends ServiceProvider
             activity('auth')
                 ->causedBy($event->user)
                 ->withProperties(['guard' => $event->guard])
-                ->log('Login: ' . ($event->user->email ?? $event->user->getAuthIdentifier()));
+                ->log('Login: '.($event->user->email ?? $event->user->getAuthIdentifier()));
         });
 
         Event::listen(Failed::class, function (Failed $event) {
             activity('auth')
                 ->causedBy($event->user)
                 ->withProperties(['guard' => $event->guard, 'email' => $event->credentials['email'] ?? null])
-                ->log('Failed login attempt' . (isset($event->credentials['email']) ? ' for ' . $event->credentials['email'] : ''));
+                ->log('Failed login attempt'.(isset($event->credentials['email']) ? ' for '.$event->credentials['email'] : ''));
         });
 
         Event::listen(Logout::class, function (Logout $event) {
             activity('auth')
                 ->causedBy($event->user)
                 ->withProperties(['guard' => $event->guard])
-                ->log('Logout: ' . ($event->user?->email ?? 'unknown'));
+                ->log('Logout: '.($event->user?->email ?? 'unknown'));
         });
     }
 
@@ -258,6 +258,13 @@ class AppServiceProvider extends ServiceProvider
         // that never became orders.
         Order::observe(\App\Observers\GuestRoomOrderObserver::class);
         \App\Models\Booking::observe(\App\Observers\GuestStayObserver::class);
+
+        // Mirrors the terminal's own name store into attendance_device_users
+        // one way. ZKTecoController and hms:set-machine-name both write
+        // biometric_enrollments through Eloquent, so this fires for both;
+        // attendance:reconcile-device-users is the hourly net under anything
+        // that does not.
+        \App\Models\BiometricEnrollment::observe(\App\Observers\BiometricEnrollmentObserver::class);
 
         // Spatie models
         Role::observe(RoleObserver::class);

@@ -1,9 +1,9 @@
 <?php
 
+use App\Jobs\CronQueueTestJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
-use App\Jobs\CronQueueTestJob;
 
 // Prune activity log entries older than config('activitylog.clean_after_days')
 // (default 365 days / ~12 months). Retention-only pruning — there is no
@@ -34,6 +34,14 @@ Schedule::command('guest:expire-stale')->everyTenMinutes()->withoutOverlapping()
 // open at once (Phase 3) — one /admin alert per occurrence.
 Schedule::command('guest:bar-monitor')->everyMinute()->withoutOverlapping();
 
+// Safety net under BiometricEnrollmentObserver: an observer only fires for
+// Eloquent writes, so anything that reaches biometric_enrollments by query
+// builder or raw SQL would otherwise never reach attendance_device_users —
+// and the symptom is a badge that never shows on the unmatched page, so
+// nobody links it and its punches stay nameless. Idempotent, so hourly costs
+// nothing. Same cron caveat as above.
+Schedule::command('attendance:reconcile-device-users')->hourly()->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
@@ -58,7 +66,7 @@ Artisan::command('queue:status', function () {
     $totalJobs = \DB::table('jobs')->count();
     $failedJobs = \DB::table('failed_jobs')->count();
 
-    $this->info("Queue Status:");
+    $this->info('Queue Status:');
     $this->line("  Total pending jobs: {$totalJobs}");
     $this->line("  Failed jobs: {$failedJobs}");
 
@@ -67,17 +75,17 @@ Artisan::command('queue:status', function () {
         $this->line("  Oldest job created: {$oldestJob->created_at}");
 
         $this->warn("You have {$totalJobs} pending jobs. This suggests your queue worker is not running.");
-        $this->comment("Run: php artisan queue:work --once");
-        $this->comment("Or start a worker: php artisan queue:work");
+        $this->comment('Run: php artisan queue:work --once');
+        $this->comment('Or start a worker: php artisan queue:work');
     } else {
-        $this->info("✅ Queue is clean - no pending jobs!");
+        $this->info('✅ Queue is clean - no pending jobs!');
     }
 
     return \Illuminate\Console\Command::SUCCESS;
 })->purpose('Check queue status and pending jobs');
 
 Artisan::command('queue:clear', function () {
-    if (!$this->confirm('Are you sure you want to clear all pending jobs? This cannot be undone!')) {
+    if (! $this->confirm('Are you sure you want to clear all pending jobs? This cannot be undone!')) {
         return;
     }
 

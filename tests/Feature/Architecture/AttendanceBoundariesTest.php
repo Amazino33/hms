@@ -51,7 +51,6 @@ it('never reaches into debts, payroll, stock or orders', function () {
         'App\\Models\\Order',
         'OrderPayment',
         'OrderItem',
-        'SalaryDeduction',
     ];
 
     $violations = [];
@@ -61,6 +60,33 @@ it('never reaches into debts, payroll, stock or orders', function () {
             if (str_contains($contents, $needle)) {
                 $violations[] = basename($path).' references '.$needle;
             }
+        }
+    }
+
+    expect($violations)->toBe([]);
+});
+
+/**
+ * Salary deductions are READ by DeviceLinkService::void(), on purpose: voiding
+ * a mistaken link surfaces any legacy late fines over the affected dates so a
+ * human can decide what to do about them.
+ *
+ * Reading is the whole permission. Reversing somebody's money as a side effect
+ * of a clerical correction is a decision this module must never make on its
+ * own, so writes are what the boundary forbids — not the mention.
+ */
+it('reads salary deductions but never writes them', function () {
+    $violations = [];
+
+    foreach (attendanceSourceFiles() as $path => $contents) {
+        // Model-level access could write through any of a dozen methods, so
+        // the module goes through the query builder and reads only.
+        if (str_contains($contents, 'SalaryDeduction::')) {
+            $violations[] = basename($path).' uses the SalaryDeduction model directly';
+        }
+
+        if (preg_match('/salary_deductions\'\)[^;]*->(update|insert|delete|truncate|upsert)\(/', $contents, $m)) {
+            $violations[] = basename($path).' calls '.$m[1].'() on salary_deductions';
         }
     }
 
