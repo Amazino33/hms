@@ -102,12 +102,41 @@ class UserResource extends Resource
                     ->maxLength(255)
                     ->unique(ignoreRecord: true),
 
+                // Cleaners, laundry and the like are on the fingerprint
+                // terminal but have no business in the app. Choosing
+                // "Attendance only" hides the credential fields entirely and
+                // assigns the attendance_only role, which grants nothing.
+                \Filament\Forms\Components\ToggleButtons::make('staff_type')
+                    ->label('Staff type')
+                    ->options([
+                        'app' => 'App user',
+                        'attendance_only' => 'Attendance only',
+                    ])
+                    ->icons([
+                        'app' => 'heroicon-o-computer-desktop',
+                        'attendance_only' => 'heroicon-o-finger-print',
+                    ])
+                    ->inline()
+                    ->default('app')
+                    ->live()
+                    ->dehydrated(false)
+                    ->helperText(fn ($state) => $state === 'attendance_only'
+                        ? 'No password, no PIN, no access to any screen. Their attendance is still tracked and they can still be paid.'
+                        : 'Signs in to the admin panel or the kiosk.')
+                    ->afterStateHydrated(function ($component, ?User $record) {
+                        $component->state(
+                            $record?->hasRole(User::ATTENDANCE_ONLY_ROLE) ? 'attendance_only' : 'app'
+                        );
+                    }),
+
                 // Password Field (Smart handling)
                 TextInput::make('password')
                     ->password()
                     ->dehydrateStateUsing(fn ($state) => Hash::make($state))
                     ->dehydrated(fn ($state) => filled($state)) // Only save if user typed something
-                    ->required(fn (string $operation): bool => $operation === 'create'), // Required only on create
+                    ->visible(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('staff_type') !== 'attendance_only')
+                    ->required(fn (string $operation, \Filament\Schemas\Components\Utilities\Get $get): bool => $operation === 'create'
+                        && $get('staff_type') !== 'attendance_only'),
 
                 Tabs::make('Staff Details')
                     ->tabs([
@@ -119,24 +148,49 @@ class UserResource extends Resource
                                     TextInput::make('staff_code')
                                         ->placeholder('e.g. LH-001')
                                         ->unique(ignoreRecord: true),
+                                    // attendance_only is deliberately absent
+                                    // from this list: it is exclusive, and
+                                    // assigning it alongside another role
+                                    // would hand back exactly the access it
+                                    // exists to withhold. The staff-type
+                                    // toggle is the only way in or out of it.
                                     Select::make('roles')
-                                        ->relationship('roles', 'name')
+                                        ->relationship(
+                                            'roles',
+                                            'name',
+                                            fn ($query) => $query->where('name', '!=', User::ATTENDANCE_ONLY_ROLE),
+                                        )
                                         ->multiple()
-                                        ->preload(),
+                                        ->preload()
+                                        ->visible(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('staff_type') !== 'attendance_only')
+                                        ->required(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('staff_type') !== 'attendance_only'),
                                     Select::make('primary_location')
                                         ->options([
                                             'main_bar' => 'Main Bar',
                                             'restaurant' => 'Restaurant',
                                             'kitchen' => 'Kitchen',
                                         ]),
+                                    \Filament\Forms\Components\TextInput::make('job_title')
+                                        ->label('Job title')
+                                        ->placeholder('Cleaner, Laundry, Waiter'),
+
+                                    // Read-only on purpose. DeviceLinkService
+                                    // is the only writer, so that every
+                                    // pairing carries a dated link row with a
+                                    // reason behind it — typing an ID here
+                                    // used to leave no history at all.
                                     \Filament\Forms\Components\TextInput::make('biometric_id')
                                         ->label('Biometric Machine ID')
-                                        ->numeric()
-                                        ->placeholder('e.g. 1'),
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->placeholder('Not linked')
+                                        ->helperText('Linked under Attendance → Device Users.'),
+
                                     \Filament\Forms\Components\TimePicker::make('shift_start_time')
-                                        ->label('Expected Resumption Time')
+                                        ->label('Legacy late-fine start time')
                                         ->seconds(false)
-                                        ->timezone('UTC'),
+                                        ->timezone('UTC')
+                                        ->helperText('Used by the old automatic ₦500 late fine. Replaced by Schedule in Phase 2 — still live until then.'),
                                 ]),
                             ]),
 
@@ -145,8 +199,17 @@ class UserResource extends Resource
                             ->icon('heroicon-m-banknotes')
                             ->schema([
                                 Grid::make(2)->schema([
+                                    // Defaulted rather than left blank: the
+                                    // column is NOT NULL with a database
+                                    // default of 0, and an untouched field
+                                    // posts an explicit null that overrides
+                                    // it — which fails the insert outright
+                                    // for anyone created without opening this
+                                    // tab, such as attendance-only staff.
                                     TextInput::make('base_salary')
                                         ->numeric()
+                                        ->default(0)
+                                        ->dehydrateStateUsing(fn ($state) => $state ?? 0)
                                         ->prefix('₦'),
                                     TextInput::make('total_commission')
                                         ->label('Total Commission Earned')
@@ -283,7 +346,7 @@ class UserResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            \App\Filament\Resources\Users\RelationManagers\ScheduleRelationManager::class,
         ];
     }
 
