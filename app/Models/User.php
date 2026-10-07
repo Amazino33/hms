@@ -4,25 +4,24 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
+use App\Services\SettingsService;
+use App\Services\ShiftAccountingService;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
-use App\Models\Order;
-use App\Services\ShiftAccountingService;
-use App\Services\SettingsService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
-use Spatie\Permission\Traits\HasRoles;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles, LogsActivity;
+    use HasFactory, HasRoles, LogsActivity, Notifiable, TwoFactorAuthenticatable;
 
     /**
      * Never log credentials or secrets, even hashed — only the fields an
@@ -61,6 +60,30 @@ class User extends Authenticatable implements FilamentUser
         'next_of_kin_phone',
         'biometric_id',
         'shift_start_time',
+        'job_title',
+    ];
+
+    /**
+     * The role for staff who exist on the fingerprint terminal but have no
+     * business in the app at all — cleaners, laundry, and anyone else whose
+     * only interaction with Selum is punching in.
+     *
+     * It is exclusive: holding it means holding no other role. That is
+     * enforced in AttendanceOnlyRoleService rather than left to the form,
+     * because the whole security value of the role is that it grants nothing,
+     * and a second role granted beside it would quietly hand over a panel.
+     */
+    public const ATTENDANCE_ONLY_ROLE = 'attendance_only';
+
+    /**
+     * The database default is false, but a model instance created without the
+     * key reads NULL until it is refreshed. Everything that asks "is this
+     * person exempt?" would get null — falsy, so not dangerous here, but it
+     * makes an exemption check depend on whether the model happens to have
+     * been reloaded.
+     */
+    protected $attributes = [
+        'attendance_exempt' => false,
     ];
 
     /**
@@ -87,6 +110,11 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            // Deliberately absent from $fillable: only a super admin may
+            // change this, through AttendanceExemptionService, which logs who
+            // did it. Mass assignment would make it settable from any form
+            // that happens to accept user input.
+            'attendance_exempt' => 'boolean',
         ];
     }
 
@@ -98,7 +126,7 @@ class User extends Authenticatable implements FilamentUser
         return Str::of($this->name)
             ->explode(' ')
             ->take(2)
-            ->map(fn($word) => Str::substr($word, 0, 1))
+            ->map(fn ($word) => Str::substr($word, 0, 1))
             ->implode('');
     }
 
@@ -266,7 +294,7 @@ class User extends Authenticatable implements FilamentUser
                 );
             }
 
-            $outstanding = (new ShiftAccountingService())->outstandingOrders($shift);
+            $outstanding = (new ShiftAccountingService)->outstandingOrders($shift);
 
             if ($outstanding->isNotEmpty()) {
                 $count = $outstanding->count();
@@ -275,7 +303,7 @@ class User extends Authenticatable implements FilamentUser
                 );
             }
 
-            $pendingReturns = (new ShiftAccountingService())->pendingReturns($shift);
+            $pendingReturns = (new ShiftAccountingService)->pendingReturns($shift);
 
             if ($pendingReturns->isNotEmpty()) {
                 $count = $pendingReturns->count();
@@ -301,6 +329,7 @@ class User extends Authenticatable implements FilamentUser
                 'declared_pos' => (float) ($orders->paid_pos ?? 0),
             ]);
         }
+
         return $shift;
     }
 
@@ -344,11 +373,27 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(\App\Models\PayrollLine::class);
     }
 
+    /**
+     * Attendance shift assignments — what this person is scheduled to work.
+     */
+    public function attendanceShiftAssignments(): HasMany
+    {
+        return $this->hasMany(\App\Models\Attendance\AttendanceShiftAssignment::class);
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
         // Allow super admins unconditionally, on every panel.
         if ($this->hasRole('super_admin')) {
             return true;
+        }
+
+        // Attendance-only staff are on the fingerprint terminal and nowhere
+        // else. This must be checked before the "any role" grant below, which
+        // would otherwise let them in on the strength of holding this very
+        // role — a role that exists precisely to grant nothing.
+        if ($this->hasRole(self::ATTENDANCE_ONLY_ROLE)) {
+            return false;
         }
 
         // The CEO panel is a separate, read-only surface — only the ceo
