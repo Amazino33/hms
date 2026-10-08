@@ -2,10 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\CountBreakdownLine;
 use App\Models\CountSession;
 use App\Models\Shift;
 use App\Services\BartenderChefShiftService;
+use App\Services\CountBreakdownViewService;
 use App\Services\CountSessionService;
+use App\Services\CountVarianceNoteService;
 use App\Services\PermissionService;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -305,6 +308,59 @@ class CountSessionDetail extends Page
     protected function refreshSession(): void
     {
         unset($this->session);
+    }
+
+    /**
+     * A sealed count's figures are for the people who took part in it and
+     * for managers. Anyone else reaching this page by id (it's a plain
+     * ?session_id= link) sees that the count exists, not its numbers.
+     */
+    public function canViewResults(): bool
+    {
+        return $this->session !== null && CountBreakdownViewService::canView($this->session, auth()->user());
+    }
+
+    /**
+     * Built only when the count is sealed and the viewer may see it, and
+     * only ever called from the Blade view — never stored on a public
+     * property, so none of it is in the Livewire payload of an unsealed
+     * (blind) count.
+     */
+    public function breakdownPayload(): ?array
+    {
+        if (! $this->canViewResults()) {
+            return null;
+        }
+
+        return (new CountBreakdownViewService)->payload($this->session, CountBreakdownViewService::canAudit(), auth()->user());
+    }
+
+    /**
+     * @return array{note: array, can_note: bool}|null
+     */
+    public function addVarianceNote(int $lineId, string $body): ?array
+    {
+        $line = CountBreakdownLine::query()->where('count_session_id', $this->countSessionId)->find($lineId);
+
+        try {
+            if (! $line) {
+                throw new \Exception('That item is not on this count.');
+            }
+
+            $service = new CountVarianceNoteService;
+            $note = $service->add($line, auth()->user(), $body);
+
+            Notification::make()->title('Explanation saved')->success()->send();
+
+            return [
+                'note' => (new CountBreakdownViewService)->note($note),
+                'can_note' => $service->isOpenForNotes($line->fresh()),
+            ];
+        } catch (\Exception $e) {
+            Notification::make()->title('Could not save explanation')->body($e->getMessage())->danger()->persistent()->send();
+
+            return null;
+        }
     }
 
     /**

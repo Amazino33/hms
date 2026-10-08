@@ -893,6 +893,19 @@
                 </div>
             @endif
 
+            @if(! $this->canViewResults())
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center text-gray-600 dark:text-gray-300">
+                    This count is sealed. Its figures are only shown to the staff who took part in it and to managers.
+                </div>
+            @else
+            @include('filament.components.count-breakdown', [
+                'payload' => $this->breakdownPayload(),
+                'pdfUrl' => route('count-breakdown.pdf', $session->id),
+            ])
+
+            {{-- Staff get the summary above instead; managers keep this table
+                 too, for the per-item review outcomes and decisions. --}}
+            @if(! $session->breakdown || \App\Services\CountBreakdownViewService::canAudit())
             <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-4">
                 <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-4">
                     <div>
@@ -991,6 +1004,8 @@
                     </tbody>
                 </table>
             </div>
+            @endif
+            @endif
         @endif
 
         @if($session->status === 'cancelled')

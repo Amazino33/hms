@@ -804,6 +804,10 @@ class CountSessionService
                 $session->update(['notes' => trim($handoverNote)]);
             }
 
+            // Same transaction as the seal: a seal that rolls back leaves
+            // no breakdown behind, and a sealed count always has one.
+            app(CountBreakdownSnapshotService::class)->capture($session->fresh());
+
             (new BartenderChefShiftService)->completeHandoverBoundary($session->fresh());
 
             activity('count_session')
@@ -951,6 +955,8 @@ class CountSessionService
         return DB::transaction(function () use ($session, $user) {
             $session = $this->closeSessionAndReconcile($session, $user->id, trackOverages: true);
 
+            app(CountBreakdownSnapshotService::class)->capture($session);
+
             activity('count_session')
                 ->performedOn($session)
                 ->withProperties(['submitted_by' => $user->id, 'solo' => true])
@@ -1026,6 +1032,11 @@ class CountSessionService
                 'status' => 'pending_review',
                 'submitted_for_review_at' => now(),
             ]);
+
+            // Expected/variance freeze here on this path, so this is where
+            // the breakdown is frozen too. It stays hidden until the
+            // manager finalizes the session (status 'reviewed').
+            app(CountBreakdownSnapshotService::class)->capture($session->fresh());
 
             return $session->fresh();
         });

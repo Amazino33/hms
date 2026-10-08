@@ -87,6 +87,44 @@ class CountSession extends Model
         );
     }
 
+    /**
+     * The movement breakdown frozen when this count locked. Null for
+     * counts sealed before the breakdown existed, or not yet locked.
+     */
+    public function breakdown()
+    {
+        return $this->hasOne(CountBreakdown::class);
+    }
+
+    public function breakdownLines()
+    {
+        return $this->hasMany(CountBreakdownLine::class);
+    }
+
+    public function openOrdersAtHandover()
+    {
+        return $this->hasMany(CountOpenOrder::class);
+    }
+
+    /**
+     * Everyone who took part in this count: the two custodians, a
+     * witness, and whoever opened it (a solo count's counter).
+     */
+    public function participantIds(): array
+    {
+        return array_values(array_unique(array_filter([
+            $this->outgoing_user_id,
+            $this->incoming_user_id,
+            $this->witness_user_id,
+            $this->opened_by,
+        ])));
+    }
+
+    public function isParticipant(?int $userId): bool
+    {
+        return $userId !== null && in_array($userId, $this->participantIds(), true);
+    }
+
     public function isHandover(): bool
     {
         return in_array($this->type, ['bar_handover', 'kitchen_handover'], true);

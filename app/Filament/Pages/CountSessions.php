@@ -45,7 +45,11 @@ class CountSessions extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(CountSession::query()->with(['warehouse', 'openedBy', 'outgoingUser', 'incomingUser', 'items']))
+            ->query(CountSession::query()
+                ->with(['warehouse', 'openedBy', 'outgoingUser', 'incomingUser', 'items'])
+                ->withSum('breakdownLines as breakdown_sales', 'sales_amount')
+                ->withSum('breakdownLines as breakdown_variance_value', 'variance_value_selling')
+                ->withExists('breakdown'))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('type')
@@ -90,6 +94,19 @@ class CountSessions extends Page implements HasTable
                     ->label('Shortage ₦')
                     ->money('NGN')
                     ->placeholder('—'),
+                TextColumn::make('breakdown_sales')
+                    ->label('Sales ₦')
+                    ->state(fn (CountSession $record) => $record->breakdown_exists ? (float) $record->breakdown_sales : null)
+                    ->money('NGN')
+                    ->alignEnd()
+                    ->placeholder('—'),
+                TextColumn::make('breakdown_variance_value')
+                    ->label('Variance ₦')
+                    ->state(fn (CountSession $record) => $record->breakdown_exists ? (float) $record->breakdown_variance_value : null)
+                    ->money('NGN')
+                    ->alignEnd()
+                    ->color(fn ($state) => $state === null ? 'gray' : ((float) $state < 0 ? 'danger' : ((float) $state > 0 ? 'warning' : 'gray')))
+                    ->placeholder('—'),
                 TextColumn::make('unresolved')
                     ->label('Unresolved')
                     ->state(fn (CountSession $record) => $record->unresolvedDiscrepancyCount())
@@ -115,6 +132,21 @@ class CountSessions extends Page implements HasTable
                     ->relationship('outgoingUser', 'name')
                     ->searchable()
                     ->preload(),
+                SelectFilter::make('staff')
+                    ->label('Staff member (either side)')
+                    ->options(fn () => User::orderBy('name')->pluck('name', 'id'))
+                    ->searchable()
+                    ->query(fn (Builder $query, array $data) => $query->when($data['value'] ?? null, fn ($q, $userId) => $q->where(
+                        fn ($w) => $w->where('outgoing_user_id', $userId)->orWhere('incoming_user_id', $userId)->orWhere('witness_user_id', $userId)->orWhere('opened_by', $userId)
+                    ))),
+                SelectFilter::make('section')
+                    ->label('Section')
+                    ->options(['product' => 'Products', 'ingredient' => 'Ingredients'])
+                    ->query(fn (Builder $query, array $data) => $query->when($data['value'] ?? null, fn ($q, $section) => $q->whereHas('items', fn ($i) => $i->where('item_type', $section)))),
+                Filter::make('has_variance')
+                    ->label('Has variance')
+                    ->toggle()
+                    ->query(fn (Builder $query) => $query->whereHas('items', fn ($i) => $i->where(fn ($v) => $v->where('variance', '>', 0.0001)->orWhere('variance', '<', -0.0001)))),
                 Filter::make('opened_between')
                     ->form([
                         DatePicker::make('from')->label('From'),
@@ -128,6 +160,12 @@ class CountSessions extends Page implements HasTable
             ])
             ->recordUrl(fn (CountSession $record) => "/admin/count-session-detail?session_id={$record->id}")
             ->recordActions([
+                Action::make('breakdownCsv')
+                    ->label('CSV')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('gray')
+                    ->visible(fn (CountSession $record) => $record->isReviewed() && $record->breakdown_exists)
+                    ->url(fn (CountSession $record) => route('count-breakdown.csv', $record->id)),
                 Action::make('cancelSession')
                     ->label('Cancel')
                     ->color('danger')
@@ -148,6 +186,11 @@ class CountSessions extends Page implements HasTable
                     }),
             ])
             ->headerActions([
+                Action::make('itemTrace')
+                    ->label('Item trace')
+                    ->icon('heroicon-o-magnifying-glass')
+                    ->color('gray')
+                    ->url(fn () => CountItemTrace::getUrl(panel: 'admin')),
                 Action::make('newSession')
                     ->label('New Session')
                     ->form([

@@ -119,12 +119,16 @@ Route::get('/pos', function () {
 
 require __DIR__.'/settings.php';
 
+use App\Http\Controllers\CountBreakdownExportController;
 use App\Http\Controllers\FolioReceiptController;
 use App\Http\Controllers\HandoverPdfController;
 use App\Http\Controllers\StockTransferController;
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/handover/{session}/pdf', [HandoverPdfController::class, 'download'])->name('handover.pdf');
+    Route::get('/count-breakdown/{session}/pdf', [CountBreakdownExportController::class, 'pdf'])->name('count-breakdown.pdf');
+    Route::get('/count-breakdown/{session}/csv', [CountBreakdownExportController::class, 'csv'])->name('count-breakdown.csv');
+    Route::get('/count-item-trace/csv', [CountBreakdownExportController::class, 'traceCsv'])->name('count-item-trace.csv');
     Route::get('/folio/{booking}/pdf', [FolioReceiptController::class, 'download'])->name('folio.pdf');
     Route::post('/stock-transfers', [StockTransferController::class, 'store']);
     Route::post('/stock-transfers/{stockTransfer}/send', [StockTransferController::class, 'send']);

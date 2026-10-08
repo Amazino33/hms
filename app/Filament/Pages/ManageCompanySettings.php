@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Company;
+use App\Services\CountBreakdownSettings;
 use App\Services\PermissionService;
 use App\Services\SettingsService;
 use BackedEnum;
@@ -69,6 +70,9 @@ class ManageCompanySettings extends Page implements HasForms
             'payroll_minimum_net' => SettingsService::get('payroll_minimum_net', '20000'),
             'room_generator_cost_per_night' => SettingsService::get('room_generator_cost_per_night', '0'),
             'room_electricity_cost_per_night' => SettingsService::get('room_electricity_cost_per_night', '0'),
+            CountBreakdownSettings::SLOW_RELEASE_MINUTES => CountBreakdownSettings::slowReleaseMinutes(),
+            CountBreakdownSettings::REPEAT_SHORTAGE_THRESHOLD => CountBreakdownSettings::repeatShortageThreshold(),
+            CountBreakdownSettings::REPEAT_SHORTAGE_WINDOW => CountBreakdownSettings::repeatShortageWindow(),
         ]);
     }
 
@@ -228,6 +232,34 @@ class ManageCompanySettings extends Page implements HasForms
                             ->default(0)
                             ->required(),
                     ]),
+
+                Section::make('Count Breakdown')
+                    ->description('Flags shown on the breakdown after a handover count is sealed.')
+                    ->columnSpanFull()
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make(CountBreakdownSettings::SLOW_RELEASE_MINUTES)
+                            ->label('Flag as slow after (minutes)')
+                            ->helperText('A sale whose ticket took longer than this to be marked ready is tagged "Slow".')
+                            ->integer()
+                            ->minValue(1)
+                            ->required(),
+
+                        TextInput::make(CountBreakdownSettings::REPEAT_SHORTAGE_THRESHOLD)
+                            ->label('Repeat shortage: short at least')
+                            ->helperText('…this many times…')
+                            ->integer()
+                            ->minValue(1)
+                            ->required(),
+
+                        TextInput::make(CountBreakdownSettings::REPEAT_SHORTAGE_WINDOW)
+                            ->label('…in the last N counts')
+                            ->helperText('Shows a "Short 3 of last 5" badge on the item.')
+                            ->integer()
+                            ->minValue(1)
+                            ->gte(CountBreakdownSettings::REPEAT_SHORTAGE_THRESHOLD)
+                            ->required(),
+                    ]),
             ]);
     }
 
@@ -242,6 +274,9 @@ class ManageCompanySettings extends Page implements HasForms
             'payroll_minimum_net',
             'room_generator_cost_per_night',
             'room_electricity_cost_per_night',
+            CountBreakdownSettings::SLOW_RELEASE_MINUTES,
+            CountBreakdownSettings::REPEAT_SHORTAGE_THRESHOLD,
+            CountBreakdownSettings::REPEAT_SHORTAGE_WINDOW,
         ];
 
         $settingsServiceData = array_intersect_key($data, array_flip($settingsServiceKeys));

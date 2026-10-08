@@ -2,6 +2,8 @@
 
 @source '../../../../app/Filament/Ceo/**/*';
 @source '../../../../resources/views/filament-ceo/**/*';
+/* The count breakdown and item trace partials are shared with the admin panel. */
+@source '../../../../resources/views/filament/components/count-*';
 @config '../../../../tailwind.config.js';
 
 /* Same table-scroll containment as the admin theme (see its own comment) —
