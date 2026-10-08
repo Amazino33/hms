@@ -22,7 +22,6 @@
         d: @js($payload),
         tab: null,
         onlyVariance: false,
-        showQuiet: false,
         showOpenOrders: false,
         modal: null,
         noteFor: null,
@@ -32,11 +31,12 @@
         init() { this.tab = this.d.sections?.[0]?.key ?? null },
         section() { return (this.d.sections || []).find(s => s.key === this.tab) || null },
         lines() {
-            let rows = (this.section()?.lines || []).filter(l => ! l.quiet)
+            // Every product is listed: variance first (biggest ₦ first), then
+            // anything that moved, then the untouched ones, each by name.
+            let rows = [...(this.section()?.lines || [])]
             if (this.onlyVariance) rows = rows.filter(l => l.variance !== 0)
-            return rows.sort((a, b) => (b.variance !== 0) - (a.variance !== 0) || Math.abs(b.value) - Math.abs(a.value) || a.name.localeCompare(b.name))
+            return rows.sort((a, b) => (b.variance !== 0) - (a.variance !== 0) || Math.abs(b.value) - Math.abs(a.value) || a.quiet - b.quiet || a.name.localeCompare(b.name))
         },
-        quietLines() { return this.onlyVariance ? [] : (this.section()?.lines || []).filter(l => l.quiet) },
         q(n) { return n === null || n === undefined ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) },
         naira(n) { return n === null || n === undefined ? '—' : '₦' + Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
         signed(n) { return n < 0 ? '−' + this.q(-n) : (n > 0 ? '+' + this.q(n) : '0') },
@@ -161,7 +161,7 @@
             {{-- Section tabs --}}
             <div class="flex items-center gap-2 mb-3 flex-wrap">
                 <template x-for="s in d.sections" :key="s.key">
-                    <button type="button" x-on:click="tab = s.key; showQuiet = false"
+                    <button type="button" x-on:click="tab = s.key"
                         class="min-h-[44px] px-4 rounded-lg text-sm font-bold border"
                         :class="tab === s.key ? 'bg-red-600 border-red-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'"
                         x-text="s.label"></button>
@@ -241,10 +241,10 @@
                             </thead>
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                                 <template x-for="line in lines()" :key="line.id">
-                                    <tr>
+                                    <tr :class="line.quiet ? 'text-gray-500 dark:text-gray-400' : ''">
                                         <td class="px-3 py-2 sticky left-0 bg-white dark:bg-gray-900">
                                             <div class="flex items-center gap-2">
-                                                <span class="font-medium text-gray-900 dark:text-white" x-text="line.name"></span>
+                                                <span class="font-medium" :class="line.quiet ? '' : 'text-gray-900 dark:text-white'" x-text="line.name"></span>
                                                 <span x-show="line.repeat" class="px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold" x-text="line.repeat ? 'Short ' + line.repeat.short + ' of last ' + line.repeat.of : ''"></span>
                                                 <button type="button" x-show="line.notes.length" x-on:click="open(line, 'variance')" class="text-xs text-gray-500 hover:text-gray-900" :title="line.notes.length + ' explanation(s)'">
                                                     <x-filament::icon icon="heroicon-m-chat-bubble-left-ellipsis" class="h-4 w-4 inline" />
@@ -282,19 +282,6 @@
                                         </td>
                                     </tr>
                                 </template>
-                                <template x-if="quietLines().length">
-                                    <tr>
-                                        <td colspan="13" class="px-3 py-2">
-                                            <button type="button" class="min-h-[44px] text-sm text-gray-600 dark:text-gray-300 font-medium" x-on:click="showQuiet = ! showQuiet"
-                                                x-text="(showQuiet ? 'Hide' : 'No change') + ' (' + quietLines().length + (quietLines().length === 1 ? ' item)' : ' items)')"></button>
-                                            <div x-show="showQuiet" class="flex flex-wrap gap-2 pb-2">
-                                                <template x-for="line in quietLines()" :key="line.id">
-                                                    <button type="button" x-on:click="open(line, 'counted')" class="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-xs" x-text="line.name + ' · ' + q(line.counted)"></button>
-                                                </template>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </template>
                             </tbody>
                             <tfoot class="bg-gray-50 dark:bg-gray-800 font-bold text-sm">
                                 <tr>
@@ -312,22 +299,6 @@
                 </div>
             </template>
             @endif
-
-            {{-- Staff: folded quiet items --}}
-            <template x-if="! d.audit && quietLines().length">
-                <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 mb-3">
-                    <button type="button" class="w-full min-h-[44px] px-4 text-left text-sm font-medium text-gray-600 dark:text-gray-300" x-on:click="showQuiet = ! showQuiet"
-                        x-text="(showQuiet ? 'Hide' : 'No change') + ' (' + quietLines().length + (quietLines().length === 1 ? ' item)' : ' items)')"></button>
-                    <div x-show="showQuiet" class="divide-y divide-gray-100 dark:divide-gray-800 border-t border-gray-100 dark:border-gray-800">
-                        <template x-for="line in quietLines()" :key="line.id">
-                            <button type="button" x-on:click="open(line, 'counted')" class="w-full min-h-[44px] px-4 flex items-center justify-between text-sm">
-                                <span x-text="line.name"></span>
-                                <span class="font-mono tabular-nums text-gray-500" x-text="q(line.counted)"></span>
-                            </button>
-                        </template>
-                    </div>
-                </div>
-            </template>
 
             {{-- Staff: sticky totals --}}
             <template x-if="! d.audit && section()">
