@@ -37,6 +37,25 @@ class ShiftScheduleResolver
         $start = $this->localDate($from);
         $end = $this->localDate($to);
 
+        // Nobody is scheduled on or after the day they left. Without this a
+        // leaver keeps generating expected shifts indefinitely, and Phase 2
+        // would mark them absent — ₦3,000 plus a day's pay — every day for
+        // the rest of time, against a person who no longer works here.
+        if ($user->left_at !== null) {
+            // left_at is a true instant, so it needs converting rather than
+            // date-stringing: 23:30 UTC is already tomorrow in Lagos, and
+            // reading the UTC date would retire them a day early.
+            $lastDay = $this->instantToLocalDate($user->left_at)->subDay();
+
+            if ($lastDay->lessThan($start)) {
+                return collect();
+            }
+
+            if ($lastDay->lessThan($end)) {
+                $end = $lastDay;
+            }
+        }
+
         if ($end->lessThan($start)) {
             return collect();
         }
@@ -176,6 +195,20 @@ class ShiftScheduleResolver
             endsAt: $startsAt->addMinutes($template->duration_minutes),
             isHandover: (bool) $template->is_handover,
         );
+    }
+
+    /**
+     * The Lagos calendar date a real instant falls on.
+     *
+     * Distinct from localDate(), which deliberately reads a date cast's own
+     * Y-m-d without shifting it. Using that on an instant would read the UTC
+     * date and be a day out for anything between midnight and 01:00 Lagos.
+     */
+    private function instantToLocalDate(CarbonInterface $instant): CarbonImmutable
+    {
+        return CarbonImmutable::instance($instant->toDateTime())
+            ->setTimezone(VenueTime::TIMEZONE)
+            ->startOfDay();
     }
 
     private function localDate(CarbonInterface|string $value): CarbonImmutable

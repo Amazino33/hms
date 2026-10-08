@@ -18,6 +18,17 @@
         </include>
     </source>
     <php>
+        <!--
+            The suite renders a lot of Filament pages in one process, and
+            ShieldRoleEditRendersTest renders every role's permission screen —
+            which grows with every role and every permission the app gains. At
+            PHP's 512M default the whole run died with a fatal partway through,
+            which reads as a broken build rather than what it is. Raised here
+            rather than thinning the test: rendering every role's screen is
+            exactly the check that catches a permission rename breaking the
+            Shield UI.
+        -->
+        <ini name="memory_limit" value="1G"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

@@ -36,6 +36,11 @@ class AttendanceSetting extends Model
         'absence_day_pay_amount',
         'rules_start_date',
         'shadow_mode',
+        'window_before_minutes',
+        'window_after_minutes',
+        'finalise_delay_minutes',
+        'max_device_wait_minutes',
+        'early_leave_grace_minutes',
         'created_by',
     ];
 
@@ -58,6 +63,11 @@ class AttendanceSetting extends Model
         'fine_early_leave' => 1500,
         'fine_no_clockout' => 1500,
         'fine_absent' => 3000,
+        'window_before_minutes' => 120,
+        'window_after_minutes' => 240,
+        'finalise_delay_minutes' => 60,
+        'max_device_wait_minutes' => 1440,
+        'early_leave_grace_minutes' => 0,
     ];
 
     protected $casts = [
@@ -72,6 +82,11 @@ class AttendanceSetting extends Model
         'fine_no_clockout' => 'integer',
         'fine_absent' => 'integer',
         'absence_day_pay_amount' => 'integer',
+        'window_before_minutes' => 'integer',
+        'window_after_minutes' => 'integer',
+        'finalise_delay_minutes' => 'integer',
+        'max_device_wait_minutes' => 'integer',
+        'early_leave_grace_minutes' => 'integer',
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -105,5 +120,78 @@ class AttendanceSetting extends Model
     public static function current(): ?self
     {
         return static::forDate(now()->timezone(\App\Support\VenueTime::TIMEZONE));
+    }
+
+    /**
+     * Whether a fine for a shift on this date is real money or a dry run.
+     *
+     * Four independent conditions, ALL of which must hold. Written so that
+     * every failure — including a missing settings row, a null column, or a
+     * config nobody has set — lands on shadow. The asymmetry is deliberate:
+     * a shadow fine that should have been live costs nothing and can be
+     * re-evaluated, while a live fine that should have been shadow takes
+     * money off somebody who was told this was a trial.
+     *
+     * Note the strict `=== false` on shadow_mode. A null there means "nobody
+     * has said", and a loose check would read that as "not shadow" and start
+     * charging people on the strength of an unset column.
+     */
+    public static function isLiveOn(CarbonInterface $shiftDate): bool
+    {
+        if (config('attendance.allow_live_fines') !== true) {
+            return false;
+        }
+
+        $settings = static::forDate($shiftDate);
+
+        if ($settings === null) {
+            return false;
+        }
+
+        if ($settings->shadow_mode !== false) {
+            return false;
+        }
+
+        if ($settings->rules_start_date === null) {
+            return false;
+        }
+
+        $date = \Carbon\CarbonImmutable::parse(
+            $shiftDate->format('Y-m-d'),
+            \App\Support\VenueTime::TIMEZONE,
+        )->startOfDay();
+
+        $start = \Carbon\CarbonImmutable::parse(
+            $settings->rules_start_date->format('Y-m-d'),
+            \App\Support\VenueTime::TIMEZONE,
+        )->startOfDay();
+
+        return $date->greaterThanOrEqualTo($start);
+    }
+
+    /**
+     * Why fines are still shadow, in a sentence, for the settings banner.
+     * Null when they are live.
+     */
+    public static function shadowReason(?CarbonInterface $on = null): ?string
+    {
+        $date = $on ?? now()->timezone(\App\Support\VenueTime::TIMEZONE);
+
+        if (static::isLiveOn($date)) {
+            return null;
+        }
+
+        if (config('attendance.allow_live_fines') !== true) {
+            return 'Live fines are disabled until leave/waiver handling is built. All fines are shadow.';
+        }
+
+        $settings = static::forDate($date);
+
+        return match (true) {
+            $settings === null => 'No attendance rules have been saved yet, so nothing can be charged.',
+            $settings->shadow_mode !== false => 'Shadow mode is on — everything is worked out and nothing is charged.',
+            $settings->rules_start_date === null => 'No start date has been announced, so nothing is charged yet.',
+            default => 'The announced start date has not been reached yet.',
+        };
     }
 }
