@@ -96,6 +96,94 @@ class ShiftFinaliser
     }
 
     /**
+     * Judge a stretch of history that the routine run will never reach.
+     *
+     * Deliberately a separate entry point rather than a flag on run(): the
+     * floor exists so the first scheduled run cannot mark months of untracked
+     * days absent, and quietly loosening it would remove that protection for
+     * every future run too. This asks for an explicit range, once.
+     *
+     * Everything it writes is shadow, whatever the settings say. The device
+     * wait is skipped as well — a shift from last month is not waiting on a
+     * buffered push.
+     *
+     * @return array{judged: int, skipped_existing: int, by_outcome: array<string, int>, fines: int, pay: int}
+     */
+    public function backfill(
+        CarbonInterface $from,
+        CarbonInterface $to,
+        ?User $onlyUser = null,
+        bool $dryRun = false,
+    ): array {
+        $start = $this->localDate($from);
+        $end = $this->localDate($to);
+
+        $counts = ['judged' => 0, 'skipped_existing' => 0, 'by_outcome' => [], 'fines' => 0, 'pay' => 0];
+
+        if ($end->lessThan($start)) {
+            return $counts;
+        }
+
+        $this->attributor->preload();
+
+        $punches = $this->punchesBetween($start->subDay(), $end->addDays(2));
+        $punchesByUser = $this->attributor->groupByOwner($punches);
+
+        $staff = $onlyUser !== null ? collect([$onlyUser]) : $this->trackableStaff();
+
+        foreach ($staff as $user) {
+            $shifts = $this->resolver->expectedShifts($user, $start, $end);
+
+            if ($shifts->isEmpty()) {
+                continue;
+            }
+
+            $reference = AttendanceSetting::forDate($start) ?? AttendanceSetting::current();
+
+            if ($reference === null) {
+                continue;
+            }
+
+            $assignment = $this->assigner->assign($shifts, $punchesByUser->get($user->id, collect()), $reference);
+
+            foreach ($shifts->values() as $index => $shift) {
+                if ($this->alreadyRecorded($user->id, $shift->startsAt)) {
+                    $counts['skipped_existing']++;
+
+                    continue;
+                }
+
+                $settings = AttendanceSetting::forDate(
+                    CarbonImmutable::parse($shift->shiftDate, VenueTime::TIMEZONE)
+                ) ?? $reference;
+
+                $evaluated = $this->evaluator->evaluate(
+                    $shift,
+                    $settings,
+                    $assignment['assigned'][$index] ?? collect(),
+                    $this->attributor->hasLinkOn($user->id, CarbonImmutable::parse($shift->shiftDate, VenueTime::TIMEZONE)),
+                );
+
+                $counts['by_outcome'][$evaluated->outcome] = ($counts['by_outcome'][$evaluated->outcome] ?? 0) + 1;
+                $counts['fines'] += $evaluated->totalFines();
+                $counts['pay'] += $evaluated->totalPayDeductions();
+
+                if (! $dryRun && $this->persist($evaluated, $settings, $evaluated->flags, forceShadow: true) !== null) {
+                    $counts['judged']++;
+                }
+
+                if ($dryRun) {
+                    $counts['judged']++;
+                }
+            }
+        }
+
+        $this->attributor->flush();
+
+        return $counts;
+    }
+
+    /**
      * @param  Collection<int, ExpectedShift>  $shifts
      * @param  Collection<int, AttendanceLog>  $userPunches
      */
@@ -218,10 +306,16 @@ class ShiftFinaliser
         EvaluatedShift $evaluated,
         AttendanceSetting $settings,
         array $flags = [],
-        ?string $supersedes = null,
+        bool $forceShadow = false,
     ): ?AttendanceShiftRecord {
         $shift = $evaluated->shift;
-        $isShadow = ! AttendanceSetting::isLiveOn(CarbonImmutable::parse($shift->shiftDate, VenueTime::TIMEZONE));
+
+        // forceShadow is for historical backfill. Judging the past can never
+        // charge anybody: those staff were not told the rules existed on the
+        // day, and a fine they had no chance to avoid is not a fine, it is a
+        // deduction with a story attached.
+        $isShadow = $forceShadow
+            || ! AttendanceSetting::isLiveOn(CarbonImmutable::parse($shift->shiftDate, VenueTime::TIMEZONE));
 
         try {
             return DB::transaction(function () use ($evaluated, $settings, $flags, $shift, $isShadow) {
