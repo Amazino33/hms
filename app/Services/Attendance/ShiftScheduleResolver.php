@@ -106,6 +106,45 @@ class ShiftScheduleResolver
     }
 
     /**
+     * Project one assignment's pattern across a range, ignoring its own
+     * effective dates.
+     *
+     * Only for the back-test. Most of the venue's history predates any
+     * schedule existing at all, so "what would these rules have said about
+     * September" needs the current pattern applied backwards — a rotation
+     * projects from its anchor in both directions, which the positive modulo
+     * already handles.
+     *
+     * Deliberately shares isOnDuty() and buildShift() with the live path
+     * rather than reimplementing the pattern maths, so a simulation cannot
+     * quietly disagree with the engine it is meant to be predicting.
+     *
+     * @return Collection<int, ExpectedShift>
+     */
+    public function projectAssignment(
+        User $user,
+        AttendanceShiftAssignment $assignment,
+        CarbonInterface $from,
+        CarbonInterface $to,
+    ): Collection {
+        if ($user->attendance_exempt || $assignment->template === null) {
+            return collect();
+        }
+
+        $start = $this->localDate($from);
+        $end = $this->localDate($to);
+        $shifts = collect();
+
+        for ($date = $start; $date->lessThanOrEqualTo($end); $date = $date->addDay()) {
+            if ($this->isOnDuty($assignment, $date)) {
+                $shifts->push($this->buildShift($user, $assignment, $date));
+            }
+        }
+
+        return $shifts;
+    }
+
+    /**
      * The assignment in force on a date. Assignments never overlap (the
      * service enforces that), so the first match is the only match.
      */
