@@ -148,6 +148,10 @@ it('exports the monthly fines as a workbook', function () {
 });
 
 it('shows the shadow banner while live fines are switched off', function () {
+    // Set explicitly rather than inherited from .env: a developer's local
+    // flag must not decide whether this assertion holds.
+    config(['attendance.allow_live_fines' => false]);
+
     $this->get('/admin/attendance-rules')
         ->assertOk()
         ->assertSee('All fines are shadow')
