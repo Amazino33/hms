@@ -268,3 +268,57 @@ it('lists non-exempt staff with no current schedule', function () {
     expect($names)->not->toContain('Owner');
     expect($names)->not->toContain('Leaver');
 });
+
+/**
+ * Re-assigning somebody on the same date their current schedule starts is the
+ * normal way to correct a wrong one — and it used to fail, because the old row
+ * was closed to that same date and then blocked the replacement for
+ * overlapping it. Found by a real bulk re-assignment of 32 staff.
+ */
+it('re-assigns on the same effective date the current schedule started', function () {
+    $template = dayTemplate($this->templates, $this->actor);
+    $user = User::factory()->create();
+
+    $first = $this->assignments->assign($user, $template, CarbonImmutable::parse('2026-09-01'), actor: $this->actor);
+
+    $second = $this->assignments->assign(
+        $user,
+        $template,
+        CarbonImmutable::parse('2026-09-01'),
+        weeklyDaysOverride: [1, 2, 3, 4, 5, 6],
+        actor: $this->actor,
+    );
+
+    expect($second->id)->not->toBe($first->id);
+    expect($second->weekly_days_override)->toBe([1, 2, 3, 4, 5, 6]);
+
+    // The superseded one is kept but ends before it began, which is how an
+    // assignment that never applied for a day is recorded.
+    expect($first->fresh()->effective_to->toDateString())->toBe('2026-08-31');
+
+    // And exactly one assignment covers the date.
+    expect(AttendanceShiftAssignment::where('user_id', $user->id)->covering(CarbonImmutable::parse('2026-09-01'))->count())->toBe(1);
+});
+
+it('leaves a never-applied assignment out of the resolver entirely', function () {
+    $template = dayTemplate($this->templates, $this->actor);
+    $user = User::factory()->create();
+
+    $this->assignments->assign($user, $template, CarbonImmutable::parse('2026-09-01'), actor: $this->actor);
+    $this->assignments->assign(
+        $user,
+        $template,
+        CarbonImmutable::parse('2026-09-01'),
+        weeklyDaysOverride: [1],
+        actor: $this->actor,
+    );
+
+    // Monday only, so one shift in the week — not two from a lingering row.
+    $shifts = app(\App\Services\Attendance\ShiftScheduleResolver::class)->expectedShifts(
+        $user,
+        CarbonImmutable::parse('2026-09-07'),
+        CarbonImmutable::parse('2026-09-13'),
+    );
+
+    expect($shifts)->toHaveCount(1);
+});

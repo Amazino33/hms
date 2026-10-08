@@ -121,8 +121,16 @@ class ShiftAssignmentService
      * Close anything that would still be running on the changeover date.
      *
      * The previous assignment ends the day before, so the two never share a
-     * date. An assignment that has not started yet is closed to a zero-length
-     * window rather than a backwards one.
+     * date.
+     *
+     * An assignment the changeover reaches back past — including one starting
+     * on the very same day, which is what re-assigning somebody looks like —
+     * is closed to the day BEFORE its own start. That reads as a backwards
+     * range on purpose: it is how an assignment that never applied for a
+     * single day is recorded, since nothing here may be deleted. Closing it
+     * to its own start date instead would leave it covering that one day, and
+     * the overlap check would then refuse the replacement it was making room
+     * for.
      */
     private function closeAssignmentsFrom(User $user, CarbonImmutable $from, ?User $actor): void
     {
@@ -136,10 +144,10 @@ class ShiftAssignmentService
             $lastDay = $from->subDay();
 
             if ($lastDay->lessThan($start)) {
-                // Scheduled to begin on or after the changeover and now
-                // superseded before it ever took effect.
+                // Superseded before it ever took effect. Ends the day before
+                // it began, so covering() and overlapping() both exclude it.
                 $assignment->forceFill([
-                    'effective_to' => $start->toDateString(),
+                    'effective_to' => $start->subDay()->toDateString(),
                     'ended_by' => $actor?->id,
                 ])->save();
 
