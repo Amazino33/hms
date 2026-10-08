@@ -2,7 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\BiometricEnrollment;
+use App\Models\Attendance\AttendanceDeviceUser;
+use App\Services\Attendance\DeviceUserReconciler;
 use Illuminate\Console\Command;
 
 /**
@@ -56,7 +57,7 @@ class SetMachineName extends Command
         $missing = \App\Models\AttendanceLog::whereNotNull('biometric_id')
             ->distinct()
             ->pluck('biometric_id')
-            ->diff(BiometricEnrollment::whereNotNull('name')->pluck('biometric_id'))
+            ->diff(AttendanceDeviceUser::whereNotNull('device_name')->pluck('device_user_id'))
             ->sort()
             ->values();
 
@@ -83,10 +84,10 @@ class SetMachineName extends Command
 
     private function store(string $badge, string $name): void
     {
-        BiometricEnrollment::updateOrCreate(
-            ['biometric_id' => $badge],
-            ['name' => trim($name), 'last_seen_at' => now()]
-        );
+        // Through the reconciler so a retired badge is refused here exactly
+        // as it is for a device push — the manual path must not be a way
+        // around the rule that a retired ID is finished with.
+        DeviceUserReconciler::mirror($badge, trim($name));
 
         $this->line("  ID {$badge} → ".trim($name));
     }

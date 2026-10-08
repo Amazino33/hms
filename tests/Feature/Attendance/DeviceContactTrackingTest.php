@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Attendance\AttendanceDeviceUser;
 use App\Models\AttendanceLog;
-use App\Models\BiometricEnrollment;
 use App\Models\ZktecoDevice;
 
 /**
@@ -82,15 +82,15 @@ it('sets a machine name by hand when the device will not supply one', function (
     $this->artisan('hms:set-machine-name', ['pairs' => ['20', 'Chidi Okeke', '31', 'Ada Nwosu']])
         ->assertSuccessful();
 
-    expect(BiometricEnrollment::where('biometric_id', '20')->value('name'))->toBe('Chidi Okeke');
-    expect(BiometricEnrollment::where('biometric_id', '31')->value('name'))->toBe('Ada Nwosu');
+    expect(AttendanceDeviceUser::where('device_user_id', '20')->value('device_name'))->toBe('Chidi Okeke');
+    expect(AttendanceDeviceUser::where('device_user_id', '31')->value('device_name'))->toBe('Ada Nwosu');
 });
 
 it('rejects an odd number of values rather than guessing which is which', function () {
     $this->artisan('hms:set-machine-name', ['pairs' => ['20', 'Chidi Okeke', '31']])
         ->assertFailed();
 
-    expect(BiometricEnrollment::count())->toBe(0);
+    expect(AttendanceDeviceUser::count())->toBe(0);
 });
 
 it('lets a later push from the device overwrite a hand-typed name', function () {
@@ -104,5 +104,5 @@ it('lets a later push from the device overwrite a hand-typed name', function () 
         "USER PIN=7\tName=Mary Clement\tPri=0\n"
     );
 
-    expect(BiometricEnrollment::sole()->name)->toBe('Mary Clement');
+    expect(AttendanceDeviceUser::sole()->device_name)->toBe('Mary Clement');
 });

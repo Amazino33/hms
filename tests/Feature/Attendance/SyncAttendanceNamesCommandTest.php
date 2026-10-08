@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Attendance\AttendanceDeviceUser;
 use App\Models\AttendanceLog;
-use App\Models\BiometricEnrollment;
 use App\Models\User;
 use App\Models\ZktecoCommand;
 
@@ -22,7 +22,7 @@ it('queues one name lookup per badge that has punched', function () {
 it('skips badges whose name we already hold unless --all is passed', function () {
     AttendanceLog::create(['biometric_id' => '7', 'punch_time' => now()]);
     AttendanceLog::create(['biometric_id' => '20', 'punch_time' => now()]);
-    BiometricEnrollment::create(['biometric_id' => '7', 'name' => 'Mary Clement']);
+    AttendanceDeviceUser::create(['device_user_id' => '7', 'device_name' => 'Mary Clement']);
 
     $this->artisan('hms:sync-attendance-names')->assertSuccessful();
     expect(ZktecoCommand::pluck('command')->all())->toBe(['DATA QUERY USERINFO PIN=20']);
@@ -48,7 +48,7 @@ it('says so plainly when no badges are known yet', function () {
 });
 
 it('reports what the terminal has answered', function () {
-    BiometricEnrollment::create(['biometric_id' => '7', 'name' => 'Mary Clement', 'last_seen_at' => now()]);
+    AttendanceDeviceUser::create(['device_user_id' => '7', 'device_name' => 'Mary Clement', 'last_seen_at' => now()]);
     ZktecoCommand::create(['command' => 'DATA QUERY USERINFO PIN=9', 'sent_at' => now(), 'return_code' => '-1', 'responded_at' => now()]);
 
     $this->artisan('hms:attendance-name-status')

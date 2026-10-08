@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Attendance\AttendanceDeviceUser;
 use App\Models\AttendanceLog;
-use App\Models\BiometricEnrollment;
 use App\Models\User;
 use App\Models\ZktecoCommand;
 use Illuminate\Console\Command;
@@ -48,7 +48,7 @@ class SyncAttendanceNames extends Command
         }
 
         if (! $this->option('all')) {
-            $known = BiometricEnrollment::whereNotNull('name')->pluck('biometric_id');
+            $known = AttendanceDeviceUser::whereNotNull('device_name')->pluck('device_user_id');
             $badges = $badges->diff($known)->values();
 
             if ($badges->isEmpty()) {

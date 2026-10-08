@@ -26,10 +26,12 @@ class AttendanceDeviceUser extends Model
         'device_user_id',
         'device_name',
         'first_seen_at',
+        'last_seen_at',
     ];
 
     protected $casts = [
         'first_seen_at' => 'datetime',
+        'last_seen_at' => 'datetime',
         'retired_at' => 'datetime',
     ];
 

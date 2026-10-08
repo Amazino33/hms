@@ -2,84 +2,30 @@
 
 use App\Models\Attendance\AttendanceDeviceUser;
 use App\Models\AttendanceLog;
-use App\Models\BiometricEnrollment;
 use App\Models\User;
 use App\Services\Attendance\DeviceUserImporter;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * biometric_enrollments stays exactly where it is this phase — ZKTecoController
- * and hms:set-machine-name keep writing it, untouched — and everything written
- * there is mirrored forward into attendance_device_users.
+ * The bridge is gone.
  *
- * The observer covers Eloquent writes. The reconcile command covers everything
- * else, which is the half that actually matters: an observer that silently does
- * not fire produces a badge nobody ever sees on the unmatched page.
+ * Phase 1 wrote names into biometric_enrollments and mirrored them forward
+ * with an observer. Phase 2 writes attendance_device_users directly, the
+ * observer is removed and the old table is renamed to _legacy — so there is
+ * one table and nothing to fall out of step.
+ *
+ * attendance:reconcile-device-users stays as the net, now reading
+ * attendance_logs: a punch is the one thing that cannot be bypassed, because
+ * whatever happens to names, a badge that has been used has a row there.
  */
-it('creates a device user when an enrolment is written through the model', function () {
-    BiometricEnrollment::create(['biometric_id' => '7', 'name' => 'Mary Clement']);
-
-    $deviceUser = AttendanceDeviceUser::where('device_user_id', '7')->sole();
-    expect($deviceUser->device_name)->toBe('Mary Clement');
-});
-
-it('updates the device name when the enrolment is renamed', function () {
-    BiometricEnrollment::create(['biometric_id' => '7', 'name' => 'Mary']);
-    BiometricEnrollment::where('biometric_id', '7')->first()->update(['name' => 'Mary Clement']);
-
-    expect(AttendanceDeviceUser::where('device_user_id', '7')->sole()->device_name)->toBe('Mary Clement');
-});
-
-it('mirrors a repeated identical push without error', function () {
-    // updateOrCreate on unchanged values fires saved but not updated, which
-    // is why the observer listens to saved.
-    BiometricEnrollment::updateOrCreate(['biometric_id' => '7'], ['name' => 'Mary']);
-    BiometricEnrollment::updateOrCreate(['biometric_id' => '7'], ['name' => 'Mary']);
-
-    expect(AttendanceDeviceUser::where('device_user_id', '7')->count())->toBe(1);
-});
-
-it('never modifies a retired device user', function () {
-    $retired = AttendanceDeviceUser::create([
-        'device_user_id' => '7',
-        'device_name' => 'Original Holder',
-    ]);
-    $retired->forceFill(['retired_at' => now()])->save();
-
-    // The terminal happily keeps pushing records for an ID it has reassigned.
-    BiometricEnrollment::create(['biometric_id' => '7', 'name' => 'New Starter']);
-
-    expect($retired->fresh()->device_name)->toBe('Original Holder');
-});
-
-it('does not wipe a held name when the device pushes a blank one', function () {
-    BiometricEnrollment::create(['biometric_id' => '7', 'name' => 'Mary Clement']);
-    BiometricEnrollment::where('biometric_id', '7')->first()->update(['name' => null]);
-
-    expect(AttendanceDeviceUser::where('device_user_id', '7')->sole()->device_name)->toBe('Mary Clement');
-});
-
-it('picks up a row written straight through the query builder', function () {
-    // The exact case the observer cannot see, and the reason the command
-    // exists at all.
-    DB::table('biometric_enrollments')->insert([
-        'biometric_id' => '42',
-        'name' => 'Bypassed The Model',
-        'created_at' => now(),
-        'updated_at' => now(),
+it('creates a device user from a punch the system has never seen', function () {
+    AttendanceLog::create([
+        'biometric_id' => '55',
+        'punch_time' => CarbonImmutable::parse('2026-10-05 07:00:00', 'UTC'),
     ]);
 
-    expect(AttendanceDeviceUser::where('device_user_id', '42')->exists())->toBeFalse();
-
-    $this->artisan('attendance:reconcile-device-users')->assertSuccessful();
-
-    expect(AttendanceDeviceUser::where('device_user_id', '42')->sole()->device_name)->toBe('Bypassed The Model');
-});
-
-it('picks up a badge that has punched but was never enrolled', function () {
-    AttendanceLog::create(['biometric_id' => '55', 'punch_time' => now()]);
+    expect(AttendanceDeviceUser::where('device_user_id', '55')->exists())->toBeFalse();
 
     $this->artisan('attendance:reconcile-device-users')->assertSuccessful();
 
@@ -89,10 +35,8 @@ it('picks up a badge that has punched but was never enrolled', function () {
 });
 
 it('changes nothing when run a second time', function () {
-    DB::table('biometric_enrollments')->insert([
-        'biometric_id' => '42', 'name' => 'Someone', 'created_at' => now(), 'updated_at' => now(),
-    ]);
     AttendanceLog::create(['biometric_id' => '55', 'punch_time' => now()]);
+    AttendanceDeviceUser::create(['device_user_id' => '7', 'device_name' => 'Mary']);
 
     $this->artisan('attendance:reconcile-device-users')->assertSuccessful();
 
@@ -107,28 +51,64 @@ it('changes nothing when run a second time', function () {
         ->toArray())->toBe($snapshot);
 });
 
+it('never touches a retired device user', function () {
+    $retired = AttendanceDeviceUser::create(['device_user_id' => '7', 'device_name' => 'Original Holder']);
+    $retired->forceFill(['retired_at' => now()])->save();
+
+    AttendanceLog::create(['biometric_id' => '7', 'punch_time' => now()]);
+
+    $this->artisan('attendance:reconcile-device-users')->assertSuccessful();
+
+    expect($retired->fresh()->device_name)->toBe('Original Holder');
+    expect($retired->fresh()->first_seen_at)->toBeNull();
+});
+
 it('stamps first seen from the earliest punch and never moves it afterwards', function () {
-    AttendanceLog::create(['biometric_id' => '55', 'punch_time' => CarbonImmutable::parse('2026-03-10 07:00:00', 'UTC')]);
+    AttendanceLog::create(['biometric_id' => '55', 'punch_time' => CarbonImmutable::parse('2026-10-05 07:00:00', 'UTC')]);
     $this->artisan('attendance:reconcile-device-users');
 
-    $first = AttendanceDeviceUser::where('device_user_id', '55')->sole()->first_seen_at;
+    $first = AttendanceDeviceUser::sole()->first_seen_at;
 
     // A punch arriving late from the device's offline buffer must not rewrite
     // a date other records already cite.
-    AttendanceLog::create(['biometric_id' => '55', 'punch_time' => CarbonImmutable::parse('2026-02-01 07:00:00', 'UTC')]);
+    AttendanceLog::create(['biometric_id' => '55', 'punch_time' => CarbonImmutable::parse('2026-09-01 07:00:00', 'UTC')]);
     $this->artisan('attendance:reconcile-device-users');
 
-    expect(AttendanceDeviceUser::where('device_user_id', '55')->sole()->first_seen_at->eq($first))->toBeTrue();
+    expect(AttendanceDeviceUser::sole()->first_seen_at->eq($first))->toBeTrue();
 });
 
-it('never creates a link while mirroring', function () {
+it('never creates a link while reconciling', function () {
     User::factory()->create(['biometric_id' => '7']);
-    BiometricEnrollment::create(['biometric_id' => '7', 'name' => 'Mary Clement']);
+    AttendanceLog::create(['biometric_id' => '7', 'punch_time' => now()]);
 
     $this->artisan('attendance:reconcile-device-users');
 
-    // Pairing is a human decision; the mirror only ever carries names.
-    expect(AttendanceDeviceUser::where('device_user_id', '7')->sole()->activeLink())->toBeNull();
+    // Pairing is a human decision; reconciliation only ever carries names.
+    expect(AttendanceDeviceUser::sole()->activeLink())->toBeNull();
+});
+
+it('sets a machine name by hand into the live table', function () {
+    $this->artisan('hms:set-machine-name', ['pairs' => ['20', 'Chidi Okeke', '31', 'Ada Nwosu']])
+        ->assertSuccessful();
+
+    expect(AttendanceDeviceUser::where('device_user_id', '20')->value('device_name'))->toBe('Chidi Okeke');
+    expect(AttendanceDeviceUser::where('device_user_id', '31')->value('device_name'))->toBe('Ada Nwosu');
+});
+
+it('refuses to rename a retired badge by hand', function () {
+    $retired = AttendanceDeviceUser::create(['device_user_id' => '7', 'device_name' => 'Original']);
+    $retired->forceFill(['retired_at' => now()])->save();
+
+    $this->artisan('hms:set-machine-name', ['pairs' => ['7', 'New Starter']])->assertSuccessful();
+
+    // The manual path must not be a way around the retirement rule.
+    expect($retired->fresh()->device_name)->toBe('Original');
+});
+
+it('rejects an odd number of values rather than guessing which is which', function () {
+    $this->artisan('hms:set-machine-name', ['pairs' => ['20', 'Chidi Okeke', '31']])->assertFailed();
+
+    expect(AttendanceDeviceUser::count())->toBe(0);
 });
 
 it('imports device users from a csv, upserting by device id', function () {

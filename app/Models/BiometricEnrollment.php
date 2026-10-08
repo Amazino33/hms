@@ -17,6 +17,14 @@ class BiometricEnrollment extends Model
 {
     use HasFactory;
 
+    /**
+     * Renamed in Phase 2. ZKTecoController writes attendance_device_users
+     * directly now, so nothing adds to this any more — but the Name on
+     * Machine column and the CSV export still read it through AttendanceLog
+     * and DailyAttendance, so it keeps answering rather than 500ing.
+     */
+    protected $table = 'biometric_enrollments_legacy';
+
     protected $fillable = [
         'biometric_id',
         'name',

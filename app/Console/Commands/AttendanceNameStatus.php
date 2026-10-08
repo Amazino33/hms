@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\BiometricEnrollment;
+use App\Models\Attendance\AttendanceDeviceUser;
 use App\Models\ZktecoCommand;
 use App\Models\ZktecoDevice;
 use App\Support\VenueTime;
@@ -71,7 +71,7 @@ class AttendanceNameStatus extends Command
 
     private function reportNames(): void
     {
-        $names = BiometricEnrollment::orderBy('biometric_id')->get();
+        $names = AttendanceDeviceUser::orderBy('device_user_id')->get();
 
         $this->newLine();
         $this->info('Names received from the terminal');
@@ -84,9 +84,9 @@ class AttendanceNameStatus extends Command
 
         $this->table(
             ['Machine ID', 'Name on machine', 'Last heard'],
-            $names->map(fn (BiometricEnrollment $e) => [
-                $e->biometric_id,
-                $e->name ?? '— enrolled but unnamed —',
+            $names->map(fn (AttendanceDeviceUser $e) => [
+                $e->device_user_id,
+                $e->device_name ?? '— enrolled but unnamed —',
                 $e->last_seen_at ? VenueTime::format($e->last_seen_at) : '—',
             ])->all()
         );

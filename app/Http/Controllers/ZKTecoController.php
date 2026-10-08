@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Attendance\AttendanceSetting;
 use App\Models\AttendanceLog;
-use App\Models\BiometricEnrollment;
 use App\Models\SalaryDeduction;
 use App\Models\User;
 use App\Models\ZktecoCommand;
 use App\Models\ZktecoDevice;
+use App\Services\Attendance\DeviceUserReconciler;
 use App\Support\VenueTime;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -246,6 +247,12 @@ class ZKTecoController extends Controller
             'verify_mode' => $verifyMode,
         ]);
 
+        // Every punch is proof the badge is still in use. A badge that goes
+        // quiet while the terminal keeps reporting is somebody who left
+        // without anyone telling the office — which otherwise surfaces as a
+        // month of ₦3,000 absences rather than as a question.
+        DeviceUserReconciler::touchSeen($biometricId, $punchUtc);
+
         if ($user && $user->shift_start_time) {
             $this->checkAndApplyPenalty($user, $punchLocal);
         }
@@ -293,6 +300,24 @@ class ZKTecoController extends Controller
     private function checkAndApplyPenalty(User $user, Carbon $punchLocal): void
     {
         $localDate = $punchLocal->toDateString();
+
+        /*
+         * The handover to the Phase 2 engine.
+         *
+         * The moment the new rules go live for a date is the moment this old
+         * one stops for that date, so the two can never both be charging. It
+         * is deliberately a per-date check rather than a global flag: a
+         * backlog pushed after cutover may carry punches from before it, and
+         * those still belong to the rules that were in force when they
+         * happened.
+         *
+         * isLiveOn() fails closed, so if anything about the new engine's
+         * configuration is incomplete this keeps running and nobody silently
+         * stops being tracked.
+         */
+        if (AttendanceSetting::isLiveOn($punchLocal)) {
+            return;
+        }
 
         // One penalty per person per day, however many times they punch.
         $alreadyDeducted = SalaryDeduction::where('user_id', $user->id)
@@ -353,17 +378,13 @@ class ZKTecoController extends Controller
 
             $name = trim($fields['NAME'] ?? '');
 
-            BiometricEnrollment::updateOrCreate(
-                ['biometric_id' => $pin],
-                array_filter([
-                    // A blank name is the device saying "enrolled, never
-                    // named" — keep any name we already hold rather than
-                    // wiping it, but still record that we heard from it.
-                    'name' => $name !== '' ? $name : null,
-                    'privilege' => $fields['PRI'] ?? null,
-                    'card' => $fields['CARD'] ?? null,
-                ], fn ($value) => $value !== null && $value !== '') + ['last_seen_at' => now()]
-            );
+            // Straight into attendance_device_users now, rather than through
+            // biometric_enrollments and the mirror observer. Same rules: a
+            // blank name is the device saying "enrolled, never named", so it
+            // must not wipe a name already held, and a retired badge is never
+            // touched because the terminal happily keeps pushing records for
+            // IDs it has since reassigned.
+            DeviceUserReconciler::mirror($pin, $name !== '' ? $name : null);
 
             $stored++;
         }

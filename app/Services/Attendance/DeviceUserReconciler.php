@@ -60,6 +60,29 @@ class DeviceUserReconciler
     }
 
     /**
+     * Record that this badge was used, creating it if the terminal has one we
+     * have never heard of.
+     *
+     * Only ever moves forward: a device dumping an offline backlog delivers
+     * old punches after newer ones, and letting those rewind last_seen_at
+     * would make a badge in daily use look dormant.
+     */
+    public static function touchSeen(string $deviceUserId, \DateTimeInterface $at): void
+    {
+        $deviceUser = self::mirror($deviceUserId);
+
+        if ($deviceUser === null || $deviceUser->isRetired()) {
+            return;
+        }
+
+        if ($deviceUser->last_seen_at !== null && $deviceUser->last_seen_at->greaterThanOrEqual($at)) {
+            return;
+        }
+
+        $deviceUser->forceFill(['last_seen_at' => $at])->save();
+    }
+
+    /**
      * Full sweep.
      *
      * @return array{created: int, renamed: int, first_seen_set: int, skipped_retired: int}
@@ -101,8 +124,13 @@ class DeviceUserReconciler
     }
 
     /**
-     * Every badge the system has heard of: named ones from the enrolment
-     * table, plus any that have punched without ever being named.
+     * Every badge the system has heard of.
+     *
+     * attendance_logs is now the primary source, because a punch is the one
+     * thing that cannot be bypassed: whatever the terminal does with names,
+     * a badge that has been used has a row here. The legacy enrolment table
+     * is still read where it survives, purely so the names typed in by hand
+     * before Phase 2 are not lost — nothing writes it any more.
      *
      * @return array<string, ?string>
      */
@@ -122,11 +150,21 @@ class DeviceUserReconciler
             }
         }
 
-        if (Schema::hasTable('biometric_enrollments')) {
-            // Second so a real name always wins over the null placed above.
-            foreach (DB::table('biometric_enrollments')->get(['biometric_id', 'name']) as $row) {
-                $badges[(string) $row->biometric_id] = $row->name;
+        foreach (['biometric_enrollments_legacy', 'biometric_enrollments'] as $legacy) {
+            if (! Schema::hasTable($legacy)) {
+                continue;
             }
+
+            // Second so a real name always wins over the null placed above.
+            foreach (DB::table($legacy)->get(['biometric_id', 'name']) as $row) {
+                if (filled($row->name)) {
+                    $badges[(string) $row->biometric_id] = $row->name;
+                } else {
+                    $badges[(string) $row->biometric_id] ??= null;
+                }
+            }
+
+            break;
         }
 
         return $badges;
@@ -154,6 +192,9 @@ class DeviceUserReconciler
         foreach ($earliest as $badge => $firstPunch) {
             $updated += AttendanceDeviceUser::where('device_user_id', (string) $badge)
                 ->whereNull('first_seen_at')
+                // A retired badge is finished with in every respect; the
+                // terminal still reports punches for IDs it has reassigned.
+                ->whereNull('retired_at')
                 ->update(['first_seen_at' => $firstPunch]);
         }
 

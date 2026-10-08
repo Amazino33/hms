@@ -259,12 +259,11 @@ class AppServiceProvider extends ServiceProvider
         Order::observe(\App\Observers\GuestRoomOrderObserver::class);
         \App\Models\Booking::observe(\App\Observers\GuestStayObserver::class);
 
-        // Mirrors the terminal's own name store into attendance_device_users
-        // one way. ZKTecoController and hms:set-machine-name both write
-        // biometric_enrollments through Eloquent, so this fires for both;
-        // attendance:reconcile-device-users is the hourly net under anything
-        // that does not.
-        \App\Models\BiometricEnrollment::observe(\App\Observers\BiometricEnrollmentObserver::class);
+        // The BiometricEnrollment mirror observer is gone: ZKTecoController
+        // writes attendance_device_users directly now, so there is nothing
+        // left to mirror. attendance:reconcile-device-users still runs hourly
+        // and now reads attendance_logs, which is the one source that cannot
+        // be bypassed.
 
         // Spatie models
         Role::observe(RoleObserver::class);
