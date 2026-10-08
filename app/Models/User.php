@@ -381,6 +381,21 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(\App\Models\Attendance\AttendanceShiftAssignment::class);
     }
 
+    /**
+     * Judged shifts. Superseded rows are kept for the audit trail, so
+     * anything showing these to a person has to filter to current — an old
+     * judgement displayed as if it still stood would be worse than none.
+     */
+    public function attendanceShiftRecords(): HasMany
+    {
+        return $this->hasMany(\App\Models\Attendance\AttendanceShiftRecord::class);
+    }
+
+    public function attendanceFines(): HasMany
+    {
+        return $this->hasMany(\App\Models\Attendance\AttendanceFine::class);
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
         // Allow super admins unconditionally, on every panel.

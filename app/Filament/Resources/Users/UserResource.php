@@ -347,6 +347,7 @@ class UserResource extends Resource
     {
         return [
             \App\Filament\Resources\Users\RelationManagers\ScheduleRelationManager::class,
+            \App\Filament\Resources\Users\RelationManagers\AttendanceRelationManager::class,
         ];
     }
 

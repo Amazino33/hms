@@ -34,7 +34,14 @@ Schedule::command('guest:expire-stale')->everyTenMinutes()->withoutOverlapping()
 // open at once (Phase 3) — one /admin alert per occurrence.
 Schedule::command('guest:bar-monitor')->everyMinute()->withoutOverlapping();
 
-// Safety net under BiometricEnrollmentObserver: an observer only fires for
+// Judges shifts whose window has closed. Every fifteen minutes rather than
+// nightly so the board is useful during the day and a terminal coming back
+// online is picked up promptly. Idempotent — a double run, a missed run or a
+// redeploy mid-run all come out the same — and it waits on a quiet device
+// rather than calling a buffered shift absent. Same cron caveat as above.
+Schedule::command('attendance:finalise')->everyFifteenMinutes()->withoutOverlapping();
+
+// Safety net under the old enrolment bridge: an observer only fires for
 // Eloquent writes, so anything that reaches biometric_enrollments by query
 // builder or raw SQL would otherwise never reach attendance_device_users —
 // and the symptom is a badge that never shows on the unmatched page, so

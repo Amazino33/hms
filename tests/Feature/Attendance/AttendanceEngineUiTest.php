@@ -212,3 +212,40 @@ it('accepts a rules start date from tomorrow', function () {
     expect(AttendanceSetting::count())->toBe(2);
     expect(AttendanceSetting::orderByDesc('id')->first()->early_leave_grace_minutes)->toBe(10);
 });
+
+it('shows a staff member their judged shifts on their own page', function () {
+    $user = staffed('7');
+    logPunch('7', '2026-10-05 09:00');
+    logPunch('7', '2026-10-05 18:00');
+    deviceHeardAt('2026-10-05 23:30');
+    finaliseAt('2026-10-05 23:30');
+
+    Livewire::test(\App\Filament\Resources\Users\RelationManagers\AttendanceRelationManager::class, [
+        'ownerRecord' => $user,
+        'pageClass' => \App\Filament\Resources\Users\Pages\EditUser::class,
+    ])->assertCanSeeTableRecords(AttendanceShiftRecord::where('user_id', $user->id)->get());
+});
+
+it('hides superseded records from a staff member page', function () {
+    $user = staffed('7');
+    logPunch('7', '2026-10-05 08:00');
+    deviceHeardAt('2026-10-05 23:30');
+    finaliseAt('2026-10-05 23:30');
+
+    $superseded = AttendanceShiftRecord::sole();
+
+    logPunch('7', '2026-10-05 18:00');
+    app(\App\Services\Attendance\ShiftReevaluationService::class)->reevaluate(
+        \Carbon\CarbonImmutable::parse('2026-10-05'),
+        \Carbon\CarbonImmutable::parse('2026-10-05'),
+        'backlog',
+    );
+
+    // The old judgement is kept but must not be shown as if it still stands.
+    Livewire::test(\App\Filament\Resources\Users\RelationManagers\AttendanceRelationManager::class, [
+        'ownerRecord' => $user,
+        'pageClass' => \App\Filament\Resources\Users\Pages\EditUser::class,
+    ])
+        ->assertCanNotSeeTableRecords(AttendanceShiftRecord::whereKey($superseded->id)->get())
+        ->assertCanSeeTableRecords(AttendanceShiftRecord::current()->get());
+});
