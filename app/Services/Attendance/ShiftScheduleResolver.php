@@ -204,11 +204,17 @@ class ShiftScheduleResolver
      * Y-m-d without shifting it. Using that on an instant would read the UTC
      * date and be a day out for anything between midnight and 01:00 Lagos.
      */
-    private function instantToLocalDate(CarbonInterface $instant): CarbonImmutable
+    private function instantToLocalDate(CarbonInterface|string $instant): CarbonImmutable
     {
-        return CarbonImmutable::instance($instant->toDateTime())
-            ->setTimezone(VenueTime::TIMEZONE)
-            ->startOfDay();
+        // users.left_at carries no cast on the model, so it arrives as a raw
+        // string. It is stored UTC like every other instant, so it is parsed
+        // as UTC rather than assumed local — reading it as Lagos would retire
+        // somebody an hour early and, either side of midnight, a day early.
+        $value = is_string($instant)
+            ? CarbonImmutable::parse($instant, 'UTC')
+            : CarbonImmutable::instance($instant->toDateTime());
+
+        return $value->setTimezone(VenueTime::TIMEZONE)->startOfDay();
     }
 
     private function localDate(CarbonInterface|string $value): CarbonImmutable
