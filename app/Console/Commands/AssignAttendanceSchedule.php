@@ -34,6 +34,8 @@ class AssignAttendanceSchedule extends Command
         {--role=* : Limit to staff holding these roles}
         {--user=* : Limit to these user ids}
         {--all : Every trackable staff member}
+        {--days= : Working days as ISO numbers, e.g. 1,2,3,4,5,6 for Mon-Sat}
+        {--replace : Re-assign people who already have a schedule}
         {--dry-run : List who would be assigned without writing}';
 
     protected $description = 'Put many staff on the same weekly shift pattern at once';
@@ -71,14 +73,28 @@ class AssignAttendanceSchedule extends Command
             return self::SUCCESS;
         }
 
+        $days = $this->workingDays();
+
+        if ($days === false) {
+            return self::FAILURE;
+        }
+
         $already = $staff->filter(fn (User $u) => $assignments->currentFor($u, $from) !== null);
-        $toAssign = $staff->reject(fn (User $u) => $already->contains('id', $u->id))->values();
+
+        // --replace exists because the usual mistake is assigning the right
+        // template with the wrong days: the seeded Day shift covers all seven,
+        // so without it every rest day reads as an absence. Re-assigning
+        // closes the old row and opens a new one, keeping both in history.
+        $toAssign = $this->option('replace')
+            ? $staff
+            : $staff->reject(fn (User $u) => $already->contains('id', $u->id))->values();
 
         $this->line('Template: '.$template->name.' ('.$template->describeHours().')');
         $this->line('Starting: '.$from->format('j M Y'));
+        $this->line('Days:     '.$this->describeDays($days ?: $template->weekly_days ?? []));
         $this->newLine();
 
-        if ($already->isNotEmpty()) {
+        if ($already->isNotEmpty() && ! $this->option('replace')) {
             $this->line($already->count().' already have a schedule covering that date and are left alone:');
             $this->line('  '.$already->pluck('name')->implode(', '));
             $this->newLine();
@@ -117,6 +133,7 @@ class AssignAttendanceSchedule extends Command
                     $user,
                     $template,
                     $from,
+                    weeklyDaysOverride: $days ?: null,
                     reason: 'Bulk assignment',
                     actor: null,
                 );
@@ -142,6 +159,63 @@ class AssignAttendanceSchedule extends Command
         $this->line('Check a few profiles before relying on it — Schedule → Next 7 shifts.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The days this group actually works, as ISO weekday numbers.
+     *
+     * Returned as an override on each assignment rather than by editing the
+     * template, because a template in use is locked — and rightly so, since
+     * changing its days would retroactively rewrite who was absent on every
+     * day already judged under it.
+     *
+     * @return array<int, int>|false false on a bad value
+     */
+    private function workingDays(): array|false
+    {
+        $given = $this->option('days');
+
+        if (blank($given)) {
+            return [];
+        }
+
+        $days = [];
+
+        foreach (explode(',', (string) $given) as $part) {
+            $day = (int) trim($part);
+
+            if ($day < 1 || $day > 7) {
+                $this->error('"'.trim($part).'" is not a weekday. Use 1 (Monday) to 7 (Sunday).');
+                $this->line('Example: --days=1,2,3,4,5,6 for Monday to Saturday.');
+
+                return false;
+            }
+
+            $days[] = $day;
+        }
+
+        $days = array_values(array_unique($days));
+        sort($days);
+
+        return $days;
+    }
+
+    /**
+     * @param  array<int, int>  $days
+     */
+    private function describeDays(array $days): string
+    {
+        $names = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun'];
+
+        if ($days === []) {
+            return 'as the template defines';
+        }
+
+        if (count($days) === 7) {
+            return 'every day';
+        }
+
+        return implode(', ', array_map(fn (int $d) => $names[$d], $days));
     }
 
     private function resolveTemplate(): ?AttendanceShiftTemplate

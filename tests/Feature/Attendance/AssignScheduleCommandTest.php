@@ -116,3 +116,53 @@ it('lists the templates when none is given', function () {
         ->expectsOutputToContain('Day shift')
         ->assertFailed();
 });
+
+it('narrows the working days with an override', function () {
+    $user = User::factory()->create();
+
+    $this->artisan('attendance:assign-schedule', [
+        '--all' => true,
+        '--template' => 'Day shift',
+        '--from' => '2026-10-01',
+        '--days' => '1,2,3,4,5,6',
+    ])->expectsConfirmation('Assign these 1 staff?', 'yes')->assertSuccessful();
+
+    // Stored as an override, not by editing a template other people share.
+    expect(AttendanceShiftAssignment::sole()->weekly_days_override)->toBe([1, 2, 3, 4, 5, 6]);
+});
+
+it('re-assigns an existing schedule when told to replace', function () {
+    $user = User::factory()->create();
+
+    AttendanceShiftAssignment::create([
+        'user_id' => $user->id,
+        'attendance_shift_template_id' => $this->day->id,
+        'effective_from' => '2026-09-01',
+    ]);
+
+    $this->artisan('attendance:assign-schedule', [
+        '--all' => true,
+        '--template' => 'Day shift',
+        '--from' => '2026-10-01',
+        '--days' => '1,2,3,4,5,6',
+        '--replace' => true,
+    ])->expectsConfirmation('Assign these 1 staff?', 'yes')->assertSuccessful();
+
+    // The old row is closed, not edited — both stay in history.
+    expect(AttendanceShiftAssignment::count())->toBe(2);
+    expect(AttendanceShiftAssignment::orderBy('id')->first()->effective_to->toDateString())->toBe('2026-09-30');
+    expect(AttendanceShiftAssignment::orderByDesc('id')->first()->weekly_days_override)->toBe([1, 2, 3, 4, 5, 6]);
+});
+
+it('rejects a weekday outside 1 to 7', function () {
+    User::factory()->create();
+
+    $this->artisan('attendance:assign-schedule', [
+        '--all' => true,
+        '--template' => 'Day shift',
+        '--from' => '2026-10-01',
+        '--days' => '1,2,9',
+    ])->expectsOutputToContain('is not a weekday')->assertFailed();
+
+    expect(AttendanceShiftAssignment::count())->toBe(0);
+});
