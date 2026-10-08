@@ -42,6 +42,7 @@ class AttendanceDoctor extends Command
         $this->line('Checking attendance for '.$date->format('j M Y').' (Lagos)');
         $this->newLine();
 
+        $this->checkChargingState($date);
         $this->checkRules();
         $this->checkTemplates();
         $this->checkSchedules($date);
@@ -74,6 +75,36 @@ class AttendanceDoctor extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The single most important fact about the system, stated first.
+     *
+     * Four switches stand between the engine and somebody's wages, and three
+     * of them are invisible from the admin screens. Anybody about to flip one
+     * should be able to see where the other three stand without reading code.
+     */
+    private function checkChargingState(CarbonImmutable $date): void
+    {
+        $live = AttendanceSetting::isLiveOn($date);
+        $settings = AttendanceSetting::forDate($date);
+
+        if ($live) {
+            $this->error('  >> FINES ARE LIVE on this date — charges here are real money. <<');
+        } else {
+            $this->line('  [shadow] Nothing is charged. '.AttendanceSetting::shadowReason($date));
+        }
+
+        $this->line(sprintf(
+            '           master switch %s | shadow mode %s | announced from %s',
+            config('attendance.allow_live_fines') === true ? 'ON' : 'off',
+            // Strictly false is the only non-shadow value; null means nobody
+            // has decided, which is not consent.
+            ($settings?->shadow_mode === false) ? 'off' : 'ON',
+            $settings?->rules_start_date?->format('j M Y') ?? 'not set',
+        ));
+
+        $this->newLine();
     }
 
     private function checkRules(): void

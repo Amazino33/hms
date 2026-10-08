@@ -58,3 +58,27 @@ it('explains that a shift is simply not finished yet', function () {
         ->expectsOutputToContain('none have been judged yet')
         ->assertSuccessful();
 });
+
+it('says plainly that nothing is charged while any switch is off', function () {
+    config(['attendance.allow_live_fines' => true]);
+    AttendanceSetting::create(['effective_from' => '2026-10-01', 'shadow_mode' => true]);
+
+    // Master switch on, but shadow mode still on — so still shadow.
+    $this->artisan('attendance:doctor --date=2026-10-05')
+        ->expectsOutputToContain('[shadow] Nothing is charged')
+        ->expectsOutputToContain('master switch ON')
+        ->assertSuccessful();
+});
+
+it('shouts when fines are actually live', function () {
+    config(['attendance.allow_live_fines' => true]);
+    AttendanceSetting::create([
+        'effective_from' => '2026-10-01',
+        'shadow_mode' => false,
+        'rules_start_date' => '2026-10-01',
+    ]);
+
+    $this->artisan('attendance:doctor --date=2026-10-05')
+        ->expectsOutputToContain('FINES ARE LIVE')
+        ->assertSuccessful();
+});
