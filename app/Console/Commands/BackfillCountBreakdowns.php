@@ -74,15 +74,23 @@ class BackfillCountBreakdowns extends Command
         $rebuilt = 0;
         $failed = 0;
 
-        foreach ($sessions as $session) {
+        // Load each count fresh and let it go afterwards. Holding every
+        // count with its items, products and movements in memory at once
+        // ran past PHP's 128 MB limit on a live system with 150+ counts.
+        $sessionIds = $sessions->pluck('id')->all();
+        unset($sessions);
+
+        foreach ($sessionIds as $sessionId) {
             try {
-                DB::transaction(fn () => $snapshots->reconstruct($session));
+                DB::transaction(fn () => $snapshots->reconstruct(CountSession::findOrFail($sessionId)));
                 $rebuilt++;
-                $this->line("  ✓ #{$session->id}");
+                $this->line("  ✓ #{$sessionId}");
             } catch (\Throwable $e) {
                 $failed++;
-                $this->error("  ✗ #{$session->id}: {$e->getMessage()}");
+                $this->error("  ✗ #{$sessionId}: {$e->getMessage()}");
             }
+
+            gc_collect_cycles();
         }
 
         $this->newLine();
