@@ -49,6 +49,11 @@ Schedule::command('attendance:finalise')->everyFifteenMinutes()->withoutOverlapp
 // nothing. Same cron caveat as above.
 Schedule::command('attendance:reconcile-device-users')->hourly()->withoutOverlapping();
 
+// Staff 0A: once a notice period runs out, clear the leaver's kiosk PIN,
+// trusted phones and sessions. Logins and PIN checks already refuse them the
+// moment left_at passes; this removes what is left. Idempotent.
+Schedule::command('hms:finalise-deactivations')->hourly()->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

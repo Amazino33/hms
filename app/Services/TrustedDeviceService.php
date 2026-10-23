@@ -40,6 +40,12 @@ class TrustedDeviceService
             return null;
         }
 
+        // Deactivation revokes the owner's devices, but a notice period that
+        // has just run out may not have been finalised yet — refuse here too.
+        if (! $device->user || $device->user->isDeactivated()) {
+            return null;
+        }
+
         $device->update(['last_seen_at' => now()]);
 
         return $device->user;

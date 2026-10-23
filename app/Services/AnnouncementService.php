@@ -125,13 +125,14 @@ class AnnouncementService
 
     /**
      * Who this announcement is for, right now. Staff who have left are
-     * excluded, using the same `left_at` rule payroll compilation uses.
+     * excluded (User::active()); someone still working out their notice
+     * period is included.
      *
      * @return Collection<int, int>
      */
     public function audienceUserIds(Announcement $announcement): Collection
     {
-        $query = User::query()->whereNull('left_at');
+        $query = User::query()->active();
 
         if ($announcement->audience === 'roles') {
             $roles = $announcement->targets->pluck('role_name')->all();
@@ -152,7 +153,7 @@ class AnnouncementService
      */
     public function appliesTo(Announcement $announcement, User $user): bool
     {
-        if ($user->left_at !== null) {
+        if ($user->isDeactivated()) {
             return false;
         }
 

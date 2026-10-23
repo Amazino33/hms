@@ -43,33 +43,19 @@ test('email verification status is unchanged when email address is unchanged', f
     expect($user->refresh()->email_verified_at)->not->toBeNull();
 });
 
-test('user can delete their account', function () {
+test('the profile page offers no way to delete the account', function () {
+    // Staff 0A: staff are deactivated, never deleted. The self-delete form
+    // and its component are gone.
     $user = User::factory()->create();
 
-    $this->actingAs($user);
+    $this->actingAs($user)
+        ->get(route('profile.edit'))
+        ->assertOk()
+        ->assertDontSee('Delete account')
+        ->assertDontSee('delete-user-button');
 
-    $response = Livewire::test('pages::settings.delete-user-form')
-        ->set('password', 'password')
-        ->call('deleteUser');
-
-    $response
-        ->assertHasNoErrors()
-        ->assertRedirect('/');
-
-    expect($user->fresh())->toBeNull();
-    expect(auth()->check())->toBeFalse();
-});
-
-test('correct password must be provided to delete account', function () {
-    $user = User::factory()->create();
-
-    $this->actingAs($user);
-
-    $response = Livewire::test('pages::settings.delete-user-form')
-        ->set('password', 'wrong-password')
-        ->call('deleteUser');
-
-    $response->assertHasErrors(['password']);
+    expect(fn () => Livewire::test('pages::settings.delete-user-form'))
+        ->toThrow(\Livewire\Exceptions\ComponentNotFoundException::class);
 
     expect($user->fresh())->not->toBeNull();
 });

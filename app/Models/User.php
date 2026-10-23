@@ -24,17 +24,69 @@ class User extends Authenticatable implements FilamentUser
     use HasFactory, HasRoles, LogsActivity, Notifiable, TwoFactorAuthenticatable;
 
     /**
-     * Never log credentials or secrets, even hashed — only the fields an
-     * admin would actually be editing (name, contact/bank/KYC details).
+     * Personal and credential fields whose values must never reach the
+     * activity log, keyed to the plain-language group named in the separate
+     * "Sensitive details updated" entry UserObserver writes instead. The
+     * log shows that bank details changed and who changed them — never the
+     * account number itself.
+     *
+     * @var array<string, string>
+     */
+    public const SENSITIVE_ATTRIBUTES = [
+        'bank_name' => 'bank',
+        'account_number' => 'bank',
+        'account_name' => 'bank',
+        'id_type' => 'ID',
+        'id_number' => 'ID',
+        'id_card_copy' => 'documents',
+        'guarantor_form' => 'documents',
+        'next_of_kin_name' => 'next of kin',
+        'next_of_kin_phone' => 'next of kin',
+        'pin_hash' => 'PIN',
+        'pin_lookup_hash' => 'PIN',
+        'pin_set_at' => 'PIN',
+    ];
+
+    /**
+     * Why someone left. Stored as the key; the label is for the screen.
+     *
+     * @var array<string, string>
+     */
+    public const LEFT_REASONS = [
+        'resigned' => 'Resigned',
+        'dismissed' => 'Dismissed',
+        'absconded' => 'Absconded',
+        'contract_ended' => 'Contract ended',
+        'other' => 'Other',
+    ];
+
+    /**
+     * Never log credentials or secrets, even hashed. Sensitive personal
+     * fields are excluded too: UserObserver records that they changed, and
+     * by whom, without their values.
      */
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logFillable()
-            ->logExcept(['password'])
+            ->logExcept(['password', ...array_keys(self::SENSITIVE_ATTRIBUTES)])
             ->logOnlyDirty()
             ->useLogName('user')
             ->dontLogEmptyChanges();
+    }
+
+    /**
+     * Staff are never deleted: 31 foreign keys would cascade away their
+     * shifts, debts and stock history, and 17 would make the delete fail
+     * half-way. Registered in booting() — before the traits boot — so this
+     * listener runs ahead of Spatie's, which would otherwise detach every
+     * role before the delete was refused.
+     */
+    protected static function booting(): void
+    {
+        static::deleting(function () {
+            throw new \App\Exceptions\StaffDeletionForbiddenException;
+        });
     }
 
     /**
@@ -115,7 +167,34 @@ class User extends Authenticatable implements FilamentUser
             // did it. Mass assignment would make it settable from any form
             // that happens to accept user input.
             'attendance_exempt' => 'boolean',
+            // The instant the person stopped working — set by
+            // StaffDeactivationService to the close of their last business
+            // day, so a future value is a notice period.
+            'left_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Gone as of now. A future left_at is a notice period: still active.
+     */
+    public function isDeactivated(): bool
+    {
+        return $this->left_at !== null && $this->left_at->lte(now());
+    }
+
+    /**
+     * Staff who are working today — for operational pickers and lists.
+     * Historical reports must not use this: a leaver's past orders, shifts
+     * and debts still belong to them by name.
+     */
+    public function scopeActive(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->where(fn ($q) => $q->whereNull('left_at')->orWhere('left_at', '>', now()));
+    }
+
+    public function scopeDeactivated(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->whereNotNull('left_at')->where('left_at', '<=', now());
     }
 
     /**
@@ -181,6 +260,10 @@ class User extends Authenticatable implements FilamentUser
      */
     public function startShift(): Shift
     {
+        if ($this->isDeactivated()) {
+            throw new \Exception('This account is no longer active, so it cannot start a shift.');
+        }
+
         $requestedType = $this->shiftTypeFromRole();
 
         if ($currentShift = $this->currentShift()) {
@@ -398,6 +481,12 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
+        // Checked first, ahead of super_admin: a deactivated account opens
+        // no panel at all, whatever roles it still carries.
+        if ($this->isDeactivated()) {
+            return false;
+        }
+
         // Allow super admins unconditionally, on every panel.
         if ($this->hasRole('super_admin')) {
             return true;

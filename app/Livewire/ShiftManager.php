@@ -265,11 +265,12 @@ class ShiftManager extends Component
             : [];
     }
 
-    /** Waiters who could take a table over: on an active waiter shift, not me. */
+    /** Waiters who could take a table over: on an active waiter shift, not me, not deactivated. */
     public function handoverCandidates(): array
     {
         return Shift::query()->activeNonStale('waiter')->with('user:id,name')
             ->where('user_id', '!=', auth()->id())
+            ->whereHas('user', fn ($q) => $q->active())
             ->get()
             ->pluck('user.name', 'user.id')
             ->all();

@@ -3,6 +3,7 @@
 namespace App\Services\Attendance;
 
 use App\Models\User;
+use App\Services\StaffAccessGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
@@ -45,6 +46,17 @@ class AttendanceOnlyRoleService
      */
     public static function makeAttendanceOnly(User $user, ?User $actor = null): User
     {
+        // A record created moments ago with no role yet may be made
+        // attendance-only by anyone who could create it — the role grants
+        // nothing, and admins onboard cleaners this way. Converting anyone
+        // who already exists strips their roles, password and PIN, so that
+        // is a role change and needs assign_staff_roles.
+        $isFreshRecord = $user->wasRecentlyCreated && $user->roles()->doesntExist();
+
+        if (! $isFreshRecord) {
+            StaffAccessGuard::assertCanAssignRoles($actor);
+        }
+
         return DB::transaction(function () use ($user, $actor) {
             $previous = $user->roles->pluck('name')->sort()->values()->all();
 
@@ -78,6 +90,8 @@ class AttendanceOnlyRoleService
      */
     public static function makeAppUser(User $user, array $roles, ?User $actor = null): User
     {
+        StaffAccessGuard::assertCanAssignRoles($actor);
+
         $roles = array_values(array_filter($roles, fn ($r) => $r !== User::ATTENDANCE_ONLY_ROLE));
 
         if ($roles === []) {

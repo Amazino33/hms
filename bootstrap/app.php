@@ -22,6 +22,21 @@ return Application::configure(basePath: dirname(__DIR__))
         // Add performance headers middleware
         $middleware->append(\App\Http\Middleware\AddPerformanceHeaders::class);
 
+        // Signs out a deactivated account on its next request. The web group
+        // also carries every Livewire request; the Filament panels add it to
+        // their own stacks (Admin/CeoPanelProvider).
+        $middleware->appendToGroup('web', \App\Http\Middleware\EnsureAccountIsActive::class);
+
+        // It must run before any Authenticate middleware. Laravel sorts the
+        // priority list ahead of everything else, so without this entry
+        // Filament's Authenticate ran first and answered a bare 403 —
+        // leaving the deactivated session signed in instead of ending it.
+        // Still after StartSession, which comes earlier in the list.
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+            prepend: \App\Http\Middleware\EnsureAccountIsActive::class,
+        );
+
         $middleware->alias([
             'staff_pin.auth' => \App\Http\Middleware\EnsureStaffPinAuthenticated::class,
             'kiosk.device' => \App\Http\Middleware\EnsureValidKioskDevice::class,

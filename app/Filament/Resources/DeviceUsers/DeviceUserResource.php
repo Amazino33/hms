@@ -136,7 +136,7 @@ class DeviceUserResource extends Resource
             ->schema([
                 Select::make('user_id')
                     ->label('Staff member')
-                    ->options(fn () => User::whereNull('left_at')->orderBy('name')->pluck('name', 'id'))
+                    ->options(fn () => User::active()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
                     ->required(),
                 DatePicker::make('effective_from')
@@ -224,7 +224,7 @@ class DeviceUserResource extends Resource
                     ->helperText('This is the only record of why the attendance history changed.'),
                 Select::make('correct_user_id')
                     ->label('Actually belongs to')
-                    ->options(fn () => User::whereNull('left_at')->orderBy('name')->pluck('name', 'id'))
+                    ->options(fn () => User::active()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
                     ->placeholder('Nobody — leave the punches unattributed'),
             ])

@@ -263,7 +263,7 @@ class AssignAttendanceSchedule extends Command
         // produce no shifts for them anyway, and an assignment nobody can be
         // judged against is just confusing history.
         $query = User::query()
-            ->whereNull('left_at')
+            ->active()
             ->where('attendance_exempt', false)
             ->orderBy('name');
 

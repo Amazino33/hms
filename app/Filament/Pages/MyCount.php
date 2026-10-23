@@ -181,7 +181,7 @@ class MyCount extends Page
             return collect();
         }
 
-        return User::role($role)->where('id', '!=', auth()->id())->orderBy('name')->get();
+        return User::role($role)->active()->where('id', '!=', auth()->id())->orderBy('name')->get();
     }
 
     /**

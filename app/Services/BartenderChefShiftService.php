@@ -22,6 +22,13 @@ class BartenderChefShiftService
      */
     public function startOpeningShift(User $user, string $type, CountSession $countSession): Shift
     {
+        // The handover paths below need no check of their own: the incoming
+        // person confirms with their PIN, and PinAuthService::attempt()
+        // refuses a deactivated owner.
+        if ($user->isDeactivated()) {
+            throw new \Exception('This account is no longer active, so it cannot start a shift.');
+        }
+
         if (!in_array($type, ['bartender', 'chef'], true)) {
             throw new \Exception('Invalid shift type for an opening shift.');
         }

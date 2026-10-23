@@ -7,6 +7,7 @@ use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Models\Commission;
 use App\Models\User;
+use App\Services\StaffAccessGuard;
 use App\Support\VenueTime;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -120,13 +121,23 @@ class UserResource extends Resource
                     ->default('app')
                     ->live()
                     ->dehydrated(false)
+                    // Switching type is a role change. Without
+                    // assign_staff_roles the toggle is fixed: a new person
+                    // can only be attendance-only (it grants nothing), and
+                    // an existing person keeps the type they have. The pages
+                    // re-check this server-side.
+                    ->disabled(fn () => ! StaffAccessGuard::canAssignRoles(auth()->user()))
                     ->helperText(fn ($state) => $state === 'attendance_only'
                         ? 'No password, no PIN, no access to any screen. Their attendance is still tracked and they can still be paid.'
                         : 'Signs in to the admin panel or the kiosk.')
                     ->afterStateHydrated(function ($component, ?User $record) {
-                        $component->state(
-                            $record?->hasRole(User::ATTENDANCE_ONLY_ROLE) ? 'attendance_only' : 'app'
-                        );
+                        if (! $record) {
+                            $component->state(StaffAccessGuard::canAssignRoles(auth()->user()) ? 'app' : 'attendance_only');
+
+                            return;
+                        }
+
+                        $component->state($record->hasRole(User::ATTENDANCE_ONLY_ROLE) ? 'attendance_only' : 'app');
                     }),
 
                 // Password Field (Smart handling)
@@ -162,8 +173,16 @@ class UserResource extends Resource
                                         )
                                         ->multiple()
                                         ->preload()
+                                        // Read-only without assign_staff_roles.
+                                        // Filament never saves a disabled
+                                        // relationship field, and Create/
+                                        // EditUser compare the roles before
+                                        // and after every save as well.
+                                        ->disabled(fn () => ! StaffAccessGuard::canAssignRoles(auth()->user()))
+                                        ->helperText(fn () => StaffAccessGuard::canAssignRoles(auth()->user()) ? null : 'Only the super admin can change roles.')
                                         ->visible(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('staff_type') !== 'attendance_only')
-                                        ->required(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('staff_type') !== 'attendance_only'),
+                                        ->required(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('staff_type') !== 'attendance_only'
+                                            && StaffAccessGuard::canAssignRoles(auth()->user())),
                                     Select::make('primary_location')
                                         ->options([
                                             'main_bar' => 'Main Bar',
@@ -306,34 +325,60 @@ class UserResource extends Resource
                     ->badge()
                     ->color('info'),
 
+                // Leavers stay in this list for good — they are never
+                // deleted — so status is shown rather than hidden.
+                TextColumn::make('status')
+                    ->state(fn (User $record): string => match (true) {
+                        $record->isDeactivated() => 'Deactivated',
+                        $record->left_at !== null => 'Leaving '.$record->left_at->venueTime()->format('j M'),
+                        default => 'Active',
+                    })
+                    ->badge()
+                    ->color(fn (string $state): string => match (true) {
+                        $state === 'Deactivated' => 'gray',
+                        $state === 'Active' => 'success',
+                        default => 'warning',
+                    }),
+
                 TextColumn::make('created_at')->dateTime(),
+            ])
+            ->filters([
+                \Filament\Tables\Filters\SelectFilter::make('status')
+                    ->options(['active' => 'Active', 'deactivated' => 'Deactivated'])
+                    ->default('active')
+                    ->query(fn (\Illuminate\Database\Eloquent\Builder $query, array $data) => match ($data['value'] ?? null) {
+                        'active' => $query->active(),
+                        'deactivated' => $query->deactivated(),
+                        default => $query,
+                    }),
             ])
             ->paginated([10, 25, 50, 100])
             ->recordActions([
+                // Custom actions are not authorised by Filament on their
+                // own, so each carries the policy / guard check itself.
                 Action::make('edit')
                     ->label('Edit')
                     ->icon(Heroicon::PencilSquare)
+                    ->authorize(fn (User $record): bool => auth()->user()->can('update', $record))
                     ->url(fn (User $record): string => EditUser::getUrl(['record' => $record])),
                 Action::make('forceResetPin')
                     ->label('Force Reset PIN')
                     ->icon('heroicon-o-key')
                     ->color('warning')
+                    ->authorize(fn (User $record): bool => auth()->user()->can('update', $record))
                     ->requiresConfirmation()
                     ->modalDescription('Clears their kiosk PIN entirely — you never see or choose it, they must set a brand new one next time.')
                     ->action(function (User $record) {
                         try {
                             (new \App\Services\PinAuthService)->forceReset($record, auth()->user());
                             \App\Services\UserFeedback::succeeded('PIN reset', "{$record->name} must set a new PIN next time.");
+                        } catch (\Illuminate\Validation\ValidationException $e) {
+                            \App\Services\UserFeedback::blocked('Could not reset PIN', collect($e->errors())->flatten()->implode(' '));
                         } catch (\Throwable $e) {
                             report($e);
                             \App\Services\UserFeedback::failed('Could not reset PIN');
                         }
                     }),
-                Action::make('delete')
-                    ->label('Delete')
-                    ->icon(Heroicon::Trash)
-                    ->color('danger')
-                    ->url(fn (User $record): string => EditUser::getUrl(['record' => $record])),
             ])
             ->toolbarActions([
                 Action::make('create')

@@ -59,7 +59,7 @@ class RoomDeliveryService
     {
         $this->assertRole($receptionist, self::RECEPTION_ROLES, 'Only reception or a manager can send room deliveries.');
 
-        if ($porter && (! $porter->hasRole('porter') || $porter->left_at)) {
+        if ($porter && (! $porter->hasRole('porter') || $porter->isDeactivated())) {
             throw new \Exception("{$porter->name} isn't an active porter.");
         }
 

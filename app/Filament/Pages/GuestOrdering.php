@@ -125,7 +125,7 @@ class GuestOrdering extends Page implements HasForms
                         }),
                     Placeholder::make('porters')
                         ->label('Porters')
-                        ->content(fn () => User::whereHas('roles', fn ($q) => $q->where('name', 'porter'))->whereNull('left_at')->orderBy('name')->pluck('name')->join(', ') ?: 'Nobody has the Porter role yet.')
+                        ->content(fn () => User::whereHas('roles', fn ($q) => $q->where('name', 'porter'))->active()->orderBy('name')->pluck('name')->join(', ') ?: 'Nobody has the Porter role yet.')
                         ->helperText('Reception picks from staff who have the Porter role. Give or remove the role in Users.'),
                 ])->columns(2),
 

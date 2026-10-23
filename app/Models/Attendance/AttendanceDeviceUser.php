@@ -99,7 +99,7 @@ class AttendanceDeviceUser extends Model
 
         $best = null;
 
-        foreach (User::whereNull('left_at')->get(['id', 'name']) as $user) {
+        foreach (User::active()->get(['id', 'name']) as $user) {
             similar_text(
                 mb_strtolower($this->device_name),
                 mb_strtolower($user->name),

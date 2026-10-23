@@ -34,6 +34,11 @@ class StaffLoginController extends Controller
 
         $user = \App\Models\User::where('email', $credentials['email'])->firstOrFail();
 
+        // A correct password must not trust a phone for someone who has left.
+        if ($user->isDeactivated()) {
+            return back()->withErrors(['email' => 'This account is no longer active.'])->withInput();
+        }
+
         ['token' => $token] = (new TrustedDeviceService())->trust($user);
 
         $cookie = Cookie::make(

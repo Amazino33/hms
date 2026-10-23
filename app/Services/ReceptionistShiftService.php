@@ -22,6 +22,10 @@ class ReceptionistShiftService
 {
     public function startShift(User $user, float $startingFloat): Shift
     {
+        if ($user->isDeactivated()) {
+            throw new \Exception('This account is no longer active, so it cannot start a shift.');
+        }
+
         if ($current = $user->currentShift()) {
             if ($current->type === 'receptionist') {
                 return $current;

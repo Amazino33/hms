@@ -16,6 +16,36 @@ class UserObserver
     {
         // Invalidate per-user sidebar cache so UI changes (name/roles) are reflected.
         Cache::forget('sidebar_html_user_'.$user->id);
+
+        $this->logSensitiveChange($user, array_keys($user->getChanges()), 'updated');
+    }
+
+    /**
+     * The model's own activity log skips User::SENSITIVE_ATTRIBUTES entirely,
+     * so this is the only trace: which groups changed (bank, ID, next of
+     * kin, documents, PIN) and who changed them — never a value.
+     *
+     * @param  list<string>  $attributes
+     */
+    private function logSensitiveChange(User $user, array $attributes, string $verb): void
+    {
+        $groups = collect($attributes)
+            ->map(fn (string $attribute) => User::SENSITIVE_ATTRIBUTES[$attribute] ?? null)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($groups === []) {
+            return;
+        }
+
+        activity('user')
+            ->performedOn($user)
+            ->causedBy(auth()->user())
+            ->event('sensitive_'.$verb)
+            ->withProperties(['groups' => $groups])
+            ->log('Sensitive details '.$verb.': '.implode(', ', $groups));
     }
 
     public function deleted(User $user): void
@@ -26,6 +56,12 @@ class UserObserver
     public function created(User $user): void
     {
         Cache::forget('sidebar_html_user_'.$user->id);
+
+        $this->logSensitiveChange(
+            $user,
+            array_keys(array_filter($user->getAttributes(), fn ($value) => filled($value))),
+            'set',
+        );
 
         // Handled here rather than in saved() because Laravel only calls
         // syncChanges() on update — after an insert wasChanged() is false for

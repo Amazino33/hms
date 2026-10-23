@@ -26,6 +26,12 @@ class GuestSessionHandoverService
             throw new \Exception('Choose a different waiter to hand the table to.');
         }
 
+        // A shift left open when someone was deactivated would otherwise
+        // still make them look like a valid recipient.
+        if ($to->isDeactivated()) {
+            throw new \Exception("{$to->name} is no longer active — choose another waiter.");
+        }
+
         $toShift = GuestShifts::activeWaiterShift($to);
 
         if (! $toShift) {

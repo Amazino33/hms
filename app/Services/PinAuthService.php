@@ -4,12 +4,26 @@ namespace App\Services;
 
 use App\Exceptions\PinLockedException;
 use App\Models\User;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 
 class PinAuthService
 {
     public const PIN_LENGTH = 4;
+
+    /**
+     * Rejected PIN choices allowed per person per hour. Each rejection of an
+     * in-use PIN confirms that some colleague holds it, so repeated tries are
+     * a way of hunting for working PINs: the third locks PIN changes for an
+     * hour and tells the super admins.
+     */
+    public const PIN_SET_MAX_REJECTIONS = 3;
+
+    public const PIN_SET_LOCK_SECONDS = 3600;
+
+    private const PIN_SET_LIMITER_PREFIX = 'pin-set-rejections:';
 
     /**
      * Staff choose their own PIN, so it must not be guessable in one or two
@@ -42,20 +56,32 @@ class PinAuthService
      */
     public function setPin(User $user, string $pin): void
     {
+        $limiterKey = self::PIN_SET_LIMITER_PREFIX.$user->id;
+
+        if (RateLimiter::tooManyAttempts($limiterKey, self::PIN_SET_MAX_REJECTIONS)) {
+            $minutes = (int) ceil(RateLimiter::availableIn($limiterKey) / 60);
+
+            throw new \InvalidArgumentException("Too many attempts — try again in {$minutes} minute(s).");
+        }
+
         if (!preg_match('/^\d{' . self::PIN_LENGTH . '}$/', $pin)) {
-            throw new \InvalidArgumentException('PIN must be exactly ' . self::PIN_LENGTH . ' digits.');
+            $this->rejectPinChoice($user, $limiterKey, 'PIN must be exactly ' . self::PIN_LENGTH . ' digits.');
         }
 
         if (in_array($pin, $this->trivialPins(), true)) {
-            throw new \InvalidArgumentException('That PIN is too easy to guess — choose a less predictable one.');
+            $this->rejectPinChoice($user, $limiterKey, 'That PIN is too easy to guess — choose a less predictable one.');
         }
 
         $lookupHash = $this->lookupHash($pin);
 
         $taken = User::where('pin_lookup_hash', $lookupHash)->where('id', '!=', $user->id)->exists();
 
+        // Deliberately the same wording a person sees for any unusable PIN
+        // that is not a format or guessability problem: saying "someone else
+        // has it" handed out a working PIN for another member of staff, since
+        // attempt() resolves a person from the PIN alone on a shared kiosk.
         if ($taken) {
-            throw new \InvalidArgumentException('That PIN is already in use by someone else — choose a different one.');
+            $this->rejectPinChoice($user, $limiterKey, "This PIN can't be used. Please choose a different one.");
         }
 
         // These fields are deliberately excluded from $fillable so nothing
@@ -74,6 +100,10 @@ class PinAuthService
      */
     public function forceReset(User $user, User $resetBy): void
     {
+        // Resetting a super admin's or CEO's PIN is part of taking over
+        // their account, so it needs assign_staff_roles like editing them.
+        StaffAccessGuard::assertCanManage($resetBy, $user);
+
         $user->forceFill([
             'pin_hash' => null,
             'pin_lookup_hash' => null,
@@ -102,7 +132,12 @@ class PinAuthService
 
         $user = User::where('pin_lookup_hash', $this->lookupHash($pin))->first();
 
-        if ($user && $user->pin_hash && Hash::check($pin, $user->pin_hash)) {
+        // A deactivated person's PIN behaves exactly like a wrong one — no
+        // distinct message, and it counts towards the lockout. Every PIN
+        // surface comes through here (kiosk, KDS, handover seals, guest
+        // credit approval, the guest orders strip), so this one check covers
+        // them all.
+        if ($user && $user->pin_hash && ! $user->isDeactivated() && Hash::check($pin, $user->pin_hash)) {
             $this->clearFailures($throttleKey);
 
             return $user;
@@ -148,6 +183,37 @@ class PinAuthService
     {
         Cache::forget("pin_failures:{$throttleKey}");
         Cache::forget("pin_lock:{$throttleKey}");
+    }
+
+    /**
+     * Count a rejected PIN choice; the third within the hour locks PIN
+     * changes and notifies the super admins.
+     *
+     * @throws \InvalidArgumentException always, with $message
+     */
+    private function rejectPinChoice(User $user, string $limiterKey, string $message): never
+    {
+        RateLimiter::hit($limiterKey, self::PIN_SET_LOCK_SECONDS);
+
+        if (RateLimiter::attempts($limiterKey) === self::PIN_SET_MAX_REJECTIONS) {
+            // whereHas, not role(): role() throws when the role does not exist.
+            $superAdmins = User::whereHas('roles', fn ($q) => $q->where('name', 'super_admin'))->active()->get();
+
+            if ($superAdmins->isNotEmpty()) {
+                Notification::make()
+                    ->warning()
+                    ->title("Repeated PIN rejections for {$user->name}")
+                    ->body('PIN changes are locked for this person for one hour.')
+                    ->sendToDatabase($superAdmins);
+            }
+
+            activity('pin')
+                ->performedOn($user)
+                ->withProperties(['rejections' => self::PIN_SET_MAX_REJECTIONS])
+                ->log("PIN changes locked for {$user->name} after repeated rejections");
+        }
+
+        throw new \InvalidArgumentException($message);
     }
 
     private function lookupHash(string $pin): string

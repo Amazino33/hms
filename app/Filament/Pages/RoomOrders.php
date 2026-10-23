@@ -261,7 +261,7 @@ class RoomOrders extends Page
             'outForDelivery' => $outForDelivery,
             'claims' => $claims,
             'calls' => $calls,
-            'porters' => User::whereHas('roles', fn ($q) => $q->where('name', 'porter'))->whereNull('left_at')->orderBy('name')->get(['id', 'name']),
+            'porters' => User::whereHas('roles', fn ($q) => $q->where('name', 'porter'))->active()->orderBy('name')->get(['id', 'name']),
             'presets' => GuestBarReleaseService::REASON_PRESETS,
             // Anything new here chimes once (D16 sound bar on the page).
             'chimeIds' => collect()

@@ -105,7 +105,7 @@ class ShiftAssignmentService
         $today = $this->localDate(now())->toDateString();
 
         return User::query()
-            ->whereNull('left_at')
+            ->active()
             ->where('attendance_exempt', false)
             ->whereDoesntHave('attendanceShiftAssignments', function ($query) use ($today) {
                 $query->whereDate('effective_from', '<=', $today)

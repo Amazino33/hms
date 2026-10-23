@@ -36,7 +36,7 @@ class StaffWithoutScheduleWidget extends BaseWidget
         return $table
             ->query(
                 User::query()
-                    ->whereNull('left_at')
+                    ->active()
                     ->where('attendance_exempt', false)
                     ->whereDoesntHave('attendanceShiftAssignments', function (Builder $query) use ($today) {
                         $query->whereDate('effective_from', '<=', $today)

@@ -218,13 +218,13 @@ class CountSessions extends Page implements HasTable
 
                         Select::make('outgoing_user_id')
                             ->label('Outgoing Custodian')
-                            ->options(fn () => User::pluck('name', 'id'))
+                            ->options(fn () => User::active()->pluck('name', 'id'))
                             ->visible(fn (callable $get) => in_array($get('type'), ['bar_handover', 'kitchen_handover'], true))
                             ->required(fn (callable $get) => in_array($get('type'), ['bar_handover', 'kitchen_handover'], true)),
 
                         Select::make('incoming_user_id')
                             ->label('Incoming Custodian')
-                            ->options(fn () => User::pluck('name', 'id'))
+                            ->options(fn () => User::active()->pluck('name', 'id'))
                             ->visible(fn (callable $get) => in_array($get('type'), ['bar_handover', 'kitchen_handover'], true))
                             ->required(fn (callable $get) => in_array($get('type'), ['bar_handover', 'kitchen_handover'], true)),
 
