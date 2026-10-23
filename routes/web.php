@@ -143,6 +143,14 @@ Route::middleware(['auth'])->group(function () {
 
 use App\Http\Controllers\KioskRegistrationController;
 
+// Staff application form — public, no login. Creates a Pending application
+// only; an account exists once a super admin approves it. Open only while
+// applications are switched on (StaffApplicationSettings). Submissions are
+// rate-limited inside the component; this limits page loads.
+Route::livewire('join', 'pages::join')
+    ->middleware('throttle:30,1')
+    ->name('staff.join');
+
 // Kiosk registration — deliberately outside the 'auth' group. The physical
 // device isn't registered yet at this point, so there is no user session to
 // require; the registration CODE itself is the gate (short-lived, single-use).

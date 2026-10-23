@@ -236,6 +236,8 @@ return [
         // Staff 0A hotfix — App\Services\StaffAccessGuard.
         'assign_staff_roles' => 'Assign staff roles',
         'deactivate_staff' => 'Deactivate staff',
+        // Staff 0C — App\Services\StaffApplicationService.
+        'approve_staff_applications' => 'Approve staff applications',
     ],
 
     /*

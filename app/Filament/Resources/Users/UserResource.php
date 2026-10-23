@@ -8,6 +8,7 @@ use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Models\Commission;
 use App\Models\User;
 use App\Services\StaffAccessGuard;
+use App\Support\NigerianBanks;
 use App\Support\VenueTime;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -157,8 +158,14 @@ class UserResource extends Resource
                             ->schema([
                                 Grid::make(3)->schema([
                                     TextInput::make('staff_code')
+                                        ->label('Staff ID')
                                         ->placeholder('e.g. LH-001')
-                                        ->unique(ignoreRecord: true),
+                                        ->unique(ignoreRecord: true)
+                                        // An SLM- ID issued at approval is
+                                        // permanent; User::booting() refuses
+                                        // a change server-side as well.
+                                        ->disabled(fn (?User $record) => \App\Services\StaffIdGenerator::isIssued($record?->staff_code))
+                                        ->helperText(fn (?User $record) => \App\Services\StaffIdGenerator::isIssued($record?->staff_code) ? 'Permanent — issued at approval.' : null),
                                     // attendance_only is deliberately absent
                                     // from this list: it is exclusive, and
                                     // assigning it alongside another role
@@ -270,7 +277,7 @@ class UserResource extends Resource
                             ->schema([
                                 Grid::make(2)->schema([
                                     Select::make('id_type')
-                                        ->options(['nin' => 'NIN', 'voters' => 'Voters Card']),
+                                        ->options(\App\Models\StaffApplication::ID_TYPES),
                                     TextInput::make('id_number'),
                                     FileUpload::make('id_card_copy')
                                         ->directory('staff-docs'),
@@ -283,8 +290,11 @@ class UserResource extends Resource
                         Tab::make('Emergency')
                             ->icon('heroicon-m-phone')
                             ->schema([
+                                TextInput::make('phone')->label('Staff phone')->tel()->maxLength(20),
+                                \Filament\Forms\Components\Textarea::make('address')->label('Home address')->rows(2)->maxLength(500),
                                 TextInput::make('next_of_kin_name'),
                                 TextInput::make('next_of_kin_phone')->tel(),
+                                TextInput::make('next_of_kin_relationship')->label('Next of kin relationship')->maxLength(60),
                             ]),
 
                         Tab::make('Commissions')
@@ -407,28 +417,6 @@ class UserResource extends Resource
 
     protected static function getNigerianBanks(): array
     {
-        return [
-            'access' => 'Access Bank',
-            'fidelity' => 'Fidelity Bank',
-            'fcmb' => 'First City Monument Bank (FCMB)',
-            'first_bank' => 'First Bank of Nigeria',
-            'gtbank' => 'Guaranty Trust Bank (GTB)',
-            'heritage' => 'Heritage Bank',
-            'keystone' => 'Keystone Bank',
-            'moniepoint' => 'Moniepoint MFB',
-            'opay' => 'OPay (Digital Bank)',
-            'palmpay' => 'PalmPay',
-            'polaris' => 'Polaris Bank',
-            'providus' => 'Providus Bank',
-            'stanbic' => 'Stanbic IBTC Bank',
-            'standard_chartered' => 'Standard Chartered',
-            'sterling' => 'Sterling Bank',
-            'suntrust' => 'SunTrust Bank',
-            'union' => 'Union Bank',
-            'uba' => 'United Bank for Africa (UBA)',
-            'unity' => 'Unity Bank',
-            'wema' => 'Wema Bank',
-            'zenith' => 'Zenith Bank',
-        ];
+        return NigerianBanks::all();
     }
 }

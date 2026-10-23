@@ -42,6 +42,10 @@ class User extends Authenticatable implements FilamentUser
         'guarantor_form' => 'documents',
         'next_of_kin_name' => 'next of kin',
         'next_of_kin_phone' => 'next of kin',
+        'next_of_kin_relationship' => 'next of kin',
+        'phone' => 'contact',
+        'address' => 'contact',
+        'photo_path' => 'documents',
         'pin_hash' => 'PIN',
         'pin_lookup_hash' => 'PIN',
         'pin_set_at' => 'PIN',
@@ -87,6 +91,14 @@ class User extends Authenticatable implements FilamentUser
         static::deleting(function () {
             throw new \App\Exceptions\StaffDeletionForbiddenException;
         });
+
+        // A staff ID issued by StaffIdGenerator is permanent: it is printed on
+        // ID cards and must never change or be handed to someone else.
+        static::updating(function (self $user) {
+            if ($user->isDirty('staff_code') && \App\Services\StaffIdGenerator::isIssued($user->getOriginal('staff_code'))) {
+                throw new \LogicException('A staff ID cannot be changed once it has been issued.');
+            }
+        });
     }
 
     /**
@@ -110,6 +122,9 @@ class User extends Authenticatable implements FilamentUser
         'account_name',
         'next_of_kin_name',
         'next_of_kin_phone',
+        'next_of_kin_relationship',
+        'phone',
+        'address',
         'biometric_id',
         'shift_start_time',
         'job_title',
@@ -477,6 +492,16 @@ class User extends Authenticatable implements FilamentUser
     public function attendanceFines(): HasMany
     {
         return $this->hasMany(\App\Models\Attendance\AttendanceFine::class);
+    }
+
+    public function guarantors(): HasMany
+    {
+        return $this->hasMany(\App\Models\StaffGuarantor::class);
+    }
+
+    public function staffApplication(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(\App\Models\StaffApplication::class);
     }
 
     public function canAccessPanel(Panel $panel): bool
