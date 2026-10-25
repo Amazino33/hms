@@ -3,10 +3,11 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Order;
+use App\Support\BusinessDay;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class WaiterShiftStats extends BaseWidget
 {
@@ -32,13 +33,20 @@ class WaiterShiftStats extends BaseWidget
 
     protected function getStats(): array
     {
-        // 1. Get stats for THIS USER for TODAY only
+        // 1. Get stats for THIS USER for the current BUSINESS day — a 1am
+        // order belongs to last night's trading, same as My History.
+        // Cancelled/returned orders and return tickets never left the bar as
+        // a sale, so they are neither sales nor credit the waiter owes.
         $userId = auth()->id();
-        $dateKey = today()->toDateString();
-        $orders = Cache::remember("waiter_shift:{$userId}:{$dateKey}", 30, function () use ($userId) {
+        $dateKey = BusinessDay::today();
+        [$start, $end] = BusinessDay::boundsFor($dateKey);
+        $orders = Cache::remember("waiter_shift:{$userId}:{$dateKey}", 30, function () use ($userId, $start, $end) {
             return Order::query()
                 ->where('user_id', $userId)
-                ->whereDate('created_at', today())
+                ->where('created_at', '>=', $start)
+                ->where('created_at', '<', $end)
+                ->whereNotIn('status', ['cancelled', 'returned'])
+                ->where('is_return', false)
                 ->select(
                     DB::raw('SUM(total_amount) as expected'),
                     DB::raw('SUM(amount_paid) as collected'),
@@ -54,13 +62,13 @@ class WaiterShiftStats extends BaseWidget
 
         return [
             // STAT 1: EXPECTED REVENUE (Total Sales)
-            Stat::make('Total Sales (Today)', '₦' . number_format($expected))
+            Stat::make('Total Sales (Today)', '₦'.number_format($expected))
                 ->description('Value of orders taken')
                 ->descriptionIcon('heroicon-m-shopping-bag')
                 ->color('gray'),
 
             // STAT 2: CASH COLLECTED (What should be in their pocket)
-            Stat::make('Cash Collected', '₦' . number_format($collected))
+            Stat::make('Cash Collected', '₦'.number_format($collected))
                 ->description('Money received today')
                 ->descriptionIcon('heroicon-m-banknotes')
                 ->color('success') // Green = Good
@@ -70,7 +78,7 @@ class WaiterShiftStats extends BaseWidget
                 ]),
 
             // STAT 3: OUTSTANDING DEBT (Not Paid)
-            Stat::make('Outstanding Debt', '₦' . number_format($debt))
+            Stat::make('Outstanding Debt', '₦'.number_format($debt))
                 ->description('Credit given today')
                 ->descriptionIcon('heroicon-m-exclamation-triangle')
                 ->color($debt > 0 ? 'danger' : 'gray'), // Red if there is debt
@@ -81,6 +89,6 @@ class WaiterShiftStats extends BaseWidget
     {
         // Only show if user is NOT an admin (or strictly if they are a waiter)
         // Adjust based on your role logic
-        return !auth()->user()->hasRole('admin'); 
+        return ! auth()->user()->hasRole('admin');
     }
 }
