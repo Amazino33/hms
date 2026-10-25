@@ -75,7 +75,7 @@ class DeviceUserReconciler
             return;
         }
 
-        if ($deviceUser->last_seen_at !== null && $deviceUser->last_seen_at->greaterThanOrEqual($at)) {
+        if ($deviceUser->last_seen_at !== null && $deviceUser->last_seen_at->greaterThanOrEqualTo($at)) {
             return;
         }
 

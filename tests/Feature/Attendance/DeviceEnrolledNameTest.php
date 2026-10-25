@@ -121,7 +121,7 @@ it('never rewinds last seen when the device dumps an old backlog', function () {
         [], [], [],
         ['CONTENT_TYPE' => 'text/plain'],
         $body
-    );
+    )->assertOk()->assertSee('OK: 1');
 
     $push("44\t2026-10-05 08:00:00\t0\t1\n");
     $newest = AttendanceDeviceUser::sole()->last_seen_at;
@@ -131,6 +131,28 @@ it('never rewinds last seen when the device dumps an old backlog', function () {
     $push("44\t2026-09-01 08:00:00\t0\t1\n");
 
     expect(AttendanceDeviceUser::sole()->last_seen_at->eq($newest))->toBeTrue();
+});
+
+it('moves last seen forward on every later punch from a known badge', function () {
+    $push = fn (string $body) => $this->call(
+        'POST',
+        '/iclock/cdata?SN=K20TEST01&table=ATTLOG',
+        [], [], [],
+        ['CONTENT_TYPE' => 'text/plain'],
+        $body
+    )->assertOk();
+
+    $push("44\t2026-10-05 08:00:00\t0\t1\n");
+
+    // Two new punches in one batch: the second must not be lost to the first
+    // having already stamped the badge.
+    $push("44\t2026-10-06 08:00:00\t0\t1\n44\t2026-10-06 17:00:00\t1\t1\n")
+        ->assertSee('OK: 2');
+
+    expect(AttendanceLog::where('biometric_id', '44')->count())->toBe(3);
+    expect(AttendanceDeviceUser::sole()->last_seen_at->eq(
+        \Carbon\Carbon::parse('2026-10-06 17:00:00', 'Africa/Lagos')
+    ))->toBeTrue();
 });
 
 it('hands queued commands to the device on its next poll and marks them sent', function () {
