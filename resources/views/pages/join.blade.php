@@ -25,6 +25,16 @@ new #[Layout('layouts::join')] class extends Component {
 
     public const PER_EMAIL_PER_HOUR = 3;
 
+    /** Fields kept as a draft in the applicant's own browser so they can
+     *  finish later. Never the password or the honeypot; files can't be kept. */
+    public const DRAFT_FIELDS = [
+        'full_name', 'phone', 'email', 'address',
+        'next_of_kin_name', 'next_of_kin_phone', 'next_of_kin_relationship',
+        'bank_name', 'account_number', 'account_name',
+        'guarantor_name', 'guarantor_phone', 'guarantor_address', 'guarantor_relationship', 'guarantor_occupation',
+        'id_type', 'id_number',
+    ];
+
     public string $full_name = '';
     public string $phone = '';
     public string $email = '';
@@ -164,7 +174,7 @@ new #[Layout('layouts::join')] class extends Component {
 
 <div class="flex flex-col gap-6">
     @if ($submittedReference)
-        <div class="rounded-xl border border-green-200 bg-white p-6 text-center shadow-sm">
+        <div class="rounded-xl border border-green-200 bg-white p-6 text-center shadow-sm" x-data x-init="try { localStorage.removeItem('hms-join-draft') } catch (e) {}">
             <h2 class="text-lg font-semibold">Application received</h2>
             <p class="mt-2 text-sm text-zinc-600">Thank you. Your reference is</p>
             <p class="mt-1 text-2xl font-bold tracking-wide">{{ $submittedReference }}</p>
@@ -179,9 +189,51 @@ new #[Layout('layouts::join')] class extends Component {
         <div class="text-center">
             <h2 class="text-lg font-semibold">Staff application</h2>
             <p class="mt-1 text-sm text-zinc-600">Fill in every section. Your details are kept private and only seen by the manager.</p>
+            <p class="mt-1 text-xs text-zinc-500">Your answers are saved on this phone as you type, so you can stop and finish later. Your password and uploads are not saved.</p>
         </div>
 
-        <form wire:submit="submit" class="flex flex-col gap-6" novalidate>
+        {{-- Draft: kept only in this browser's localStorage, restored into
+             $wire without a server round-trip, cleared on success. --}}
+        <form
+            wire:submit="submit"
+            class="flex flex-col gap-6"
+            novalidate
+            x-data="{
+                key: 'hms-join-draft',
+                fields: @js($this::DRAFT_FIELDS),
+                restored: false,
+                init() {
+                    let draft = null;
+                    try { draft = JSON.parse(localStorage.getItem(this.key) || 'null'); } catch (e) {}
+                    if (! draft || ! draft.fields || Date.now() - draft.savedAt > 30 * 86400000) return;
+
+                    for (const name of this.fields) {
+                        const value = draft.fields[name];
+                        if (typeof value === 'string' && value !== '') {
+                            $wire.$set(name, value, false);
+                            this.restored = true;
+                        }
+                    }
+                },
+                save() {
+                    const fields = {};
+                    for (const name of this.fields) fields[name] = $wire[name] ?? '';
+                    try { localStorage.setItem(this.key, JSON.stringify({ savedAt: Date.now(), fields })); } catch (e) {}
+                },
+                startOver() {
+                    try { localStorage.removeItem(this.key); } catch (e) {}
+                    for (const name of this.fields) $wire.$set(name, '', false);
+                    this.restored = false;
+                },
+            }"
+            x-on:input.debounce.500ms="save()"
+            x-on:change="save()"
+        >
+            <div x-show="restored" style="display: none" class="flex items-start justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                <p>Welcome back. We filled in what you typed last time on this phone. Please type your password again and add the 3 uploads.</p>
+                <button type="button" x-on:click="startOver()" class="shrink-0 font-medium underline">Start over</button>
+            </div>
+
             {{-- Honeypot: hidden from people, irresistible to bots. --}}
             <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">
                 <label for="website">Website</label>
@@ -199,13 +251,18 @@ new #[Layout('layouts::join')] class extends Component {
                 <flux:input wire:model="email" label="Email" type="email" autocomplete="email" required />
                 <flux:textarea wire:model="address" label="Home address" rows="2" required />
 
-                <div class="flex flex-col gap-1">
-                    <label class="text-sm font-medium" for="photo">Passport photo</label>
-                    <p class="text-xs text-zinc-500">A clear photo of your face. You can take it now with your phone.</p>
-                    <input id="photo" type="file" wire:model="photo" accept="image/*" capture="user" class="text-sm">
-                    <div wire:loading wire:target="photo" class="text-xs text-zinc-500">Uploading…</div>
-                    @error('photo') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                </div>
+                <x-join-upload
+                    name="photo"
+                    label="Passport photo"
+                    hint="A clear photo of your face. You can take it now with your phone."
+                    cta="Tap to take or upload your photo"
+                    types="JPG, PNG or HEIC · up to 8 MB"
+                    accept="image/*"
+                    capture="user"
+                    icon="camera"
+                    :file="$photo"
+                    :error="$errors->first('photo')"
+                />
             </section>
 
             <section class="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -242,13 +299,16 @@ new #[Layout('layouts::join')] class extends Component {
                 <flux:input wire:model="guarantor_relationship" label="Relationship to you" required />
                 <flux:input wire:model="guarantor_occupation" label="Occupation" required />
 
-                <div class="flex flex-col gap-1">
-                    <label class="text-sm font-medium" for="guarantor_form">Signed guarantor form</label>
-                    <p class="text-xs text-zinc-500">A clear photo or PDF of the form your guarantor signed.</p>
-                    <input id="guarantor_form" type="file" wire:model="guarantor_form" accept="image/*,application/pdf" class="text-sm">
-                    <div wire:loading wire:target="guarantor_form" class="text-xs text-zinc-500">Uploading…</div>
-                    @error('guarantor_form') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                </div>
+                <x-join-upload
+                    name="guarantor_form"
+                    label="Signed guarantor form"
+                    hint="A clear photo or PDF of the form your guarantor signed."
+                    cta="Tap to upload the signed form"
+                    types="Photo or PDF · up to 8 MB"
+                    accept="image/*,application/pdf"
+                    :file="$guarantor_form"
+                    :error="$errors->first('guarantor_form')"
+                />
             </section>
 
             <section class="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -260,13 +320,16 @@ new #[Layout('layouts::join')] class extends Component {
                 </flux:select>
                 <flux:input wire:model="id_number" label="ID number" required />
 
-                <div class="flex flex-col gap-1">
-                    <label class="text-sm font-medium" for="id_document">Photo of your ID</label>
-                    <p class="text-xs text-zinc-500">A clear photo or PDF of the ID card itself.</p>
-                    <input id="id_document" type="file" wire:model="id_document" accept="image/*,application/pdf" class="text-sm">
-                    <div wire:loading wire:target="id_document" class="text-xs text-zinc-500">Uploading…</div>
-                    @error('id_document') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                </div>
+                <x-join-upload
+                    name="id_document"
+                    label="Photo of your ID"
+                    hint="A clear photo or PDF of the ID card itself."
+                    cta="Tap to upload your ID"
+                    types="Photo or PDF · up to 8 MB"
+                    accept="image/*,application/pdf"
+                    :file="$id_document"
+                    :error="$errors->first('id_document')"
+                />
             </section>
 
             <flux:button type="submit" variant="primary" class="w-full" wire:loading.attr="disabled" wire:target="submit,photo,id_document,guarantor_form">

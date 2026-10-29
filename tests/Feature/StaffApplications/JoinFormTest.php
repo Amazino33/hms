@@ -193,3 +193,18 @@ it('accepts a PDF for the ID and guarantor form', function () {
     expect($application->id_document_path)->toEndWith('.pdf');
     Storage::disk('local')->assertExists($application->guarantor_form_path);
 });
+
+it('keeps a browser draft of the typed answers, but never the password or the hidden trap field', function () {
+    openApplications($this->owner);
+
+    $component = Livewire::test('pages::join');
+    $draftFields = $component->instance()::DRAFT_FIELDS;
+
+    expect($draftFields)->not->toContain('password', 'password_confirmation', 'website', 'photo', 'id_document', 'guarantor_form');
+
+    foreach ($draftFields as $field) {
+        expect($component->get($field))->toBeString();
+    }
+
+    $component->assertSeeHtml('hms-join-draft');
+});
